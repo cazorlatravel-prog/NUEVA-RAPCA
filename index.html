@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1a3d2e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>RAPCA Campo</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<style>
+/* === VARIABLES === */
+:root {
+  --c-primary: #1a3d2e;
+  --c-primary-light: #2d5a3d;
+  --c-secondary: #5b8c5a;
+  --c-vp: #88d8b0;
+  --c-el: #2ecc71;
+  --c-ei: #fd9853;
+  --c-map: #3498db;
+  --c-infra: #8e44ad;
+  --c-dash: #f39c12;
+  --c-tl: #e74c3c;
+  --c-comp: #1abc9c;
+  --c-bg: #f5f5f0;
+  --c-card: #fff;
+  --radius: 12px;
+  --shadow: 0 2px 8px rgba(0,0,0,.12);
+  --touch-min: 44px;
+}
+
+/* === RESET === */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--c-bg);color:#333;-webkit-tap-highlight-color:transparent;overflow:hidden}
+
+/* === ALTO CONTRASTE === */
+.high-contrast{--c-bg:#fff;--c-card:#fff;--c-primary:#000;--c-primary-light:#222;color:#000}
+.high-contrast .page-header{background:#000!important}
+.high-contrast .btn{border:2px solid #000!important;font-weight:700}
+.high-contrast input,.high-contrast select,.high-contrast textarea{border:2px solid #000!important}
+
+/* === LAYOUT === */
+.app{height:100vh;display:flex;flex-direction:column}
+.page{display:none;flex:1;overflow-y:auto;padding:12px;padding-bottom:70px}
+.page.active{display:flex;flex-direction:column}
+.page-header{background:var(--c-primary);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;min-height:var(--touch-min);position:sticky;top:0;z-index:100}
+.page-header h1{font-size:18px;font-weight:600;flex:1}
+.page-header .btn-back{background:none;border:none;color:#fff;font-size:22px;cursor:pointer;min-width:var(--touch-min);min-height:var(--touch-min);display:flex;align-items:center;justify-content:center}
+
+/* === BOTONES === */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;border-radius:8px;border:none;font-size:14px;font-weight:500;cursor:pointer;min-height:var(--touch-min);transition:all .2s;text-decoration:none}
+.btn-primary{background:var(--c-primary);color:#fff}
+.btn-primary:active{background:var(--c-primary-light)}
+.btn-secondary{background:var(--c-secondary);color:#fff}
+.btn-danger{background:#e74c3c;color:#fff}
+.btn-outline{background:transparent;border:2px solid var(--c-primary);color:var(--c-primary)}
+.btn-sm{padding:6px 12px;font-size:12px;min-height:36px}
+.btn-block{width:100%}
+.btn:disabled{opacity:.5;pointer-events:none}
+.btn-icon{background:none;border:none;font-size:20px;cursor:pointer;min-width:var(--touch-min);min-height:var(--touch-min);display:flex;align-items:center;justify-content:center;color:inherit}
+
+/* === FORMULARIOS === */
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:13px;font-weight:600;margin-bottom:4px;color:#555}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;background:#fff;min-height:var(--touch-min)}
+.form-group textarea{min-height:80px;resize:vertical}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:var(--c-primary);box-shadow:0 0 0 3px rgba(26,61,46,.15)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* === TARJETAS === */
+.card{background:var(--c-card);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin-bottom:10px}
+
+/* === BADGES === */
+.badge{display:inline-block;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;color:#fff}
+.badge-vp{background:var(--c-vp);color:#333}
+.badge-el{background:var(--c-el)}
+.badge-ei{background:var(--c-ei)}
+.badge-infra{background:var(--c-infra)}
+
+/* === TOAST === */
+.toast-container{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:10000;display:flex;flex-direction:column;gap:8px;pointer-events:none;max-width:90vw}
+.toast{padding:12px 20px;border-radius:8px;color:#fff;font-size:14px;font-weight:500;animation:toastIn .3s ease;pointer-events:auto;text-align:center}
+.toast-success{background:#27ae60}
+.toast-error{background:#e74c3c}
+.toast-info{background:#3498db}
+@keyframes toastIn{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
+
+/* === LOGIN OVERLAY === */
+#login-overlay{position:fixed;inset:0;background:var(--c-primary);z-index:9999;display:flex;align-items:center;justify-content:center}
+#login-overlay .login-box{background:#fff;border-radius:16px;padding:32px 24px;width:90%;max-width:360px;text-align:center}
+#login-overlay .login-box h2{color:var(--c-primary);margin-bottom:4px;font-size:24px}
+#login-overlay .login-box p{color:#777;font-size:13px;margin-bottom:20px}
+#login-overlay .login-box input{width:100%;padding:12px;border:1.5px solid #ddd;border-radius:8px;font-size:15px;margin-bottom:12px}
+#login-overlay .login-box input:focus{border-color:var(--c-primary);outline:none}
+#login-overlay .login-box .btn{width:100%;padding:14px;font-size:16px}
+#login-error{color:#e74c3c;font-size:13px;margin-bottom:10px;display:none}
+
+/* === MENÚ PRINCIPAL === */
+#menu-page{padding:0}
+.menu-header{background:var(--c-primary);color:#fff;padding:16px;text-align:center}
+.menu-header h1{font-size:20px;margin-bottom:2px}
+.menu-header small{opacity:.7;font-size:12px}
+.menu-user{padding:10px 16px;background:var(--c-primary-light);color:#fff;display:flex;align-items:center;justify-content:space-between;font-size:13px}
+.menu-category{padding:8px 16px 4px;font-size:12px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px}
+.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 12px 10px}
+.menu-btn{background:var(--c-card);border:none;border-radius:var(--radius);padding:16px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;box-shadow:var(--shadow);min-height:var(--touch-min);transition:transform .15s}
+.menu-btn:active{transform:scale(.96)}
+.menu-btn .icon{font-size:28px;width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff}
+.menu-btn span{font-size:13px;font-weight:600;color:#333}
+.menu-actions{padding:12px;display:flex;flex-direction:column;gap:8px}
+.menu-actions .btn{justify-content:center}
+
+/* === INDICADORES === */
+.status-bar{position:fixed;bottom:0;left:0;right:0;background:var(--c-primary);color:#fff;padding:6px 12px;display:flex;align-items:center;justify-content:space-between;font-size:12px;z-index:500}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.status-dot.online{background:#2ecc71}
+.status-dot.offline{background:#e74c3c}
+.pending-count{background:#e74c3c;color:#fff;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700}
+
+/* === FORMULARIOS VP/EL/EI === */
+.section-title{font-size:15px;font-weight:700;color:var(--c-primary);margin:16px 0 8px;padding-bottom:4px;border-bottom:2px solid var(--c-primary)}
+.pastoreo-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:8px}
+.pastoreo-grid .lbl{font-size:11px;font-weight:700;color:#555;text-align:center;padding:4px}
+.pastoreo-btn{min-height:var(--touch-min);border:2px solid #ddd;border-radius:8px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+.pastoreo-btn.selected{border-color:var(--c-primary);background:var(--c-primary);color:#fff}
+.obs-row{display:grid;grid-template-columns:90px repeat(4,1fr);gap:4px;margin-bottom:4px;align-items:center}
+.obs-row .lbl{font-size:12px;font-weight:600;color:#555}
+.obs-btn{min-height:38px;border:2px solid #ddd;border-radius:6px;background:#fff;font-size:13px;font-weight:600;cursor:pointer}
+.obs-btn.selected{border-color:var(--c-secondary);background:var(--c-secondary);color:#fff}
+
+/* === FOTOS === */
+.foto-section{margin:12px 0}
+.foto-btns{display:flex;gap:8px;flex-wrap:wrap}
+.foto-btn{flex:1;min-width:120px}
+.foto-preview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px;margin-top:8px}
+.foto-preview-grid img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:6px;cursor:pointer}
+
+/* === TRANSECTO TABS === */
+.transecto-tabs{display:flex;gap:6px;margin-bottom:14px}
+.transecto-tab{flex:1;padding:10px;border:2px solid #ddd;border-radius:8px;background:#fff;font-size:14px;font-weight:700;cursor:pointer;text-align:center}
+.transecto-tab.active{border-color:var(--c-ei);background:var(--c-ei);color:#fff}
+.transecto-tab.done{border-color:var(--c-secondary);background:rgba(91,140,90,.15);color:var(--c-secondary)}
+
+/* === PLANTAS EI === */
+.planta-card{background:#f9f9f7;border-radius:8px;padding:10px;margin-bottom:8px;border-left:3px solid var(--c-ei)}
+.planta-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.planta-header span{font-weight:700;font-size:13px;color:var(--c-ei)}
+.planta-notas{display:flex;gap:3px;flex-wrap:wrap;align-items:center}
+.planta-notas select{width:42px;padding:4px;border:1px solid #ddd;border-radius:4px;font-size:13px;text-align:center;min-height:36px}
+.planta-media{font-weight:700;font-size:14px;color:var(--c-primary);margin-left:6px;min-width:35px}
+
+/* === HERBACEAS === */
+.herb-row{display:grid;grid-template-columns:40px 1fr 50px;gap:6px;align-items:center;margin-bottom:6px}
+.herb-row label{font-weight:700;font-size:13px;color:#555}
+.herb-media{font-weight:700;color:var(--c-primary)}
+
+/* === MATORRAL === */
+.mat-punto{background:#f9f9f7;border-radius:8px;padding:10px;margin-bottom:8px}
+.mat-punto h4{font-size:13px;color:var(--c-ei);margin-bottom:6px}
+.mat-resultado{background:var(--c-ei);color:#fff;border-radius:8px;padding:12px;text-align:center;margin-top:8px}
+.mat-resultado .vol{font-size:24px;font-weight:700}
+.mat-resultado small{opacity:.8}
+
+/* === MAPA === */
+#mapa-page{padding:0;position:relative}
+#mapa-page .page-header{position:absolute;top:0;left:0;right:0;z-index:1000}
+#map-container{height:100%;width:100%}
+.map-controls{position:absolute;bottom:60px;right:10px;z-index:1000;display:flex;flex-direction:column;gap:6px}
+.map-controls .btn{width:44px;height:44px;border-radius:50%;box-shadow:var(--shadow);padding:0;font-size:18px;background:#fff;color:#333;border:none}
+.map-toolbar{position:absolute;top:56px;left:0;right:0;z-index:999;background:rgba(255,255,255,.95);padding:6px 10px;display:flex;gap:6px;overflow-x:auto;backdrop-filter:blur(5px)}
+.map-toolbar .btn{white-space:nowrap;font-size:12px;padding:6px 10px;min-height:36px}
+.gps-panel{position:absolute;bottom:60px;left:10px;z-index:1000;background:rgba(255,255,255,.95);border-radius:8px;padding:10px;font-size:11px;box-shadow:var(--shadow);max-width:200px;display:none;backdrop-filter:blur(5px)}
+.gps-panel .gps-row{display:flex;justify-content:space-between;margin-bottom:3px}
+.gps-panel .gps-label{font-weight:700;color:#555}
+.gps-panel .gps-val{color:var(--c-primary);font-weight:600}
+
+/* === TABLA ATRIBUTOS === */
+.attr-table-panel{position:absolute;bottom:0;left:0;right:0;z-index:1001;background:#fff;border-top:3px solid var(--c-primary);max-height:40vh;display:none;flex-direction:column}
+.attr-table-panel.open{display:flex}
+.attr-table-header{display:flex;align-items:center;padding:8px 12px;gap:8px;border-bottom:1px solid #eee}
+.attr-table-header input{flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px}
+.attr-table-wrap{overflow:auto;flex:1}
+.attr-table{width:100%;border-collapse:collapse;font-size:12px}
+.attr-table th{background:#f0f0f0;padding:6px 8px;text-align:left;position:sticky;top:0;cursor:pointer;white-space:nowrap}
+.attr-table td{padding:5px 8px;border-bottom:1px solid #f0f0f0;white-space:nowrap}
+.attr-table tr:hover{background:#f5f5f0}
+.attr-table tr.selected{background:rgba(52,152,219,.15)}
+
+/* === INFRAESTRUCTURAS === */
+.infra-search{padding:8px 0}
+.infra-search input{width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px}
+.infra-card{display:flex;align-items:center;gap:10px}
+.infra-card .infra-icon{width:40px;height:40px;background:var(--c-infra);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;flex-shrink:0}
+.infra-card .infra-info{flex:1}
+.infra-card .infra-info h3{font-size:14px;margin-bottom:2px}
+.infra-card .infra-info small{color:#888;font-size:12px}
+.infra-badges{display:flex;gap:4px;margin-top:4px}
+
+/* === GANADEROS === */
+.ganadero-card{display:flex;align-items:center;gap:10px}
+.ganadero-card .gan-icon{width:40px;height:40px;background:var(--c-secondary);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;flex-shrink:0}
+.ganadero-card .gan-info{flex:1}
+.ganadero-card .gan-info h3{font-size:14px}
+
+/* === PANEL REGISTROS === */
+.panel-filters{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.panel-filters select,.panel-filters input{padding:8px;border:1.5px solid #ddd;border-radius:6px;font-size:13px;min-height:var(--touch-min)}
+.registro-card{position:relative}
+.registro-card .reg-header{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.registro-card .reg-header h3{flex:1;font-size:14px}
+.registro-card .reg-meta{font-size:12px;color:#888;margin-bottom:6px}
+.registro-card .reg-actions{display:flex;gap:6px;flex-wrap:wrap}
+
+/* === DASHBOARD === */
+.dash-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.dash-metric{background:var(--c-card);border-radius:8px;padding:12px;text-align:center;box-shadow:var(--shadow)}
+.dash-metric .num{font-size:24px;font-weight:800;color:var(--c-primary)}
+.dash-metric .lbl{font-size:11px;color:#888;margin-top:2px}
+.dash-filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.dash-filters select{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;min-height:36px}
+.dash-chart{background:var(--c-card);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow);margin-bottom:12px}
+.dash-chart h3{font-size:14px;margin-bottom:8px;color:#555}
+.dash-alerts{margin-top:10px}
+.dash-alert{background:#fff3cd;border-left:3px solid var(--c-dash);padding:10px 12px;border-radius:6px;margin-bottom:6px;font-size:13px}
+
+/* === TIMELINE === */
+.tl-filters{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.tl-filters select,.tl-filters input{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;min-height:36px}
+.tl-card{position:relative;padding-left:24px;margin-bottom:10px}
+.tl-card::before{content:'';position:absolute;left:6px;top:0;bottom:-10px;width:2px;background:#ddd}
+.tl-card::after{content:'';position:absolute;left:0;top:12px;width:14px;height:14px;border-radius:50%;border:3px solid var(--c-primary);background:#fff}
+.tl-card[data-tipo="VP"]::after{border-color:var(--c-vp)}
+.tl-card[data-tipo="EL"]::after{border-color:var(--c-el)}
+.tl-card[data-tipo="EI"]::after{border-color:var(--c-ei)}
+.tl-content{background:var(--c-card);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow)}
+.tl-thumbs{display:flex;gap:4px;margin-top:6px;overflow-x:auto}
+.tl-thumbs img{width:50px;height:66px;object-fit:cover;border-radius:4px;cursor:pointer;flex-shrink:0}
+
+/* === COMPARADOR === */
+.comp-controls{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+.comp-slider-wrap{position:relative;width:100%;aspect-ratio:3/4;overflow:hidden;border-radius:var(--radius);background:#000;touch-action:none}
+.comp-slider-wrap img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover}
+.comp-slider-wrap .comp-after{clip-path:inset(0 0 0 50%)}
+.comp-slider-line{position:absolute;top:0;bottom:0;width:3px;background:gold;left:50%;z-index:10;cursor:ew-resize}
+.comp-slider-handle{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:36px;height:36px;background:gold;border-radius:50%;z-index:11;cursor:ew-resize;display:flex;align-items:center;justify-content:center;font-size:18px;color:#333;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.comp-side{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.comp-side img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:6px}
+
+/* === GALERÍA === */
+.gal-tabs{display:flex;gap:4px;margin-bottom:10px}
+.gal-tab{flex:1;padding:8px;border:2px solid #ddd;border-radius:8px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;text-align:center}
+.gal-tab.active{border-color:var(--c-comp);background:var(--c-comp);color:#fff}
+.gal-filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.gal-filters select,.gal-filters input{padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;min-height:36px}
+.gal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px}
+.gal-grid .gal-item{position:relative;aspect-ratio:3/4;border-radius:6px;overflow:hidden;cursor:pointer}
+.gal-grid .gal-item img{width:100%;height:100%;object-fit:cover}
+.gal-grid .gal-item .gal-check{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.8);display:flex;align-items:center;justify-content:center;font-size:14px;display:none}
+.gal-grid .gal-item.selected .gal-check{display:flex;background:var(--c-comp);color:#fff}
+.gal-group-title{font-size:13px;font-weight:700;color:#555;margin:10px 0 4px;grid-column:1/-1}
+
+/* === LIGHTBOX === */
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9000;display:none;flex-direction:column;align-items:center;justify-content:center}
+.lightbox.open{display:flex}
+.lightbox img{max-width:95vw;max-height:80vh;object-fit:contain}
+.lightbox .lb-close{position:absolute;top:10px;right:10px;color:#fff;font-size:30px;cursor:pointer;z-index:1;background:none;border:none;min-width:var(--touch-min);min-height:var(--touch-min)}
+.lightbox .lb-nav{position:absolute;top:50%;color:#fff;font-size:36px;cursor:pointer;background:rgba(0,0,0,.3);border:none;border-radius:50%;width:var(--touch-min);height:var(--touch-min);display:flex;align-items:center;justify-content:center}
+.lightbox .lb-prev{left:8px;transform:translateY(-50%)}
+.lightbox .lb-next{right:8px;transform:translateY(-50%)}
+.lightbox .lb-info{color:#fff;font-size:13px;margin-top:8px;text-align:center}
+.lightbox .lb-actions{display:flex;gap:10px;margin-top:8px}
+.lightbox .lb-actions .btn{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)}
+
+/* === CÁMARA === */
+.camera-modal{position:fixed;inset:0;background:#000;z-index:8000;display:none;flex-direction:column}
+.camera-modal.open{display:flex}
+.camera-video-wrap{flex:1;position:relative;overflow:hidden}
+.camera-video-wrap video{width:100%;height:100%;object-fit:cover}
+.camera-overlay{position:absolute;top:10px;left:10px;color:#fff;font-size:12px;text-shadow:0 1px 3px rgba(0,0,0,.7);z-index:1}
+.camera-overlay .cam-compass{font-size:14px;margin-bottom:4px}
+.camera-overlay .cam-coords{font-size:11px;opacity:.9}
+.camera-minimap{position:absolute;bottom:10px;left:10px;width:120px;height:90px;border-radius:6px;overflow:hidden;border:2px solid #fff;z-index:1;opacity:.85}
+.camera-controls{display:flex;align-items:center;justify-content:space-around;padding:16px;background:#111}
+.camera-controls .cam-btn{width:64px;height:64px;border-radius:50%;border:4px solid #fff;background:transparent;cursor:pointer}
+.camera-controls .cam-btn-capture{background:#fff}
+.camera-controls .cam-btn-cancel,.camera-controls .cam-btn-switch{width:44px;height:44px;border:none;background:rgba(255,255,255,.2);color:#fff;border-radius:50%;font-size:20px;cursor:pointer}
+
+/* === PREVIEW FOTO === */
+.preview-modal{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:8500;display:none;flex-direction:column;align-items:center;justify-content:center}
+.preview-modal.open{display:flex}
+.preview-modal canvas{max-width:95vw;max-height:70vh;border-radius:8px}
+.preview-actions{display:flex;gap:12px;margin-top:16px}
+.preview-actions .btn{min-width:100px}
+
+/* === BÚSQUEDA GLOBAL === */
+.search-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:7000;display:none;justify-content:center;padding-top:80px}
+.search-overlay.open{display:flex}
+.search-box{background:#fff;border-radius:12px;width:90%;max-width:420px;max-height:70vh;display:flex;flex-direction:column;align-self:flex-start}
+.search-box input{padding:14px 16px;border:none;border-bottom:1px solid #eee;font-size:16px;border-radius:12px 12px 0 0}
+.search-box input:focus{outline:none}
+.search-results{overflow-y:auto;padding:8px}
+.search-result{padding:10px 12px;cursor:pointer;border-radius:6px;font-size:14px}
+.search-result:hover,.search-result:active{background:#f5f5f0}
+.search-result small{color:#888;font-size:12px;display:block}
+
+/* === PROGRESO SUBIDA === */
+.upload-progress{position:fixed;bottom:30px;left:12px;right:12px;background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.2);padding:12px 16px;z-index:6000;display:none}
+.upload-progress.show{display:block}
+.upload-progress .prog-text{font-size:13px;font-weight:600;margin-bottom:6px}
+.upload-progress .prog-bar{height:6px;background:#eee;border-radius:3px;overflow:hidden}
+.upload-progress .prog-fill{height:100%;background:var(--c-secondary);border-radius:3px;transition:width .3s}
+
+/* === ADMIN PANEL (dentro de SPA) === */
+.admin-section{margin-top:10px}
+.admin-user-card{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.admin-user-card .user-info h3{font-size:14px}
+.admin-user-card .user-info small{color:#888;font-size:12px}
+.admin-user-actions{display:flex;gap:4px}
+
+/* === INSTALAR BANNER === */
+.install-banner{background:var(--c-primary);color:#fff;padding:12px 16px;border-radius:var(--radius);display:flex;align-items:center;gap:10px;margin:8px 12px;display:none}
+.install-banner .btn{background:#fff;color:var(--c-primary);font-weight:700}
+
+/* === AUTOCOMPLETE === */
+.autocomplete-wrap{position:relative}
+.autocomplete-list{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:0 0 8px 8px;max-height:150px;overflow-y:auto;z-index:200;display:none}
+.autocomplete-list.open{display:block}
+.autocomplete-list div{padding:8px 12px;font-size:14px;cursor:pointer}
+.autocomplete-list div:hover,.autocomplete-list div.highlight{background:#f5f5f0}
+
+/* === WMS PANEL === */
+.wms-panel{position:absolute;top:56px;right:0;width:280px;max-height:60vh;background:#fff;z-index:1000;border-radius:0 0 0 12px;box-shadow:var(--shadow);display:none;flex-direction:column;overflow:hidden}
+.wms-panel.open{display:flex}
+.wms-panel h3{padding:10px 12px;font-size:14px;border-bottom:1px solid #eee;margin:0}
+.wms-panel .wms-body{overflow-y:auto;padding:10px}
+.wms-panel .wms-layer{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px}
+.wms-panel .wms-layer input[type=checkbox]{width:18px;height:18px}
+
+/* === FULLSCREEN SEARCH === */
+.map-search{position:absolute;top:56px;left:50%;transform:translateX(-50%);z-index:999;width:80%;max-width:300px;display:none}
+.map-search.open{display:block}
+.map-search input{width:100%;padding:8px 12px;border:2px solid var(--c-map);border-radius:20px;font-size:14px;box-shadow:var(--shadow)}
+
+/* === MODAL GENÉRICO === */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5000;display:none;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-box{background:#fff;border-radius:16px;padding:20px;width:90%;max-width:400px;max-height:80vh;overflow-y:auto}
+.modal-box h2{font-size:18px;margin-bottom:12px}
+.modal-box .modal-actions{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
+
+@media(min-width:600px){
+  .menu-grid{grid-template-columns:repeat(4,1fr)}
+  .dash-metrics{grid-template-columns:repeat(6,1fr)}
+  .form-row{grid-template-columns:1fr 1fr 1fr}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+<!-- ==================== LOGIN ==================== -->
+<div id="login-overlay">
+  <div class="login-box">
+    <h2>RAPCA Campo</h2>
+    <p>Evaluación de Medios Agropecuarios</p>
+    <div id="login-error"></div>
+    <input type="email" id="login-email" placeholder="Email" autocomplete="email">
+    <input type="password" id="login-pass" placeholder="Contraseña" autocomplete="current-password">
+    <button class="btn btn-primary" id="login-btn" onclick="iniciarSesion()">Entrar</button>
+  </div>
+</div>
+
+<!-- ==================== TOAST CONTAINER ==================== -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- ==================== MENÚ ==================== -->
+<div class="page active" id="menu-page">
+  <div class="menu-header">
+    <h1>RAPCA Campo</h1>
+    <small>Evaluación Ecológica y Pastoral</small>
+  </div>
+  <div class="menu-user" id="menu-user">
+    <span id="menu-user-name">—</span>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn-icon" onclick="toggleContraste()" title="Alto contraste">☀️</button>
+      <button class="btn-icon" onclick="abrirBusqueda()" title="Buscar">🔍</button>
+      <button class="btn-icon" onclick="cerrarSesion()" title="Cerrar sesión">⏻</button>
+    </div>
+  </div>
+
+  <div class="menu-category">Trabajo de campo</div>
+  <div class="menu-grid">
+    <button class="menu-btn" onclick="irPagina('vp')"><div class="icon" style="background:var(--c-vp)">📋</div><span>Visita Previa</span></button>
+    <button class="menu-btn" onclick="irPagina('el')"><div class="icon" style="background:var(--c-el)">📝</div><span>Eval. Ligera</span></button>
+    <button class="menu-btn" onclick="irPagina('ei')"><div class="icon" style="background:var(--c-ei)">📊</div><span>Eval. Intensa</span></button>
+    <button class="menu-btn" onclick="irPagina('mapa')"><div class="icon" style="background:var(--c-map)">🗺️</div><span>Mapa</span></button>
+  </div>
+
+  <div class="menu-category">Gestión</div>
+  <div class="menu-grid">
+    <button class="menu-btn" onclick="irPagina('ganaderos')"><div class="icon" style="background:var(--c-secondary)">🐄</div><span>Ganaderos</span></button>
+    <button class="menu-btn" onclick="irPagina('infraestructuras')"><div class="icon" style="background:var(--c-infra)">🏗️</div><span>Infraestructuras</span></button>
+    <button class="menu-btn" onclick="irPagina('panel')"><div class="icon" style="background:var(--c-primary)">📁</div><span>Panel</span></button>
+    <button class="menu-btn" onclick="irPagina('dashboard')"><div class="icon" style="background:var(--c-dash)">📈</div><span>Dashboard</span></button>
+  </div>
+
+  <div class="menu-category">Herramientas</div>
+  <div class="menu-grid">
+    <button class="menu-btn" onclick="irPagina('timeline')"><div class="icon" style="background:var(--c-tl)">🕐</div><span>Historial</span></button>
+    <button class="menu-btn" onclick="irPagina('comparador')"><div class="icon" style="background:var(--c-comp)">🔀</div><span>Comparador</span></button>
+    <button class="menu-btn" onclick="irPagina('galeria')"><div class="icon" style="background:var(--c-comp)">🖼️</div><span>Galería</span></button>
+  </div>
+
+  <div class="menu-grid" id="menu-admin" style="display:none">
+    <button class="menu-btn" onclick="irPagina('admin')"><div class="icon" style="background:#333">⚙️</div><span>Admin</span></button>
+  </div>
+
+  <div class="menu-actions">
+    <button class="btn btn-primary btn-block" onclick="sincronizar()">🔄 Sincronizar registros</button>
+    <button class="btn btn-secondary btn-block" onclick="subirFotosPendientes()">📤 Subir fotos pendientes (<span id="menu-pending-fotos">0</span>)</button>
+    <div class="install-banner" id="install-banner">
+      <span style="flex:1">Instalar RAPCA Campo</span>
+      <button class="btn btn-sm" onclick="instalarApp()">Instalar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== VP (Visita Previa) ==================== -->
+<div class="page" id="vp-page">
+  <div class="page-header" style="background:var(--c-vp);color:#333">
+    <button class="btn-back" onclick="irPagina('menu')" style="color:#333">←</button>
+    <h1 style="color:#333">Visita Previa</h1>
+  </div>
+  <div style="padding:12px;overflow-y:auto;flex:1">
+    <div class="section-title" style="color:var(--c-vp);border-color:var(--c-vp)">Identificación</div>
+    <div class="form-group"><label>Fecha</label><input type="date" id="vp-fecha"></div>
+    <div class="form-row">
+      <div class="form-group"><label>ID Unidad</label><input type="text" id="vp-unidad" placeholder="Ej: 23AJE01" oninput="this.value=this.value.toUpperCase();autoZona('vp')"></div>
+      <div class="form-group"><label>ID Zona</label><input type="text" id="vp-zona" readonly></div>
+    </div>
+
+    <div class="section-title" style="color:var(--c-vp);border-color:var(--c-vp)">Grados de Pastoreo</div>
+    <div id="vp-pastoreo-container"></div>
+
+    <div class="section-title" style="color:var(--c-vp);border-color:var(--c-vp)">Observación Pastoreo</div>
+    <div id="vp-obs-container"></div>
+
+    <div class="section-title" style="color:var(--c-vp);border-color:var(--c-vp)">Fotos</div>
+    <div class="foto-section">
+      <div class="foto-btns">
+        <button class="btn btn-sm foto-btn" style="background:var(--c-vp);color:#333" onclick="abrirCamara('VP','G')">📷 General</button>
+        <button class="btn btn-sm foto-btn" style="background:var(--c-vp);color:#333" onclick="abrirCamara('VP','W1')">📍 Waypoint 1</button>
+        <button class="btn btn-sm foto-btn" style="background:var(--c-vp);color:#333" onclick="abrirCamara('VP','W2')">📍 Waypoint 2</button>
+      </div>
+      <div class="foto-preview-grid" id="vp-fotos-preview"></div>
+    </div>
+
+    <div class="section-title" style="color:var(--c-vp);border-color:var(--c-vp)">Observaciones</div>
+    <div class="form-group"><textarea id="vp-observaciones" placeholder="Observaciones generales..."></textarea></div>
+
+    <button class="btn btn-block" style="background:var(--c-vp);color:#333;font-size:16px;padding:14px" onclick="guardarVP()">💾 Guardar Visita Previa</button>
+  </div>
+</div>
+
+<!-- ==================== EL (Evaluación Ligera) ==================== -->
+<div class="page" id="el-page">
+  <div class="page-header" style="background:var(--c-el)">
+    <button class="btn-back" onclick="irPagina('menu')">←</button>
+    <h1>Evaluación Ligera</h1>
+  </div>
+  <div style="padding:12px;overflow-y:auto;flex:1">
+    <div class="section-title" style="color:var(--c-el);border-color:var(--c-el)">Identificación</div>
+    <div class="form-group"><label>Fecha</label><input type="date" id="el-fecha"></div>
+    <div class="form-row">
+      <div class="form-group"><label>ID Unidad</label><input type="text" id="el-unidad" placeholder="Ej: 23AJE01" oninput="this.value=this.value.toUpperCase();autoZona('el')"></div>
+      <div class="form-group"><label>ID Zona</label><input type="text" id="el-zona" readonly></div>
+    </div>
+
+    <div class="section-title" style="color:var(--c-el);border-color:var(--c-el)">Grados de Pastoreo</div>
+    <div id="el-pastoreo-container"></div>
+
+    <div class="section-title" style="color:var(--c-el);border-color:var(--c-el)">Observación Pastoreo</div>
+    <div id="el-obs-container"></div>
+
+    <div class="section-title" style="color:var(--c-el);border-color:var(--c-el)">Fotos</div>
+    <div class="foto-section">
+      <div class="foto-btns">
+        <button class="btn btn-sm" style="background:var(--c-el);color:#fff" onclick="abrirCamara('EL','G')">📷 General</button>
+        <button class="btn btn-sm" style="background:var(--c-el);color:#fff" onclick="abrirCamara('EL','W1')">📍 Waypoint 1</button>
+        <button class="btn btn-sm" style="background:var(--c-el);color:#fff" onclick="abrirCamara('EL','W2')">📍 Waypoint 2</button>
+      </div>
+      <div class="foto-preview-grid" id="el-fotos-preview"></div>
+    </div>
+
+    <div class="section-title" style="color:var(--c-el);border-color:var(--c-el)">Observaciones</div>
+    <div class="form-group"><textarea id="el-observaciones" placeholder="Observaciones generales..."></textarea></div>
+
+    <button class="btn btn-block" style="background:var(--c-el);color:#fff;font-size:16px;padding:14px" onclick="guardarEL()">💾 Guardar Evaluación Ligera</button>
+  </div>
+</div>
+
+<!-- ==================== EI (Evaluación Intensa) ==================== -->
+<div class="page" id="ei-page">
+  <div class="page-header" style="background:var(--c-ei)">
+    <button class="btn-back" onclick="irPagina('menu')">←</button>
+    <h1>Evaluación Intensa</h1>
+    <span id="ei-unidad-label" style="font-size:12px;opacity:.8"></span>
+  </div>
+  <div style="padding:12px;overflow-y:auto;flex:1">
+    <div class="section-title" style="color:var(--c-ei);border-color:var(--c-ei)">Identificación</div>
+    <div class="form-group"><label>Fecha</label><input type="date" id="ev-fecha"></div>
+    <div class="form-row">
+      <div class="form-group"><label>ID Unidad</label><input type="text" id="ev-unidad" placeholder="Ej: 23AJE01" oninput="this.value=this.value.toUpperCase();autoZona('ev')"></div>
+      <div class="form-group"><label>ID Zona</label><input type="text" id="ev-zona" readonly></div>
+    </div>
+
+    <div class="section-title" style="color:var(--c-ei);border-color:var(--c-ei)">Transecto</div>
+    <div class="transecto-tabs" id="ev-transecto-tabs">
+      <button class="transecto-tab active" data-t="T1" onclick="cambiarTransecto('T1')">T1</button>
+      <button class="transecto-tab" data-t="T2" onclick="cambiarTransecto('T2')">T2</button>
+      <button class="transecto-tab" data-t="T3" onclick="cambiarTransecto('T3')">T3</button>
+    </div>
+
+    <div class="section-title" style="color:var(--c-ei);border-color:var(--c-ei)">Grados de Pastoreo</div>
+    <div id="ev-pastoreo-container"></div>
+
+    <div class="section-title" style="color:var(--c-ei);border-color:var(--c-ei)">Observación Pastoreo</div>
+    <div id="ev-obs-container"></div>
+
+    <div class="section-title" style="color:var(--c-ei);border-color:var(--c-ei)">Plantas (10)</div>
+    <div id="ev-plantas-container"></div>
+    <div class="card" style="text-align:center;margin-top:4px">
+      <strong>Media general plantas: </strong><span id="ev-plantas-media">—</span>
+    </div>
+
+    <div class="section-title" style="color:var(--c-ei);border-color:var(--c-ei)">Palatables (3)</div>
+    <div id="ev-palatables-container"></div>
+    <div class="card" style="text-align:center;margin-top:4px">
+      <strong>Media general palatables: </strong><span id="ev-palatables-media">—</span>
+    </div>
+
+    <div class="section-title" style="color:var(--c-ei);border-color:var(--c-ei)">Herbáceas (7)</div>
+    <div id="ev-herbaceas-container"></div>
+    <div class="card" style="text-align:center;margin-top:4px">
+      <strong>Media herbáceas: </strong><span id="ev-herbaceas-media">—</span>
+    </div>
+
+    <div class="section-title" style="color:var(--c-ei);border-color:var(--c-ei)">Matorralización</div>
+    <div id="ev-matorral-container"></div>
+    <div class="mat-resultado" id="ev-mat-resultado" style="display:none">
+      <small>Volumen matorral</small>
+      <div class="vol" id="ev-mat-volumen">— m³/ha</div>
+      <div style="font-size:12px;margin-top:4px">
+        <span>Cob media: <strong id="ev-mat-cob-media">—</strong>%</span> ·
+        <span>Alt media: <strong id="ev-mat-alt-media">—</strong> cm</span>
+      </div>
+    </div>
+
+    <div class="section-title" style="color:var(--c-ei);border-color:var(--c-ei)">Fotos</div>
+    <div class="foto-section">
+      <div class="foto-btns">
+        <button class="btn btn-sm" style="background:var(--c-ei);color:#fff" onclick="abrirCamara('EI','G')">📷 General</button>
+        <button class="btn btn-sm" style="background:var(--c-ei);color:#fff" onclick="abrirCamara('EI','W1')">📍 Waypoint 1</button>
+        <button class="btn btn-sm" style="background:var(--c-ei);color:#fff" onclick="abrirCamara('EI','W2')">📍 Waypoint 2</button>
+      </div>
+      <div class="foto-preview-grid" id="ev-fotos-preview"></div>
+    </div>
+
+    <div class="section-title" style="color:var(--c-ei);border-color:var(--c-ei)">Observaciones</div>
+    <div class="form-group"><textarea id="ev-observaciones" placeholder="Observaciones generales..."></textarea></div>
+
+    <button class="btn btn-block" style="background:var(--c-ei);color:#fff;font-size:16px;padding:14px" onclick="guardarEI()">💾 Guardar Transecto</button>
+  </div>
+</div>
+
+<!-- ==================== MAPA ==================== -->
+<div class="page" id="mapa-page">
+  <div class="page-header" style="background:var(--c-map)">
+    <button class="btn-back" onclick="irPagina('menu')">←</button>
+    <h1>Mapa</h1>
+    <button class="btn-icon" onclick="toggleMapSearch()" style="color:#fff">🔍</button>
+    <button class="btn-icon" onclick="toggleFullscreen()" style="color:#fff">⛶</button>
+  </div>
+  <div class="map-search" id="map-search"><input type="text" id="map-search-input" placeholder="Buscar punto..." oninput="buscarEnMapa(this.value)"></div>
+  <div class="map-toolbar" id="map-toolbar">
+    <button class="btn btn-sm btn-outline" onclick="toggleGPS()">📍 GPS</button>
+    <button class="btn btn-sm btn-outline" onclick="medirDistancia()">📏 Medir</button>
+    <button class="btn btn-sm btn-outline" onclick="agregarWaypoint()">📌 Waypoint</button>
+    <button class="btn btn-sm btn-outline" onclick="cargarKML()">📂 KML</button>
+    <button class="btn btn-sm btn-outline" onclick="importarGPX()">📂 GPX</button>
+    <button class="btn btn-sm btn-outline" onclick="exportarKML()">💾 KML</button>
+    <button class="btn btn-sm btn-outline" onclick="exportarGPX()">💾 GPX</button>
+    <button class="btn btn-sm btn-outline" onclick="toggleWMS()">🌐 WMS</button>
+    <button class="btn btn-sm btn-outline" onclick="toggleAttrTable()">📊 Tabla</button>
+    <button class="btn btn-sm btn-outline" onclick="exportarMapaPDF()">🖨️ PDF</button>
+    <button class="btn btn-sm btn-outline" onclick="filtrarOperadorMapa()">👤 Operador</button>
+  </div>
+  <div id="map-container"></div>
+  <div class="map-controls">
+    <button class="btn" onclick="miPosicion()">📍</button>
+    <button class="btn" onclick="toggleCapas()">🗂️</button>
+  </div>
+  <div class="gps-panel" id="gps-panel">
+    <div class="gps-row"><span class="gps-label">Lat:</span><span class="gps-val" id="gps-lat">—</span></div>
+    <div class="gps-row"><span class="gps-label">Lon:</span><span class="gps-val" id="gps-lon">—</span></div>
+    <div class="gps-row"><span class="gps-label">Alt:</span><span class="gps-val" id="gps-alt">—</span></div>
+    <div class="gps-row"><span class="gps-label">UTM:</span><span class="gps-val" id="gps-utm">—</span></div>
+    <div class="gps-row"><span class="gps-label">Vel:</span><span class="gps-val" id="gps-speed">—</span></div>
+    <div class="gps-row"><span class="gps-label">Prec:</span><span class="gps-val" id="gps-acc">—</span></div>
+    <div class="gps-row"><span class="gps-label">Rumbo:</span><span class="gps-val" id="gps-heading">—</span></div>
+  </div>
+  <div class="wms-panel" id="wms-panel">
+    <h3>Capas WMS/WMTS</h3>
+    <div class="wms-body" id="wms-body">
+      <div class="form-group" style="margin-bottom:8px">
+        <input type="text" id="wms-url" placeholder="URL del servicio WMS" style="font-size:12px;padding:6px">
+      </div>
+      <button class="btn btn-sm btn-primary" onclick="agregarWMS()" style="width:100%;margin-bottom:8px">Añadir capa</button>
+      <div id="wms-layers-list"></div>
+    </div>
+  </div>
+  <div class="attr-table-panel" id="attr-table-panel">
+    <div class="attr-table-header">
+      <input type="text" id="attr-search" placeholder="Buscar..." oninput="filtrarTablaAttr(this.value)">
+      <button class="btn-icon" onclick="toggleAttrTable()">✕</button>
+    </div>
+    <div class="attr-table-wrap">
+      <table class="attr-table" id="attr-table">
+        <thead id="attr-thead"></thead>
+        <tbody id="attr-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== GANADEROS ==================== -->
+<div class="page" id="ganaderos-page">
+  <div class="page-header" style="background:var(--c-secondary)">
+    <button class="btn-back" onclick="irPagina('menu')">←</button>
+    <h1>Ganaderos</h1>
+    <button class="btn-icon" onclick="nuevoGanadero()" style="color:#fff">＋</button>
+  </div>
+  <div style="padding:12px;overflow-y:auto;flex:1">
+    <div class="infra-search"><input type="text" id="ganaderos-buscar" placeholder="Buscar ganadero..." oninput="filtrarGanaderos(this.value)"></div>
+    <div id="ganaderos-lista"></div>
+  </div>
+</div>
+
+<!-- ==================== INFRAESTRUCTURAS ==================== -->
+<div class="page" id="infraestructuras-page">
+  <div class="page-header" style="background:var(--c-infra)">
+    <button class="btn-back" onclick="irPagina('menu')">←</button>
+    <h1>Infraestructuras</h1>
+    <button class="btn-icon" onclick="nuevaInfra()" style="color:#fff">＋</button>
+  </div>
+  <div style="padding:12px;overflow-y:auto;flex:1">
+    <div class="infra-search"><input type="text" id="infra-buscar" placeholder="Buscar infraestructura..." oninput="filtrarInfras(this.value)"></div>
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button class="btn btn-sm btn-outline" onclick="importarExcelInfra()">📥 Importar Excel</button>
+      <button class="btn btn-sm btn-outline" onclick="exportarExcelInfra()">📤 Exportar Excel</button>
+    </div>
+    <div id="infra-lista"></div>
+  </div>
+</div>
+
+<!-- ==================== PANEL ==================== -->
+<div class="page" id="panel-page">
+  <div class="page-header" style="background:var(--c-primary)">
+    <button class="btn-back" onclick="irPagina('menu')">←</button>
+    <h1>Panel de Registros</h1>
+  </div>
+  <div style="padding:12px;overflow-y:auto;flex:1">
+    <div class="panel-filters">
+      <select id="panel-filtro-tipo" onchange="filtrarPanel()"><option value="">Todos</option><option value="VP">VP</option><option value="EL">EL</option><option value="EI">EI</option></select>
+      <select id="panel-filtro-operador" onchange="filtrarPanel()"><option value="">Todos operadores</option></select>
+    </div>
+    <div id="panel-lista"></div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:14px">
+      <button class="btn btn-sm btn-primary" onclick="exportarTodosPDF()">📄 Exportar todos PDF</button>
+      <button class="btn btn-sm btn-primary" onclick="descargarTodasFotosZIP()">📷 Descargar fotos ZIP</button>
+      <button class="btn btn-sm btn-outline" onclick="exportarKMLRegistros()">🗺️ Exportar KML</button>
+      <button class="btn btn-sm btn-danger" onclick="borrarTodosRegistros()">🗑️ Borrar todo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== DASHBOARD ==================== -->
+<div class="page" id="dashboard-page">
+  <div class="page-header" style="background:var(--c-dash)">
+    <button class="btn-back" onclick="irPagina('menu')">←</button>
+    <h1>Dashboard</h1>
+  </div>
+  <div style="padding:12px;overflow-y:auto;flex:1" id="dashboard-content"></div>
+</div>
+
+<!-- ==================== TIMELINE ==================== -->
+<div class="page" id="timeline-page">
+  <div class="page-header" style="background:var(--c-tl)">
+    <button class="btn-back" onclick="irPagina('menu')">←</button>
+    <h1>Historial</h1>
+  </div>
+  <div style="padding:12px;overflow-y:auto;flex:1" id="timeline-content"></div>
+</div>
+
+<!-- ==================== COMPARADOR ==================== -->
+<div class="page" id="comparador-page">
+  <div class="page-header" style="background:var(--c-comp)">
+    <button class="btn-back" onclick="irPagina('menu')">←</button>
+    <h1>Comparador</h1>
+  </div>
+  <div style="padding:12px;overflow-y:auto;flex:1" id="comparador-content"></div>
+</div>
+
+<!-- ==================== GALERÍA ==================== -->
+<div class="page" id="galeria-page">
+  <div class="page-header" style="background:var(--c-comp)">
+    <button class="btn-back" onclick="irPagina('menu')">←</button>
+    <h1>Galería</h1>
+  </div>
+  <div style="padding:12px;overflow-y:auto;flex:1" id="galeria-content"></div>
+</div>
+
+<!-- ==================== ADMIN ==================== -->
+<div class="page" id="admin-page">
+  <div class="page-header" style="background:#333">
+    <button class="btn-back" onclick="irPagina('menu')">←</button>
+    <h1>Administración</h1>
+  </div>
+  <div style="padding:12px;overflow-y:auto;flex:1">
+    <div class="section-title">Gestión de Usuarios</div>
+    <button class="btn btn-sm btn-primary" onclick="abrirModalCrearUsuario()" style="margin-bottom:10px">＋ Crear usuario</button>
+    <div id="admin-users-list"></div>
+    <div class="section-title" style="margin-top:20px">Registros en servidor</div>
+    <button class="btn btn-sm btn-outline" onclick="cargarRegistrosServidor()">Cargar registros del servidor</button>
+    <div id="admin-server-records" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<!-- ==================== LIGHTBOX ==================== -->
+<div class="lightbox" id="lightbox">
+  <button class="lb-close" onclick="cerrarLightbox()">✕</button>
+  <button class="lb-nav lb-prev" onclick="navLightbox(-1)">‹</button>
+  <button class="lb-nav lb-next" onclick="navLightbox(1)">›</button>
+  <img id="lb-img" src="" alt="">
+  <div class="lb-info" id="lb-info"></div>
+  <div class="lb-actions">
+    <button class="btn btn-sm" onclick="descargarFotoLB()">📥 Descargar</button>
+  </div>
+</div>
+
+<!-- ==================== CÁMARA ==================== -->
+<div class="camera-modal" id="camera-modal">
+  <div class="camera-video-wrap">
+    <video id="camera-video" autoplay playsinline></video>
+    <div class="camera-overlay">
+      <div class="cam-compass" id="cam-compass">N 0°</div>
+      <div class="cam-coords" id="cam-coords">—</div>
+      <div class="cam-code" id="cam-code" style="margin-top:4px;font-weight:700"></div>
+    </div>
+    <div class="camera-minimap" id="camera-minimap"></div>
+  </div>
+  <div class="camera-controls">
+    <button class="cam-btn-cancel" onclick="cerrarCamara()">✕</button>
+    <button class="cam-btn cam-btn-capture" onclick="capturarFoto()"></button>
+    <button class="cam-btn-switch" onclick="switchCamara()">🔄</button>
+  </div>
+</div>
+
+<!-- ==================== PREVIEW FOTO ==================== -->
+<div class="preview-modal" id="preview-modal">
+  <canvas id="preview-canvas"></canvas>
+  <div class="preview-actions">
+    <button class="btn btn-danger" onclick="repetirFoto()">🔄 Repetir</button>
+    <button class="btn btn-outline" style="color:#fff;border-color:#fff" onclick="anotarFoto()">✏️ Anotar</button>
+    <button class="btn" style="background:var(--c-secondary);color:#fff" onclick="aceptarFoto()">✓ Aceptar</button>
+  </div>
+</div>
+
+<!-- ==================== BÚSQUEDA GLOBAL ==================== -->
+<div class="search-overlay" id="search-overlay" onclick="if(event.target===this)cerrarBusqueda()">
+  <div class="search-box">
+    <input type="text" id="search-input" placeholder="Buscar infraestructuras, registros, operadores..." oninput="busquedaGlobal(this.value)">
+    <div class="search-results" id="search-results"></div>
+  </div>
+</div>
+
+<!-- ==================== MODAL GENÉRICO ==================== -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)cerrarModal()">
+  <div class="modal-box" id="modal-box"></div>
+</div>
+
+<!-- ==================== PROGRESO SUBIDA ==================== -->
+<div class="upload-progress" id="upload-progress">
+  <div class="prog-text" id="prog-text">Subiendo fotos...</div>
+  <div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+</div>
+
+<!-- ==================== STATUS BAR ==================== -->
+<div class="status-bar">
+  <div><span class="status-dot" id="status-dot"></span><span id="status-text">—</span></div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <span id="pending-sync" class="pending-count" style="display:none">0</span>
+    <span id="status-user" style="font-size:11px;opacity:.7"></span>
+  </div>
+</div>
+
+</div><!-- /app -->
+
+<!-- CDN Libraries -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+<!-- App scripts -->
+<script src="app.js"></script>
+<script src="dashboard.js"></script>
+<script src="timeline.js"></script>
+<script src="comparador.js"></script>
+<script src="galeria.js"></script>
+</body>
+</html>

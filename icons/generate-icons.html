@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head><title>Generar iconos RAPCA</title></head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// Genera iconos PNG para PWA. Abrir en navegador y los descarga.
+var sizes = [72, 96, 128, 144, 152, 192, 384, 512];
+sizes.forEach(function(s) {
+  var c = document.createElement('canvas');
+  c.width = s; c.height = s;
+  var ctx = c.getContext('2d');
+  // Fondo verde
+  ctx.fillStyle = '#1a3d2e';
+  ctx.fillRect(0, 0, s, s);
+  // Círculo
+  ctx.beginPath();
+  ctx.arc(s/2, s/2, s*0.38, 0, Math.PI*2);
+  ctx.fillStyle = '#88d8b0';
+  ctx.fill();
+  // Texto
+  ctx.fillStyle = '#1a3d2e';
+  ctx.font = 'bold ' + Math.round(s*0.22) + 'px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('RC', s/2, s/2);
+  // Descargar
+  var a = document.createElement('a');
+  a.href = c.toDataURL('image/png');
+  a.download = 'icon-' + s + '.png';
+  a.click();
+});
+document.body.innerHTML = '<h2>Iconos generados y descargados</h2>';
+</script>
+</body>
+</html>
