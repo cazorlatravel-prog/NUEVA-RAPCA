@@ -3,21 +3,49 @@
 // RAPCA Campo — config.php — Configuración
 // ============================================================
 
+// Cargar .env si existe
+function loadEnv($path) {
+    if (!file_exists($path)) return;
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#') continue;
+        if (strpos($line, '=') === false) continue;
+        list($key, $val) = explode('=', $line, 2);
+        $key = trim($key);
+        $val = trim($val);
+        if (!getenv($key)) {
+            putenv("$key=$val");
+            $_ENV[$key] = $val;
+        }
+    }
+}
+
+// Buscar .env en el directorio actual o un nivel arriba
+if (file_exists(__DIR__ . '/.env')) {
+    loadEnv(__DIR__ . '/.env');
+} elseif (file_exists(dirname(__DIR__) . '/.env')) {
+    loadEnv(dirname(__DIR__) . '/.env');
+}
+
 // Base de datos MySQL
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'rapca_campo');
-define('DB_USER', 'rapca_user');
-define('DB_PASS', '');
+define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_NAME', getenv('DB_NAME') ?: 'u919343704_rapcajaen');
+define('DB_USER', getenv('DB_USER') ?: 'u919343704_datosrapca');
+define('DB_PASS', getenv('DB_PASS') ?: '');
 
 // Cloudinary
-define('CLOUDINARY_URL', '');
-define('CLOUDINARY_CLOUD', '');
-define('CLOUDINARY_KEY', '');
-define('CLOUDINARY_SECRET', '');
+define('CLOUDINARY_CLOUD', getenv('CLOUDINARY_CLOUD_NAME') ?: 'drnqs1jwl');
+define('CLOUDINARY_KEY', getenv('CLOUDINARY_API_KEY') ?: '587983846793923');
+define('CLOUDINARY_SECRET', getenv('CLOUDINARY_API_SECRET') ?: '');
+
+// URL de la app
+define('APP_URL', getenv('APP_URL') ?: 'https://rapca.app');
 
 // CORS orígenes permitidos
 define('CORS_ORIGINS', serialize([
-    'https://rapca.example.com',
+    'https://rapca.app',
+    'https://www.rapca.app',
     'http://localhost',
     'http://localhost:8080'
 ]));

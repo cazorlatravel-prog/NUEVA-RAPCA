@@ -3,9 +3,9 @@
 // ============================================================
 
 // --- Constantes globales ---
-var API_BASE = '';
-var GOOGLE_FORM_URL = '';
-var CLOUDINARY_UPLOAD_URL = '';
+var API_BASE = 'https://rapca.app/';
+var GOOGLE_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSe8kPl5QErboQmrAJ6hSnbkiAJb3h9Mi6_Fntgws_Z1NWj1TQ/formResponse';
+var CLOUDINARY_UPLOAD_URL = 'https://rapca.app/upload.php';
 var ESPECIES = [
   'Arbutus unedo','Asparagus acutifolius','Chamaerops humilis','Cistus sp.',
   'Crataegus monogyna','Cytisus sp.','Daphne gnidium','Dittrichia viscosa',
