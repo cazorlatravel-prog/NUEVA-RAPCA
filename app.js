@@ -1176,32 +1176,206 @@ function capturarFoto() {
 }
 
 function repetirFoto() {
+  limpiarAnotaciones();
   document.getElementById('preview-modal').classList.remove('open');
   abrirCamara(camaraTipo, camaraSubtipo);
 }
 
+// --- Anotaciones interactivas ---
+var anotDragging = null;
+var anotResizing = null;
+var anotStartPos = null;
+
 function anotarFoto() {
+  var previewModal = document.getElementById('preview-modal');
   var canvas = document.getElementById('preview-canvas');
-  var ctx = canvas.getContext('2d');
+
+  // Crear overlay de anotaciones si no existe
+  var overlay = document.getElementById('anot-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'anot-overlay';
+    overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;';
+    // Posicionar relativamente al canvas
+    var canvasWrap = document.getElementById('anot-canvas-wrap');
+    if (!canvasWrap) {
+      canvasWrap = document.createElement('div');
+      canvasWrap.id = 'anot-canvas-wrap';
+      canvasWrap.style.cssText = 'position:relative;display:inline-block;max-width:95vw;max-height:70vh;';
+      canvas.parentNode.insertBefore(canvasWrap, canvas);
+      canvasWrap.appendChild(canvas);
+      canvasWrap.appendChild(overlay);
+    }
+  }
+
   var numAnot = anotaciones.length + 1;
-  // Dibujar círculo numerado en el centro
-  var cx = canvas.width / 2, cy = canvas.height / 2;
-  ctx.beginPath();
-  ctx.arc(cx, cy, 40, 0, Math.PI * 2);
-  ctx.strokeStyle = '#e74c3c';
-  ctx.lineWidth = 4;
-  ctx.stroke();
-  ctx.fillStyle = '#e74c3c';
-  ctx.font = 'bold 32px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(numAnot.toString(), cx, cy + 10);
+  var circleSize = 50; // Radio en píxeles de pantalla
+
+  // Crear elemento de anotación
+  var anot = document.createElement('div');
+  anot.className = 'anot-circle';
+  anot.dataset.num = numAnot;
+  anot.dataset.radius = circleSize;
+  anot.style.cssText = 'position:absolute;left:50%;top:50%;width:' + (circleSize * 2) + 'px;height:' + (circleSize * 2) + 'px;' +
+    'margin-left:-' + circleSize + 'px;margin-top:-' + circleSize + 'px;' +
+    'border:3px solid #e74c3c;border-radius:50%;pointer-events:auto;touch-action:none;cursor:grab;' +
+    'display:flex;align-items:center;justify-content:center;z-index:10;';
+  anot.innerHTML = '<span style="color:#e74c3c;font-weight:700;font-size:18px;pointer-events:none;text-shadow:0 0 3px #fff,0 0 5px #fff;">' + numAnot + '</span>' +
+    '<div class="anot-resize-handle" style="position:absolute;bottom:-6px;right:-6px;width:18px;height:18px;background:#e74c3c;border-radius:50%;cursor:nwse-resize;pointer-events:auto;touch-action:none;border:2px solid #fff;"></div>';
+
+  overlay.appendChild(anot);
+
+  // Eventos táctiles y ratón para arrastrar
+  anot.addEventListener('mousedown', anotStartDrag);
+  anot.addEventListener('touchstart', anotStartDrag, {passive: false});
+
+  // Eventos para redimensionar
+  var handle = anot.querySelector('.anot-resize-handle');
+  handle.addEventListener('mousedown', anotStartResize);
+  handle.addEventListener('touchstart', anotStartResize, {passive: false});
+
+  anotaciones.push({el: anot, num: numAnot, radius: circleSize});
+  showToast('Anotación ' + numAnot + '. Arrastra para mover, esquina para cambiar tamaño.', 'info');
+}
+
+function anotStartDrag(e) {
+  // Evitar si es el handle de resize
+  if (e.target.classList.contains('anot-resize-handle')) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  var anot = e.currentTarget;
+  anotDragging = anot;
+  anot.style.cursor = 'grabbing';
+
+  var touch = e.touches ? e.touches[0] : e;
+  anotStartPos = {
+    x: touch.clientX,
+    y: touch.clientY,
+    left: anot.offsetLeft + parseInt(anot.style.marginLeft || 0),
+    top: anot.offsetTop + parseInt(anot.style.marginTop || 0)
+  };
+}
+
+function anotStartResize(e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  var anot = e.currentTarget.parentElement;
+  anotResizing = anot;
+
+  var touch = e.touches ? e.touches[0] : e;
+  var rect = anot.getBoundingClientRect();
+  var cx = rect.left + rect.width / 2;
+  var cy = rect.top + rect.height / 2;
+  anotStartPos = {
+    x: touch.clientX,
+    y: touch.clientY,
+    cx: cx,
+    cy: cy,
+    origRadius: parseInt(anot.dataset.radius)
+  };
+}
+
+document.addEventListener('mousemove', anotOnMove);
+document.addEventListener('touchmove', anotOnMove, {passive: false});
+document.addEventListener('mouseup', anotEndDrag);
+document.addEventListener('touchend', anotEndDrag);
+
+function anotOnMove(e) {
+  if (!anotDragging && !anotResizing) return;
+  e.preventDefault();
+
+  var touch = e.touches ? e.touches[0] : e;
+
+  if (anotDragging) {
+    var dx = touch.clientX - anotStartPos.x;
+    var dy = touch.clientY - anotStartPos.y;
+    anotDragging.style.left = (anotStartPos.left + dx) + 'px';
+    anotDragging.style.top = (anotStartPos.top + dy) + 'px';
+    anotDragging.style.marginLeft = '0';
+    anotDragging.style.marginTop = '0';
+  }
+
+  if (anotResizing) {
+    var dx2 = touch.clientX - anotStartPos.cx;
+    var dy2 = touch.clientY - anotStartPos.cy;
+    var newRadius = Math.max(20, Math.round(Math.sqrt(dx2 * dx2 + dy2 * dy2)));
+    anotResizing.style.width = (newRadius * 2) + 'px';
+    anotResizing.style.height = (newRadius * 2) + 'px';
+    anotResizing.dataset.radius = newRadius;
+    // Ajustar posición para mantener centrado
+    var currentLeft = anotResizing.offsetLeft;
+    var currentTop = anotResizing.offsetTop;
+    var oldRadius = parseInt(anotResizing.style.width) / 2;
+    // No recentrar, dejar que el usuario mueva después si quiere
+  }
+}
+
+function anotEndDrag() {
+  if (anotDragging) {
+    anotDragging.style.cursor = 'grab';
+    anotDragging = null;
+  }
+  anotResizing = null;
+  anotStartPos = null;
+}
+
+// Renderizar anotaciones sobre el canvas antes de guardar
+function renderizarAnotaciones() {
+  var canvas = document.getElementById('preview-canvas');
+  var overlay = document.getElementById('anot-overlay');
+  if (!overlay || anotaciones.length === 0) return;
+
+  var ctx = canvas.getContext('2d');
+  var canvasRect = canvas.getBoundingClientRect();
+
+  // Escala entre el canvas visual y el canvas real
+  var scaleX = canvas.width / canvasRect.width;
+  var scaleY = canvas.height / canvasRect.height;
+
+  for (var i = 0; i < anotaciones.length; i++) {
+    var a = anotaciones[i];
+    var el = a.el;
+    if (!el) continue;
+
+    var elRect = el.getBoundingClientRect();
+    // Centro del elemento relativo al canvas
+    var cx = (elRect.left + elRect.width / 2 - canvasRect.left) * scaleX;
+    var cy = (elRect.top + elRect.height / 2 - canvasRect.top) * scaleY;
+    var radius = (elRect.width / 2) * scaleX;
+
+    // Dibujar círculo
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = '#e74c3c';
+    ctx.lineWidth = Math.max(4, radius * 0.08);
+    ctx.stroke();
+
+    // Dibujar número
+    ctx.fillStyle = '#e74c3c';
+    ctx.font = 'bold ' + Math.max(24, radius * 0.6) + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(a.num.toString(), cx, cy);
+  }
   ctx.textAlign = 'start';
-  anotaciones.push({x: cx, y: cy, num: numAnot});
-  showToast('Anotación ' + numAnot + ' añadida. Toca la foto para moverla.', 'info');
+  ctx.textBaseline = 'alphabetic';
+}
+
+// Limpiar overlay de anotaciones
+function limpiarAnotaciones() {
+  var overlay = document.getElementById('anot-overlay');
+  if (overlay) overlay.innerHTML = '';
+  anotaciones = [];
 }
 
 function aceptarFoto() {
   vibrar(30);
+
+  // Renderizar anotaciones sobre el canvas antes de exportar
+  renderizarAnotaciones();
+
   var canvas = document.getElementById('preview-canvas');
 
   // Guardar thumbnail en IndexedDB
@@ -1239,6 +1413,8 @@ function aceptarFoto() {
     showToast('Foto ' + fotoCodigo + ' guardada', 'success');
   });
 
+  // Limpiar anotaciones y cerrar
+  limpiarAnotaciones();
   document.getElementById('preview-modal').classList.remove('open');
 }
 
@@ -1265,6 +1441,7 @@ async function subirFotosPendientes() {
   var total = pendientes.length;
   var subidas = 0;
   var fallos = 0;
+  var avisos = [];
 
   for (var i = 0; i < pendientes.length; i++) {
     var foto = pendientes[i];
@@ -1272,6 +1449,8 @@ async function subirFotosPendientes() {
     progFill.style.width = ((i / total) * 100) + '%';
 
     var ok = false;
+
+    // Intento 1: Subir al servidor (que sube a Cloudinary)
     for (var intento = 0; intento < 3; intento++) {
       try {
         var resp = await fetch(API_BASE + 'upload.php', {
@@ -1284,23 +1463,48 @@ async function subirFotosPendientes() {
           await eliminarDeDB('subidas_pendientes', foto.codigo);
           subidas++;
           ok = true;
+          if (result.aviso) avisos.push(foto.codigo + ': ' + result.aviso);
+          if (result.modo === 'cloudinary') {
+            console.log('Subida a Cloudinary OK:', foto.codigo, result.url);
+          } else {
+            console.log('Subida local:', foto.codigo, result.modo, result.url);
+          }
           break;
+        } else {
+          console.warn('Upload falló:', foto.codigo, result.error);
         }
       } catch (e) {
+        console.warn('Upload error intento ' + (intento + 1) + ':', e.message);
         if (intento < 2) await new Promise(function(r) { setTimeout(r, 1000 * (intento + 1)); });
       }
     }
+
+    // Intento 2: Subida directa a Cloudinary (unsigned) si el servidor falló
+    if (!ok) {
+      try {
+        ok = await subirDirectoCloudinary(foto);
+        if (ok) {
+          await eliminarDeDB('subidas_pendientes', foto.codigo);
+          subidas++;
+          avisos.push(foto.codigo + ': subida directa a Cloudinary');
+        }
+      } catch (e) {
+        console.warn('Upload directo Cloudinary falló:', e.message);
+      }
+    }
+
     if (!ok) fallos++;
   }
 
   progFill.style.width = '100%';
   progText.textContent = 'Completado: ' + subidas + ' subidas, ' + fallos + ' fallos';
-  setTimeout(function() { progDiv.classList.remove('show'); }, 3000);
+  setTimeout(function() { progDiv.classList.remove('show'); }, 4000);
   actualizarContadorFotos();
+
+  if (avisos.length > 0) console.log('Avisos de subida:', avisos);
 
   if (fallos > 0) {
     showToast(fallos + ' fotos fallaron al subir', 'error');
-    // Notificar al servidor
     fetch(API_BASE + 'notificar.php', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -1309,6 +1513,41 @@ async function subirFotosPendientes() {
   } else {
     showToast('Todas las fotos subidas correctamente', 'success');
   }
+}
+
+// Subida directa a Cloudinary (unsigned upload con upload preset)
+async function subirDirectoCloudinary(foto) {
+  var cloudName = 'drnqs1jwl';
+  var uploadPreset = 'rapca_unsigned';
+
+  // Convertir base64 a Blob
+  var byteString = atob(foto.data.split(',')[1] || foto.data);
+  var ab = new ArrayBuffer(byteString.length);
+  var ia = new Uint8Array(ab);
+  for (var i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+  var blob = new Blob([ab], {type: 'image/jpeg'});
+
+  var parts = foto.codigo.split('_');
+  var unidad = parts[0] || 'sin_unidad';
+  var folder = 'rapca/' + foto.tipo + '/' + unidad;
+
+  var formData = new FormData();
+  formData.append('file', blob, foto.codigo + '.jpg');
+  formData.append('upload_preset', uploadPreset);
+  formData.append('folder', folder);
+  formData.append('public_id', foto.codigo);
+
+  var resp = await fetch('https://api.cloudinary.com/v1_1/' + cloudName + '/image/upload', {
+    method: 'POST',
+    body: formData
+  });
+  var result = await resp.json();
+  if (result.secure_url) {
+    console.log('Cloudinary directo OK:', result.secure_url);
+    return true;
+  }
+  console.warn('Cloudinary directo error:', result);
+  return false;
 }
 
 // ============================================================
@@ -1391,12 +1630,12 @@ function miPosicion() {
 
 function toggleGPS() {
   var panel = document.getElementById('gps-panel');
-  if (panel.style.display === 'block') {
-    panel.style.display = 'none';
+  if (panel.classList.contains('visible')) {
+    panel.classList.remove('visible');
     if (gpsWatchId) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
     return;
   }
-  panel.style.display = 'block';
+  panel.classList.add('visible');
   if (!navigator.geolocation) return;
   gpsWatchId = navigator.geolocation.watchPosition(function(pos) {
     gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude};
@@ -1408,6 +1647,20 @@ function toggleGPS() {
     document.getElementById('gps-acc').textContent = pos.coords.accuracy ? pos.coords.accuracy.toFixed(0) + 'm' : '—';
     document.getElementById('gps-heading').textContent = pos.coords.heading ? pos.coords.heading.toFixed(0) + '°' : '—';
   }, function() {}, {enableHighAccuracy: true, maximumAge: 1000, timeout: 5000});
+}
+
+function toggleGPSPanelBody() {
+  var body = document.getElementById('gps-panel-body');
+  var btn = document.getElementById('gps-panel-collapse');
+  body.classList.toggle('collapsed');
+  btn.textContent = body.classList.contains('collapsed') ? '▶' : '▼';
+}
+
+function toggleMapToolbar() {
+  var toolbar = document.getElementById('map-toolbar');
+  toolbar.classList.toggle('open');
+  var btn = document.getElementById('map-toolbar-toggle');
+  btn.textContent = toolbar.classList.contains('open') ? '✕' : '🔧';
 }
 
 function toggleFullscreen() {

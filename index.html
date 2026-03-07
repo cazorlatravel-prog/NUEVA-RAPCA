@@ -170,24 +170,31 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 #mapa-page{padding:0;position:relative}
 #mapa-page .page-header{position:absolute;top:0;left:0;right:0;z-index:1000}
 #map-container{height:100%;width:100%}
-.map-controls{position:absolute;bottom:60px;right:10px;z-index:1000;display:flex;flex-direction:column;gap:6px}
+.map-controls{position:absolute;bottom:16px;right:10px;z-index:1000;display:flex;flex-direction:column;gap:6px}
 .map-controls .btn{width:44px;height:44px;border-radius:50%;box-shadow:var(--shadow);padding:0;font-size:18px;background:#fff;color:#333;border:none}
-.map-toolbar{position:absolute;top:56px;left:0;right:0;z-index:999;background:rgba(255,255,255,.95);padding:6px 10px;display:flex;gap:6px;overflow-x:auto;backdrop-filter:blur(5px)}
-.map-toolbar .btn{white-space:nowrap;font-size:12px;padding:6px 10px;min-height:36px}
-.gps-panel{position:absolute;bottom:60px;left:10px;z-index:1000;background:rgba(255,255,255,.95);border-radius:8px;padding:10px;font-size:11px;box-shadow:var(--shadow);max-width:200px;display:none;backdrop-filter:blur(5px)}
-.gps-panel .gps-row{display:flex;justify-content:space-between;margin-bottom:3px}
-.gps-panel .gps-label{font-weight:700;color:#555}
-.gps-panel .gps-val{color:var(--c-primary);font-weight:600}
+.map-toolbar{position:absolute;top:56px;left:0;right:0;z-index:999;background:rgba(255,255,255,.95);padding:4px 8px;display:none;gap:4px;overflow-x:auto;backdrop-filter:blur(5px);-webkit-overflow-scrolling:touch}
+.map-toolbar.open{display:flex}
+.map-toolbar .btn{white-space:nowrap;font-size:11px;padding:4px 8px;min-height:32px;flex-shrink:0}
+.map-toolbar-toggle{position:absolute;top:56px;right:10px;z-index:1000;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.95);border:none;box-shadow:var(--shadow);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.gps-panel{position:absolute;bottom:16px;left:10px;z-index:999;background:rgba(255,255,255,.92);border-radius:8px;font-size:11px;box-shadow:var(--shadow);max-width:180px;display:none;backdrop-filter:blur(5px);overflow:hidden}
+.gps-panel.visible{display:block}
+.gps-panel-header{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:rgba(26,61,46,.9);color:#fff;cursor:pointer;font-size:11px;font-weight:700}
+.gps-panel-header button{background:none;border:none;color:#fff;font-size:14px;cursor:pointer;padding:0;line-height:1}
+.gps-panel-body{padding:6px 8px;transition:max-height .3s;overflow:hidden}
+.gps-panel-body.collapsed{max-height:0;padding:0 8px}
+.gps-panel .gps-row{display:flex;justify-content:space-between;margin-bottom:2px;gap:6px}
+.gps-panel .gps-label{font-weight:700;color:#555;font-size:10px}
+.gps-panel .gps-val{color:var(--c-primary);font-weight:600;font-size:10px;text-align:right;overflow:hidden;text-overflow:ellipsis}
 
 /* === TABLA ATRIBUTOS === */
-.attr-table-panel{position:absolute;bottom:0;left:0;right:0;z-index:1001;background:#fff;border-top:3px solid var(--c-primary);max-height:40vh;display:none;flex-direction:column}
+.attr-table-panel{position:absolute;bottom:0;left:0;right:0;z-index:1001;background:#fff;border-top:3px solid var(--c-primary);max-height:35vh;display:none;flex-direction:column}
 .attr-table-panel.open{display:flex}
-.attr-table-header{display:flex;align-items:center;padding:8px 12px;gap:8px;border-bottom:1px solid #eee}
-.attr-table-header input{flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px}
-.attr-table-wrap{overflow:auto;flex:1}
-.attr-table{width:100%;border-collapse:collapse;font-size:12px}
-.attr-table th{background:#f0f0f0;padding:6px 8px;text-align:left;position:sticky;top:0;cursor:pointer;white-space:nowrap}
-.attr-table td{padding:5px 8px;border-bottom:1px solid #f0f0f0;white-space:nowrap}
+.attr-table-header{display:flex;align-items:center;padding:6px 10px;gap:6px;border-bottom:1px solid #eee}
+.attr-table-header input{flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px}
+.attr-table-wrap{overflow:auto;flex:1;-webkit-overflow-scrolling:touch}
+.attr-table{width:100%;border-collapse:collapse;font-size:11px}
+.attr-table th{background:#f0f0f0;padding:5px 6px;text-align:left;position:sticky;top:0;cursor:pointer;white-space:nowrap;font-size:10px}
+.attr-table td{padding:4px 6px;border-bottom:1px solid #f0f0f0;white-space:nowrap}
 .attr-table tr:hover{background:#f5f5f0}
 .attr-table tr.selected{background:rgba(52,152,219,.15)}
 
@@ -293,9 +300,14 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 /* === PREVIEW FOTO === */
 .preview-modal{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:8500;display:none;flex-direction:column;align-items:center;justify-content:center}
 .preview-modal.open{display:flex}
-.preview-modal canvas{max-width:95vw;max-height:70vh;border-radius:8px}
+.preview-modal canvas{max-width:95vw;max-height:70vh;border-radius:8px;display:block}
 .preview-actions{display:flex;gap:12px;margin-top:16px}
 .preview-actions .btn{min-width:100px}
+#anot-canvas-wrap{position:relative;display:inline-block}
+#anot-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1}
+.anot-circle{position:absolute;border:3px solid #e74c3c;border-radius:50%;pointer-events:auto;touch-action:none;cursor:grab;display:flex;align-items:center;justify-content:center;z-index:10;box-shadow:0 0 8px rgba(231,76,60,.5)}
+.anot-circle:active{cursor:grabbing}
+.anot-resize-handle{position:absolute;bottom:-6px;right:-6px;width:18px;height:18px;background:#e74c3c;border-radius:50%;cursor:nwse-resize;pointer-events:auto;touch-action:none;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)}
 
 /* === BÚSQUEDA GLOBAL === */
 .search-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:7000;display:none;justify-content:center;padding-top:80px}
@@ -334,17 +346,17 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 .autocomplete-list div:hover,.autocomplete-list div.highlight{background:#f5f5f0}
 
 /* === WMS PANEL === */
-.wms-panel{position:absolute;top:56px;right:0;width:280px;max-height:60vh;background:#fff;z-index:1000;border-radius:0 0 0 12px;box-shadow:var(--shadow);display:none;flex-direction:column;overflow:hidden}
+.wms-panel{position:absolute;top:96px;right:10px;width:260px;max-width:calc(100vw - 20px);max-height:50vh;background:#fff;z-index:1000;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.3);display:none;flex-direction:column;overflow:hidden}
 .wms-panel.open{display:flex}
-.wms-panel h3{padding:10px 12px;font-size:14px;border-bottom:1px solid #eee;margin:0}
-.wms-panel .wms-body{overflow-y:auto;padding:10px}
-.wms-panel .wms-layer{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px}
-.wms-panel .wms-layer input[type=checkbox]{width:18px;height:18px}
+.wms-panel h3{padding:8px 12px;font-size:13px;border-bottom:1px solid #eee;margin:0;display:flex;justify-content:space-between;align-items:center}
+.wms-panel .wms-body{overflow-y:auto;padding:8px;-webkit-overflow-scrolling:touch}
+.wms-panel .wms-layer{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px}
+.wms-panel .wms-layer input[type=checkbox]{width:16px;height:16px}
 
 /* === FULLSCREEN SEARCH === */
-.map-search{position:absolute;top:56px;left:50%;transform:translateX(-50%);z-index:999;width:80%;max-width:300px;display:none}
+.map-search{position:absolute;top:58px;left:10px;right:60px;z-index:1001;display:none}
 .map-search.open{display:block}
-.map-search input{width:100%;padding:8px 12px;border:2px solid var(--c-map);border-radius:20px;font-size:14px;box-shadow:var(--shadow)}
+.map-search input{width:100%;padding:8px 12px;border:2px solid var(--c-map);border-radius:20px;font-size:14px;box-shadow:var(--shadow);background:#fff;box-sizing:border-box}
 
 /* === MODAL GENÉRICO === */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5000;display:none;align-items:center;justify-content:center}
@@ -587,10 +599,11 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     <button class="btn-icon" onclick="toggleFullscreen()" style="color:#fff">⛶</button>
   </div>
   <div class="map-search" id="map-search"><input type="text" id="map-search-input" placeholder="Buscar punto..." oninput="buscarEnMapa(this.value)"></div>
+  <button class="map-toolbar-toggle" id="map-toolbar-toggle" onclick="toggleMapToolbar()">🔧</button>
   <div class="map-toolbar" id="map-toolbar">
     <button class="btn btn-sm btn-outline" onclick="toggleGPS()">📍 GPS</button>
     <button class="btn btn-sm btn-outline" onclick="medirDistancia()">📏 Medir</button>
-    <button class="btn btn-sm btn-outline" onclick="agregarWaypoint()">📌 Waypoint</button>
+    <button class="btn btn-sm btn-outline" onclick="agregarWaypoint()">📌 WP</button>
     <button class="btn btn-sm btn-outline" onclick="cargarKML()">📂 KML</button>
     <button class="btn btn-sm btn-outline" onclick="importarGPX()">📂 GPX</button>
     <button class="btn btn-sm btn-outline" onclick="exportarKML()">💾 KML</button>
@@ -598,7 +611,7 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     <button class="btn btn-sm btn-outline" onclick="toggleWMS()">🌐 WMS</button>
     <button class="btn btn-sm btn-outline" onclick="toggleAttrTable()">📊 Tabla</button>
     <button class="btn btn-sm btn-outline" onclick="exportarMapaPDF()">🖨️ PDF</button>
-    <button class="btn btn-sm btn-outline" onclick="filtrarOperadorMapa()">👤 Operador</button>
+    <button class="btn btn-sm btn-outline" onclick="filtrarOperadorMapa()">👤 Op.</button>
   </div>
   <div id="map-container"></div>
   <div class="map-controls">
@@ -606,16 +619,22 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     <button class="btn" onclick="toggleCapas()">🗂️</button>
   </div>
   <div class="gps-panel" id="gps-panel">
-    <div class="gps-row"><span class="gps-label">Lat:</span><span class="gps-val" id="gps-lat">—</span></div>
-    <div class="gps-row"><span class="gps-label">Lon:</span><span class="gps-val" id="gps-lon">—</span></div>
-    <div class="gps-row"><span class="gps-label">Alt:</span><span class="gps-val" id="gps-alt">—</span></div>
-    <div class="gps-row"><span class="gps-label">UTM:</span><span class="gps-val" id="gps-utm">—</span></div>
-    <div class="gps-row"><span class="gps-label">Vel:</span><span class="gps-val" id="gps-speed">—</span></div>
-    <div class="gps-row"><span class="gps-label">Prec:</span><span class="gps-val" id="gps-acc">—</span></div>
-    <div class="gps-row"><span class="gps-label">Rumbo:</span><span class="gps-val" id="gps-heading">—</span></div>
+    <div class="gps-panel-header" onclick="toggleGPSPanelBody()">
+      <span>📍 GPS</span>
+      <button id="gps-panel-collapse">▼</button>
+    </div>
+    <div class="gps-panel-body" id="gps-panel-body">
+      <div class="gps-row"><span class="gps-label">Lat:</span><span class="gps-val" id="gps-lat">—</span></div>
+      <div class="gps-row"><span class="gps-label">Lon:</span><span class="gps-val" id="gps-lon">—</span></div>
+      <div class="gps-row"><span class="gps-label">Alt:</span><span class="gps-val" id="gps-alt">—</span></div>
+      <div class="gps-row"><span class="gps-label">UTM:</span><span class="gps-val" id="gps-utm">—</span></div>
+      <div class="gps-row"><span class="gps-label">Vel:</span><span class="gps-val" id="gps-speed">—</span></div>
+      <div class="gps-row"><span class="gps-label">Prec:</span><span class="gps-val" id="gps-acc">—</span></div>
+      <div class="gps-row"><span class="gps-label">Rumbo:</span><span class="gps-val" id="gps-heading">—</span></div>
+    </div>
   </div>
   <div class="wms-panel" id="wms-panel">
-    <h3>Capas WMS/WMTS</h3>
+    <h3>Capas WMS/WMTS <button onclick="toggleWMS()" style="background:none;border:none;font-size:16px;cursor:pointer;padding:0">✕</button></h3>
     <div class="wms-body" id="wms-body">
       <div class="form-group" style="margin-bottom:8px">
         <input type="text" id="wms-url" placeholder="URL del servicio WMS" style="font-size:12px;padding:6px">
