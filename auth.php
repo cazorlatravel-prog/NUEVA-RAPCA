@@ -31,8 +31,28 @@ switch ($accion) {
         $stmt->execute([$email]);
         $user = $stmt->fetch();
 
-        if (!$user || !password_verify($password, $user['password'])) {
-            jsonResponse(['ok' => false, 'error' => 'Credenciales incorrectas'], 401);
+        if (!$user) {
+            jsonResponse(['ok' => false, 'error' => 'Usuario no encontrado'], 401);
+        }
+
+        // Verificar contraseña: soporta bcrypt y texto plano (migración)
+        $passOk = false;
+        if (password_verify($password, $user['password'])) {
+            $passOk = true;
+            // Rehashear si el coste es antiguo
+            if (password_needs_rehash($user['password'], PASSWORD_BCRYPT, ['cost' => 12])) {
+                $newHash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+                $db->prepare('UPDATE usuarios SET password = ? WHERE id = ?')->execute([$newHash, $user['id']]);
+            }
+        } elseif ($user['password'] === $password) {
+            // Contraseña en texto plano (creada manualmente en BD) — migrar a bcrypt
+            $passOk = true;
+            $newHash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+            $db->prepare('UPDATE usuarios SET password = ? WHERE id = ?')->execute([$newHash, $user['id']]);
+        }
+
+        if (!$passOk) {
+            jsonResponse(['ok' => false, 'error' => 'Contraseña incorrecta'], 401);
         }
 
         if (!$user['activo']) {

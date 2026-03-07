@@ -261,19 +261,33 @@ function iniciarSesion() {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({accion: 'login', email: email, password: pass})
   }).then(function(r) { return r.json(); }).then(function(data) {
+    btn.disabled = false;
+    btn.textContent = 'Entrar';
     if (data.ok) {
       sesion = {token: data.token, email: data.email, nombre: data.nombre, rol: data.rol, id: data.id};
       localStorage.setItem('rapca_sesion', JSON.stringify(sesion));
+      // Guardar también en local para acceso offline futuro
+      guardarUsuarioLocal(email, pass, data.nombre, data.rol);
       loginExito();
     } else {
-      // Fallback local
-      loginLocal(email, pass, errDiv);
+      // Servidor respondió pero credenciales incorrectas — mostrar error
+      // Intentar fallback local solo si el servidor rechaza explícitamente
+      var localOk = loginLocal(email, pass, errDiv);
+      if (!localOk) {
+        errDiv.textContent = data.error || 'Credenciales incorrectas';
+        errDiv.style.display = 'block';
+      }
     }
-  }).catch(function() {
-    loginLocal(email, pass, errDiv);
-  }).finally(function() {
+  }).catch(function(err) {
     btn.disabled = false;
     btn.textContent = 'Entrar';
+    // Sin conexión al servidor — solo fallback local
+    console.log('Servidor no disponible, intentando login local:', err);
+    var localOk = loginLocal(email, pass, errDiv);
+    if (!localOk) {
+      errDiv.textContent = 'Sin conexión al servidor. Solo disponible acceso offline con credenciales guardadas.';
+      errDiv.style.display = 'block';
+    }
   });
 }
 
@@ -284,19 +298,18 @@ function loginLocal(email, pass, errDiv) {
     localStorage.setItem('rapca_sesion', JSON.stringify(sesion));
     guardarUsuarioLocal(email, pass, 'Administrador', 'admin');
     loginExito();
-    return;
+    return true;
   }
-  // Usuarios locales
+  // Usuarios locales (guardados tras logins previos exitosos con servidor)
   var usuarios = JSON.parse(localStorage.getItem('rapca_usuarios_local') || '[]');
   var found = usuarios.find(function(u) { return u.email === email && u.passHash === simpleHash(pass) && u.activo; });
   if (found) {
     sesion = {token: 'local_' + Date.now(), email: found.email, nombre: found.nombre, rol: found.rol, id: found.id};
     localStorage.setItem('rapca_sesion', JSON.stringify(sesion));
     loginExito();
-  } else {
-    errDiv.textContent = 'Credenciales incorrectas';
-    errDiv.style.display = 'block';
+    return true;
   }
+  return false;
 }
 
 function simpleHash(str) {
