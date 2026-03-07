@@ -355,6 +355,16 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 .wms-panel .wms-layer{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:12px}
 .wms-panel .wms-layer input[type=checkbox]{width:16px;height:16px}
 
+/* === KML LAYERS PANEL === */
+.kml-panel{position:absolute;top:96px;left:56px;width:260px;max-width:calc(100vw - 70px);max-height:50vh;background:#fff;z-index:1000;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.3);display:none;flex-direction:column;overflow:hidden}
+.kml-panel.open{display:flex}
+.kml-panel h3{padding:8px 12px;font-size:13px;border-bottom:1px solid #eee;margin:0;display:flex;justify-content:space-between;align-items:center}
+.kml-panel-body{overflow-y:auto;padding:6px;-webkit-overflow-scrolling:touch}
+.kml-layer-item{border:1px solid #eee;border-radius:6px;padding:6px;margin-bottom:6px;background:#fafafa}
+.kml-layer-header{display:flex;align-items:center;gap:4px}
+.kml-layer-controls{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap}
+.kml-layer-controls input[type=range]{height:4px;cursor:pointer}
+
 /* === FULLSCREEN SEARCH === */
 .map-search{position:absolute;top:58px;left:10px;right:60px;z-index:1001;display:none}
 .map-search.open{display:block}
@@ -605,7 +615,8 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     <button class="btn" onclick="toggleGPS()" title="GPS">📍</button>
     <button class="btn" onclick="medirDistancia()" title="Medir distancia">📏</button>
     <button class="btn" onclick="agregarWaypoint()" title="Waypoint">📌</button>
-    <button class="btn" onclick="cargarKML()" title="Importar KML">📂</button>
+    <button class="btn" onclick="cargarKML()" title="Importar KML/KMZ">📂</button>
+    <button class="btn" onclick="toggleKMLPanel()" title="Gestionar capas KML">🗂️</button>
     <button class="btn" onclick="importarGPX()" title="Importar GPX">🗺️</button>
     <button class="btn" onclick="exportarKML()" title="Exportar KML">💾</button>
     <button class="btn" onclick="exportarGPX()" title="Exportar GPX">📤</button>
@@ -634,6 +645,10 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
       <div class="gps-row"><span class="gps-label">Prec:</span><span class="gps-val" id="gps-acc">—</span></div>
       <div class="gps-row"><span class="gps-label">Rumbo:</span><span class="gps-val" id="gps-heading">—</span></div>
     </div>
+  </div>
+  <div class="kml-panel" id="kml-panel">
+    <h3>Capas KML/KMZ <button onclick="toggleKMLPanel()" style="background:none;border:none;font-size:16px;cursor:pointer;padding:0">✕</button></h3>
+    <div class="kml-panel-body" id="kml-layers-list"></div>
   </div>
   <div class="wms-panel" id="wms-panel">
     <h3>Capas WMS/WMTS <button onclick="toggleWMS()" style="background:none;border:none;font-size:16px;cursor:pointer;padding:0">✕</button></h3>
