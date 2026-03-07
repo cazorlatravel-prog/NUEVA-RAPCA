@@ -172,10 +172,12 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 #map-container{height:100%;width:100%}
 .map-controls{position:absolute;bottom:16px;right:10px;z-index:1000;display:flex;flex-direction:column;gap:6px}
 .map-controls .btn{width:44px;height:44px;border-radius:50%;box-shadow:var(--shadow);padding:0;font-size:18px;background:#fff;color:#333;border:none}
-.map-toolbar{position:absolute;top:56px;left:0;right:0;z-index:999;background:rgba(255,255,255,.95);padding:4px 8px;display:none;gap:4px;overflow-x:auto;backdrop-filter:blur(5px);-webkit-overflow-scrolling:touch}
-.map-toolbar.open{display:flex}
-.map-toolbar .btn{white-space:nowrap;font-size:11px;padding:4px 8px;min-height:32px;flex-shrink:0}
-.map-toolbar-toggle{position:absolute;top:56px;right:10px;z-index:1000;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.95);border:none;box-shadow:var(--shadow);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.map-toolbar{position:absolute;top:56px;left:0;bottom:0;z-index:999;background:rgba(255,255,255,.92);padding:6px 4px;display:flex;flex-direction:column;gap:4px;overflow-y:auto;backdrop-filter:blur(5px);-webkit-overflow-scrolling:touch;width:48px;transform:translateX(-100%);transition:transform .25s ease}
+.map-toolbar.open{transform:translateX(0)}
+.map-toolbar .btn{white-space:nowrap;font-size:16px;padding:0;width:40px;height:40px;min-height:40px;flex-shrink:0;border-radius:8px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #ddd;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.map-toolbar .btn .btn-label{display:none}
+.map-toolbar-toggle{position:absolute;top:62px;left:6px;z-index:1000;width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.95);border:none;box-shadow:var(--shadow);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:left .25s ease}
+.map-toolbar.open~.map-toolbar-toggle,.map-toolbar-toggle.shifted{left:54px}
 .gps-panel{position:absolute;bottom:16px;left:10px;z-index:999;background:rgba(255,255,255,.92);border-radius:8px;font-size:11px;box-shadow:var(--shadow);max-width:180px;display:none;backdrop-filter:blur(5px);overflow:hidden}
 .gps-panel.visible{display:block}
 .gps-panel-header{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:rgba(26,61,46,.9);color:#fff;cursor:pointer;font-size:11px;font-weight:700}
@@ -599,20 +601,20 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     <button class="btn-icon" onclick="toggleFullscreen()" style="color:#fff">⛶</button>
   </div>
   <div class="map-search" id="map-search"><input type="text" id="map-search-input" placeholder="Buscar punto..." oninput="buscarEnMapa(this.value)"></div>
-  <button class="map-toolbar-toggle" id="map-toolbar-toggle" onclick="toggleMapToolbar()">🔧</button>
   <div class="map-toolbar" id="map-toolbar">
-    <button class="btn btn-sm btn-outline" onclick="toggleGPS()">📍 GPS</button>
-    <button class="btn btn-sm btn-outline" onclick="medirDistancia()">📏 Medir</button>
-    <button class="btn btn-sm btn-outline" onclick="agregarWaypoint()">📌 WP</button>
-    <button class="btn btn-sm btn-outline" onclick="cargarKML()">📂 KML</button>
-    <button class="btn btn-sm btn-outline" onclick="importarGPX()">📂 GPX</button>
-    <button class="btn btn-sm btn-outline" onclick="exportarKML()">💾 KML</button>
-    <button class="btn btn-sm btn-outline" onclick="exportarGPX()">💾 GPX</button>
-    <button class="btn btn-sm btn-outline" onclick="toggleWMS()">🌐 WMS</button>
-    <button class="btn btn-sm btn-outline" onclick="toggleAttrTable()">📊 Tabla</button>
-    <button class="btn btn-sm btn-outline" onclick="exportarMapaPDF()">🖨️ PDF</button>
-    <button class="btn btn-sm btn-outline" onclick="filtrarOperadorMapa()">👤 Op.</button>
+    <button class="btn" onclick="toggleGPS()" title="GPS">📍</button>
+    <button class="btn" onclick="medirDistancia()" title="Medir distancia">📏</button>
+    <button class="btn" onclick="agregarWaypoint()" title="Waypoint">📌</button>
+    <button class="btn" onclick="cargarKML()" title="Importar KML">📂</button>
+    <button class="btn" onclick="importarGPX()" title="Importar GPX">🗺️</button>
+    <button class="btn" onclick="exportarKML()" title="Exportar KML">💾</button>
+    <button class="btn" onclick="exportarGPX()" title="Exportar GPX">📤</button>
+    <button class="btn" onclick="toggleWMS()" title="Capas WMS">🌐</button>
+    <button class="btn" onclick="toggleAttrTable()" title="Tabla atributos">📊</button>
+    <button class="btn" onclick="exportarMapaPDF()" title="Exportar PDF">🖨️</button>
+    <button class="btn" onclick="filtrarOperadorMapa()" title="Filtrar operador">👤</button>
   </div>
+  <button class="map-toolbar-toggle" id="map-toolbar-toggle" onclick="toggleMapToolbar()">🔧</button>
   <div id="map-container"></div>
   <div class="map-controls">
     <button class="btn" onclick="miPosicion()">📍</button>

@@ -1658,8 +1658,9 @@ function toggleGPSPanelBody() {
 
 function toggleMapToolbar() {
   var toolbar = document.getElementById('map-toolbar');
-  toolbar.classList.toggle('open');
   var btn = document.getElementById('map-toolbar-toggle');
+  toolbar.classList.toggle('open');
+  btn.classList.toggle('shifted');
   btn.textContent = toolbar.classList.contains('open') ? '✕' : '🔧';
 }
 
