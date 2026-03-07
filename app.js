@@ -51,6 +51,7 @@ var medirLinea = null;
 var wmsCapas = [];
 var attrData = [];
 var kmlCapas = [];
+var capaFotosComp = null;
 var lightboxFotos = [];
 var lightboxIdx = 0;
 
@@ -770,8 +771,8 @@ function guardarVP() {
 
   var fotos = fotosPagina['G'] || [];
   var fotosComp = [];
-  if (fotosPagina['W1']) fotosPagina['W1'].forEach(function(f) { fotosComp.push({numero: f, waypoint: 'W1'}); });
-  if (fotosPagina['W2']) fotosPagina['W2'].forEach(function(f) { fotosComp.push({numero: f, waypoint: 'W2'}); });
+  if (fotosPagina['W1']) fotosPagina['W1'].forEach(function(f) { fotosComp.push({numero: f.codigo || f, waypoint: 'W1', lat: f.lat || null, lon: f.lon || null}); });
+  if (fotosPagina['W2']) fotosPagina['W2'].forEach(function(f) { fotosComp.push({numero: f.codigo || f, waypoint: 'W2', lat: f.lat || null, lon: f.lon || null}); });
 
   var reg = {
     id: editandoRegistro ? editandoRegistro.id : Date.now(),
@@ -817,8 +818,8 @@ function guardarEL() {
 
   var fotos = fotosPagina['G'] || [];
   var fotosComp = [];
-  if (fotosPagina['W1']) fotosPagina['W1'].forEach(function(f) { fotosComp.push({numero: f, waypoint: 'W1'}); });
-  if (fotosPagina['W2']) fotosPagina['W2'].forEach(function(f) { fotosComp.push({numero: f, waypoint: 'W2'}); });
+  if (fotosPagina['W1']) fotosPagina['W1'].forEach(function(f) { fotosComp.push({numero: f.codigo || f, waypoint: 'W1', lat: f.lat || null, lon: f.lon || null}); });
+  if (fotosPagina['W2']) fotosPagina['W2'].forEach(function(f) { fotosComp.push({numero: f.codigo || f, waypoint: 'W2', lat: f.lat || null, lon: f.lon || null}); });
 
   var reg = {
     id: editandoRegistro ? editandoRegistro.id : Date.now(),
@@ -917,8 +918,8 @@ function recogerDatosEI() {
     fotos: (fotosPagina['G'] || []).join(', '),
     fotosComp: (function() {
       var fc = [];
-      if (fotosPagina['W1']) fotosPagina['W1'].forEach(function(f) { fc.push({numero: f, waypoint: 'W1'}); });
-      if (fotosPagina['W2']) fotosPagina['W2'].forEach(function(f) { fc.push({numero: f, waypoint: 'W2'}); });
+      if (fotosPagina['W1']) fotosPagina['W1'].forEach(function(f) { fc.push({numero: f.codigo || f, waypoint: 'W1', lat: f.lat || null, lon: f.lon || null}); });
+      if (fotosPagina['W2']) fotosPagina['W2'].forEach(function(f) { fc.push({numero: f.codigo || f, waypoint: 'W2', lat: f.lat || null, lon: f.lon || null}); });
       return fc;
     })(),
     observaciones: document.getElementById('ev-observaciones').value
@@ -1400,7 +1401,11 @@ function aceptarFoto() {
 
     // Añadir preview a la página
     if (!fotosPagina[camaraSubtipo]) fotosPagina[camaraSubtipo] = [];
-    fotosPagina[camaraSubtipo].push(fotoCodigo);
+    if (camaraSubtipo === 'W1' || camaraSubtipo === 'W2') {
+      fotosPagina[camaraSubtipo].push({codigo: fotoCodigo, lat: gpsPos ? gpsPos.lat : null, lon: gpsPos ? gpsPos.lon : null});
+    } else {
+      fotosPagina[camaraSubtipo].push(fotoCodigo);
+    }
 
     var prefix = camaraTipo === 'EI' ? 'ev' : camaraTipo.toLowerCase();
     var previewGrid = document.getElementById(prefix + '-fotos-preview');
@@ -1565,12 +1570,16 @@ function initMapa() {
   var topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {attribution: '© OpenTopoMap', maxZoom: 17});
   osm.addTo(mapa);
 
-  L.control.layers({'OpenStreetMap': osm, 'PNOA Ortofoto': pnoa, 'Topográfico': topo}, {}, {position: 'topright'}).addTo(mapa);
+  // Capa de fotos comparativas (W1/W2)
+  capaFotosComp = L.layerGroup();
+
+  L.control.layers({'OpenStreetMap': osm, 'PNOA Ortofoto': pnoa, 'Topográfico': topo}, {'Fotos comparativas W1/W2': capaFotosComp}, {position: 'topright'}).addTo(mapa);
   L.control.zoom({position: 'topright'}).addTo(mapa);
 
   // MarkerCluster
   mapaMarkers = L.markerClusterGroup();
   mapa.addLayer(mapaMarkers);
+  mapa.addLayer(capaFotosComp);
 
   actualizarMarcadores();
   cargarCapasKML();
@@ -1612,6 +1621,29 @@ function actualizarMarcadores() {
       '<span class="badge badge-el">EL:' + elCount + '</span> ' +
       '<span class="badge badge-ei">EI:' + eiCount + '</span>');
     mapaMarkers.addLayer(m);
+  }
+
+  // Capa de fotos comparativas W1/W2
+  if (capaFotosComp) {
+    capaFotosComp.clearLayers();
+    var coloresWP = {W1: '#e74c3c', W2: '#3498db'};
+    for (var i = 0; i < regs.length; i++) {
+      var r = regs[i];
+      var fc = r.datos && r.datos.fotosComp ? r.datos.fotosComp : [];
+      for (var j = 0; j < fc.length; j++) {
+        var foto = fc[j];
+        var fLat = foto.lat || r.lat;
+        var fLon = foto.lon || r.lon;
+        if (!fLat || !fLon) continue;
+        var wColor = coloresWP[foto.waypoint] || '#888';
+        var wMarker = L.circleMarker([fLat, fLon], {radius: 6, fillColor: wColor, color: '#fff', weight: 2, fillOpacity: 0.9});
+        wMarker.bindPopup('<strong>' + foto.waypoint + '</strong><br>' +
+          '<small>' + foto.numero + '</small><br>' +
+          r.tipo + ' - ' + r.unidad + '<br>' +
+          r.fecha);
+        capaFotosComp.addLayer(wMarker);
+      }
+    }
   }
 
   // Poblar tabla de atributos
