@@ -145,6 +145,12 @@ function autoZona(prefix) {
   document.getElementById(prefix + '-zona').value = z;
 }
 
+function formatCoordNW(lat, lon) {
+  var latDir = lat >= 0 ? 'N' : 'S';
+  var lonDir = lon >= 0 ? 'E' : 'W';
+  return Math.abs(lat).toFixed(4) + latDir + '  ' + Math.abs(lon).toFixed(4) + lonDir;
+}
+
 function latLonToUTM(lat, lon) {
   var zone = Math.floor((lon + 180) / 6) + 1;
   var a = 6378137, f = 1/298.257223563;
@@ -1183,8 +1189,7 @@ function iniciarOverlayCamara() {
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(function(pos) {
       gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude};
-      var utm = latLonToUTM(gpsPos.lat, gpsPos.lon);
-      document.getElementById('cam-coords').textContent = utm;
+      document.getElementById('cam-coords').textContent = formatCoordNW(gpsPos.lat, gpsPos.lon);
 
       // Mini mapa a escala ~1:50000 (zoom 12)
       try {
@@ -1413,7 +1418,7 @@ function capturarFoto() {
   }
 
   // --- INFO PANEL (esquina inferior derecha, texto amarillo sin fondo) ---
-  var utm = gpsPos ? latLonToUTM(gpsPos.lat, gpsPos.lon) : 'Sin GPS';
+  var utm = gpsPos ? formatCoordNW(gpsPos.lat, gpsPos.lon) : 'Sin GPS';
   var fechaFoto = new Date();
   var dd = ('0' + fechaFoto.getDate()).slice(-2);
   var mm = ('0' + (fechaFoto.getMonth() + 1)).slice(-2);
@@ -2229,7 +2234,7 @@ function actualizarMarcadores() {
   }
 
   // Poblar tabla de atributos
-  attrData = regs.map(function(r) { return {tipo: r.tipo, unidad: r.unidad, zona: r.zona, fecha: r.fecha, operador: r.operador_nombre, lat: r.lat, lon: r.lon}; });
+  attrData = regs.map(function(r) { return {tipo: r.tipo, unidad: r.unidad, zona: r.zona, fecha: r.fecha, operador: r.operador_nombre, coordenadas: r.lat ? formatCoordNW(r.lat, r.lon) : '—'}; });
 }
 
 function miPosicion() {
@@ -2254,8 +2259,9 @@ function toggleGPS() {
   if (!navigator.geolocation) return;
   gpsWatchId = navigator.geolocation.watchPosition(function(pos) {
     gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude};
-    document.getElementById('gps-lat').textContent = pos.coords.latitude.toFixed(6);
-    document.getElementById('gps-lon').textContent = pos.coords.longitude.toFixed(6);
+    var coordNW = formatCoordNW(pos.coords.latitude, pos.coords.longitude);
+    document.getElementById('gps-lat').textContent = coordNW.split('  ')[0];
+    document.getElementById('gps-lon').textContent = coordNW.split('  ')[1];
     document.getElementById('gps-alt').textContent = pos.coords.altitude ? pos.coords.altitude.toFixed(1) + 'm' : '—';
     document.getElementById('gps-utm').textContent = latLonToUTM(pos.coords.latitude, pos.coords.longitude);
     document.getElementById('gps-speed').textContent = pos.coords.speed ? (pos.coords.speed * 3.6).toFixed(1) + ' km/h' : '—';
@@ -2329,7 +2335,7 @@ function agregarWaypoint() {
   if (!gpsPos) { showToast('Esperando GPS...', 'error'); return; }
   var name = prompt('Nombre del waypoint:');
   if (!name) return;
-  L.marker([gpsPos.lat, gpsPos.lon]).addTo(mapa).bindPopup('<strong>' + name + '</strong><br>' + latLonToUTM(gpsPos.lat, gpsPos.lon)).openPopup();
+  L.marker([gpsPos.lat, gpsPos.lon]).addTo(mapa).bindPopup('<strong>' + name + '</strong><br>' + formatCoordNW(gpsPos.lat, gpsPos.lon)).openPopup();
   showToast('Waypoint añadido', 'success');
 }
 
@@ -3169,7 +3175,7 @@ async function exportarPDFRegistro(id) {
   html += '<h1>RAPCA EMA — ' + r.tipo + '</h1>';
   html += '<table><tr><th>Fecha</th><td>' + r.fecha + '</td><th>Unidad</th><td>' + r.unidad + '</td></tr>';
   html += '<tr><th>Zona</th><td>' + r.zona + '</td><th>Transecto</th><td>' + (r.transecto || '—') + '</td></tr>';
-  html += '<tr><th>Operador</th><td>' + (r.operador_nombre || '') + '</td><th>Coordenadas</th><td>' + (r.lat ? r.lat.toFixed(6) + ', ' + r.lon.toFixed(6) : '—') + '</td></tr></table>';
+  html += '<tr><th>Operador</th><td>' + (r.operador_nombre || '') + '</td><th>Coordenadas</th><td>' + (r.lat ? formatCoordNW(r.lat, r.lon) : '—') + '</td></tr></table>';
 
   if (r.datos.pastoreo) {
     html += '<h3>Grados de Pastoreo</h3><table><tr>';
