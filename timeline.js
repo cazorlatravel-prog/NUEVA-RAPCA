@@ -13,7 +13,19 @@ function renderTimeline() {
   var operadores = [];
   regs.forEach(function(r) { if (r.operador_nombre && operadores.indexOf(r.operador_nombre) < 0) operadores.push(r.operador_nombre); });
   html += '<select id="tl-f-operador" onchange="filtrarTimeline()"><option value="">Operador</option>' + operadores.map(function(o) { return '<option>' + escapeHtml(o) + '</option>'; }).join('') + '</select>';
-  html += '<input type="date" id="tl-f-fecha" onchange="filtrarTimeline()">';
+
+  var zonas = [];
+  regs.forEach(function(r) { if (r.zona && zonas.indexOf(r.zona) < 0) zonas.push(r.zona); });
+  zonas.sort();
+  html += '<select id="tl-f-zona" onchange="filtrarTimeline()"><option value="">Zona</option>' + zonas.map(function(z) { return '<option>' + escapeHtml(z) + '</option>'; }).join('') + '</select>';
+
+  var unidades = [];
+  regs.forEach(function(r) { if (r.unidad && unidades.indexOf(r.unidad) < 0) unidades.push(r.unidad); });
+  unidades.sort();
+  html += '<select id="tl-f-unidad" onchange="filtrarTimeline()"><option value="">Unidad</option>' + unidades.map(function(u) { return '<option>' + escapeHtml(u) + '</option>'; }).join('') + '</select>';
+
+  html += '<input type="date" id="tl-f-desde" onchange="filtrarTimeline()" title="Desde">';
+  html += '<input type="date" id="tl-f-hasta" onchange="filtrarTimeline()" title="Hasta">';
   html += '</div>';
 
   html += '<div id="tl-lista"></div>';
@@ -25,11 +37,17 @@ function filtrarTimeline() {
   var regs = misRegistros();
   var tipo = document.getElementById('tl-f-tipo').value;
   var operador = document.getElementById('tl-f-operador').value;
-  var fecha = document.getElementById('tl-f-fecha').value;
+  var zona = document.getElementById('tl-f-zona').value;
+  var unidad = document.getElementById('tl-f-unidad').value;
+  var desde = document.getElementById('tl-f-desde').value;
+  var hasta = document.getElementById('tl-f-hasta').value;
 
   if (tipo) regs = regs.filter(function(r) { return r.tipo === tipo; });
   if (operador) regs = regs.filter(function(r) { return r.operador_nombre === operador; });
-  if (fecha) regs = regs.filter(function(r) { return r.fecha === fecha; });
+  if (zona) regs = regs.filter(function(r) { return r.zona === zona; });
+  if (unidad) regs = regs.filter(function(r) { return r.unidad === unidad; });
+  if (desde) regs = regs.filter(function(r) { return r.fecha >= desde; });
+  if (hasta) regs = regs.filter(function(r) { return r.fecha <= hasta; });
 
   regs.sort(function(a, b) { return b.id - a.id; });
 
