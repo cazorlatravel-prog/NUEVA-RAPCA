@@ -202,6 +202,30 @@ function actualizarEstado() {
   var txt = document.getElementById('status-text');
   dot.className = 'status-dot ' + (online ? 'online' : 'offline');
   txt.textContent = online ? 'En línea' : 'Sin conexión';
+
+  // Aviso offline y botones manuales
+  var offlineWarn = document.getElementById('menu-offline-warning');
+  var btnSync = document.getElementById('btn-sync-manual');
+  var btnFotos = document.getElementById('btn-fotos-manual');
+  var pendRegs = registros.filter(function(r) { return !r.enviado; }).length;
+
+  if (!online && (pendRegs > 0)) {
+    offlineWarn.style.display = '';
+    btnSync.style.display = '';
+  } else {
+    offlineWarn.style.display = 'none';
+    btnSync.style.display = 'none';
+  }
+
+  // Mostrar botón fotos manual si offline y hay pendientes
+  if (!online && db) {
+    obtenerTodosDB('subidas_pendientes').then(function(items) {
+      btnFotos.style.display = items.length > 0 ? '' : 'none';
+    });
+  } else {
+    btnFotos.style.display = 'none';
+  }
+
   if (online) sincronizarAuto();
 }
 
@@ -218,7 +242,46 @@ function sincronizarAuto() {
     if (sesion && sesion.token && !sesion.token.startsWith('local_')) {
       sincronizar();
     }
+  } else {
+    var badge = document.getElementById('pending-sync');
+    badge.style.display = 'none';
   }
+  // Auto-subir fotos pendientes si hay conexión
+  if (navigator.onLine && sesion && sesion.token && !sesion.token.startsWith('local_')) {
+    subirFotosPendientesAuto();
+  }
+}
+
+// Subida automática de fotos en segundo plano (sin bloquear UI con toast excesivos)
+var subiendoFotosAuto = false;
+async function subirFotosPendientesAuto() {
+  if (!db || subiendoFotosAuto) return;
+  var pendientes = await obtenerTodosDB('subidas_pendientes');
+  if (pendientes.length === 0) return;
+  subiendoFotosAuto = true;
+  try {
+    for (var i = 0; i < pendientes.length; i++) {
+      var foto = pendientes[i];
+      try {
+        var resp = await fetch(API_BASE + 'upload.php', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
+          body: JSON.stringify({codigo: foto.codigo, tipo: foto.tipo, imagen: foto.data})
+        });
+        if (resp.ok) {
+          var result = await resp.json();
+          if (result.ok) {
+            await eliminarDeDB('subidas_pendientes', foto.codigo);
+          }
+        } else if (resp.status === 401) {
+          var reauth = await reautenticar();
+          if (reauth) { i--; continue; }
+          break;
+        }
+      } catch(e) { break; } // Sin conexión, parar
+    }
+    actualizarContadorFotos();
+  } finally { subiendoFotosAuto = false; }
 }
 
 // --- Navegación SPA ---
@@ -859,7 +922,12 @@ function guardarVP() {
   guardarRegistros();
   limpiarBorrador('VP');
   vibrar(50);
-  showToast('Visita Previa guardada', 'success');
+  if (navigator.onLine) {
+    showToast('Visita Previa guardada. Sincronizando...', 'success');
+    sincronizarAuto();
+  } else {
+    showToast('Visita Previa guardada. Sin conexión — se sincronizará al conectar.', 'info');
+  }
   irPagina('menu');
 }
 
@@ -906,7 +974,12 @@ function guardarEL() {
   guardarRegistros();
   limpiarBorrador('EL');
   vibrar(50);
-  showToast('Evaluación Ligera guardada', 'success');
+  if (navigator.onLine) {
+    showToast('Evaluación Ligera guardada. Sincronizando...', 'success');
+    sincronizarAuto();
+  } else {
+    showToast('Evaluación Ligera guardada. Sin conexión — se sincronizará al conectar.', 'info');
+  }
   irPagina('menu');
 }
 
@@ -1050,7 +1123,12 @@ function guardarEI() {
 
   guardarRegistros();
   vibrar(50);
-  showToast('Transecto ' + transectoActual + ' guardado', 'success');
+  if (navigator.onLine) {
+    showToast('Transecto ' + transectoActual + ' guardado. Sincronizando...', 'success');
+    sincronizarAuto();
+  } else {
+    showToast('Transecto ' + transectoActual + ' guardado. Sin conexión — se sincronizará al conectar.', 'info');
+  }
 
   // Si es T3, resetear completamente
   if (transectoActual === 'T3') {
@@ -1901,7 +1979,12 @@ function aceptarFoto() {
     }
 
     actualizarContadorFotos();
-    showToast('Foto ' + _fotoCodigo + ' guardada', 'success');
+    if (navigator.onLine) {
+      showToast('Foto ' + _fotoCodigo + ' guardada. Subiendo...', 'success');
+      subirFotosPendientesAuto();
+    } else {
+      showToast('Foto ' + _fotoCodigo + ' guardada. Sin conexión — se subirá al conectar.', 'info');
+    }
   }).catch(function(err) {
     console.error('Error guardando foto:', err);
     showToast('Error al guardar foto: ' + (err.message || err), 'error');
