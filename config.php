@@ -55,7 +55,7 @@ define('ADMIN_EMAIL', 'rapcajaen@gmail.com');
 define('ADMIN_PASS_DEFAULT', 'Gallito9431%');
 
 // Rate limiting
-define('RATE_LIMIT_MAX', 5);
+define('RATE_LIMIT_MAX', 10);
 define('RATE_LIMIT_WINDOW', 900); // 15 minutos en segundos
 define('RATE_LIMIT_DIR', __DIR__ . '/tmp/rate_limits');
 

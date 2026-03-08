@@ -12,6 +12,15 @@ $input = json_decode(file_get_contents('php://input'), true);
 $accion = $input['accion'] ?? $_GET['accion'] ?? '';
 
 switch ($accion) {
+    case 'reset_rate_limit':
+        // Limpiar todos los archivos de rate limit
+        if (is_dir(RATE_LIMIT_DIR)) {
+            $files = glob(RATE_LIMIT_DIR . '/*.json');
+            foreach ($files as $f) unlink($f);
+        }
+        jsonResponse(['ok' => true, 'msg' => 'Rate limits reseteados']);
+        break;
+
     case 'login':
         $email = $input['email'] ?? '';
         $password = $input['password'] ?? '';

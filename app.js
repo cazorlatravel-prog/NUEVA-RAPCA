@@ -400,12 +400,12 @@ function iniciarSesion() {
 
   if (!email || !pass) { errDiv.textContent = 'Introduce email y contraseña'; errDiv.style.display = 'block'; return; }
 
-  // Rate limiting local
+  // Rate limiting local (10 intentos en 15 min)
   var ahora = Date.now();
   var key = 'login_' + email;
   if (!loginIntentos[key]) loginIntentos[key] = [];
   loginIntentos[key] = loginIntentos[key].filter(function(t) { return ahora - t < 900000; });
-  if (loginIntentos[key].length >= 5) {
+  if (loginIntentos[key].length >= 10) {
     errDiv.textContent = 'Demasiados intentos. Espera 15 minutos.';
     errDiv.style.display = 'block';
     return;
