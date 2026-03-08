@@ -129,10 +129,41 @@ function filtrarDashboard() {
   // Re-render con filtros aplicados
   var regs = misRegistros();
   var zona = document.getElementById('dash-f-zona').value;
+  var provincia = document.getElementById('dash-f-provincia').value;
+  var municipio = document.getElementById('dash-f-municipio').value;
+  var pn = document.getElementById('dash-f-pn').value;
   var operador = document.getElementById('dash-f-operador').value;
 
+  // Filtrar registros por infraestructura (zona/provincia/municipio/pn)
+  if (provincia || municipio || pn) {
+    var infIds = infraestructuras.filter(function(inf) {
+      if (provincia && inf.provincia !== provincia) return false;
+      if (municipio && inf.municipio !== municipio) return false;
+      if (pn && inf.pn !== pn) return false;
+      return true;
+    }).map(function(inf) { return inf.idUnidad; });
+    regs = regs.filter(function(r) { return infIds.indexOf(r.unidad) >= 0; });
+  }
   if (zona) regs = regs.filter(function(r) { return r.zona === zona; });
   if (operador) regs = regs.filter(function(r) { return r.operador_nombre === operador; });
+
+  // Actualizar métricas
+  var vpCount = regs.filter(function(r) { return r.tipo === 'VP'; }).length;
+  var elCount = regs.filter(function(r) { return r.tipo === 'EL'; }).length;
+  var eiCount = regs.filter(function(r) { return r.tipo === 'EI'; }).length;
+  var unidades = [];
+  regs.forEach(function(r) { if (unidades.indexOf(r.unidad) < 0) unidades.push(r.unidad); });
+  var pendientes = regs.filter(function(r) { return !r.enviado; }).length;
+
+  var metrics = document.querySelectorAll('.dash-metric .num');
+  if (metrics.length >= 6) {
+    metrics[0].textContent = regs.length;
+    metrics[1].textContent = vpCount;
+    metrics[2].textContent = elCount;
+    metrics[3].textContent = eiCount;
+    metrics[4].textContent = unidades.length;
+    metrics[5].textContent = pendientes;
+  }
 
   renderDashCharts(regs);
 }

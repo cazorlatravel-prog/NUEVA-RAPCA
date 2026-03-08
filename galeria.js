@@ -26,7 +26,7 @@ function renderGaleria() {
   html += '</div>';
 
   // Acciones multi-selección
-  html += '<div id="gal-multi-actions" style="display:none;margin-bottom:10px;display:flex;gap:6px">';
+  html += '<div id="gal-multi-actions" style="display:none;margin-bottom:10px;gap:6px">';
   html += '<button class="btn btn-sm btn-primary" onclick="galDescargarSel()">📥 Descargar</button>';
   html += '<button class="btn btn-sm btn-outline" onclick="galCompararSel()">🔀 Comparar</button>';
   html += '<button class="btn btn-sm btn-outline" onclick="galDeseleccionar()">✕ Deseleccionar</button>';
@@ -126,14 +126,15 @@ function galToggleSel(codigo, el) {
     el.classList.add('selected');
   }
 
-  // Si solo 1 seleccionada, abrir lightbox
+  var actions = document.getElementById('gal-multi-actions');
   if (galSeleccionadas.length === 0) {
+    // Nada seleccionado: abrir lightbox del último tocado
+    actions.style.display = 'none';
     var img = el.querySelector('img');
     if (img && img.src) abrirLightboxFoto(img.src, codigo);
+  } else {
+    actions.style.display = 'flex';
   }
-
-  var actions = document.getElementById('gal-multi-actions');
-  actions.style.display = galSeleccionadas.length > 0 ? 'flex' : 'none';
 }
 
 function galDeseleccionar() {

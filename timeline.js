@@ -12,7 +12,7 @@ function renderTimeline() {
 
   var operadores = [];
   regs.forEach(function(r) { if (r.operador_nombre && operadores.indexOf(r.operador_nombre) < 0) operadores.push(r.operador_nombre); });
-  html += '<select id="tl-f-operador" onchange="filtrarTimeline()"><option value="">Operador</option>' + operadores.map(function(o) { return '<option>' + o + '</option>'; }).join('') + '</select>';
+  html += '<select id="tl-f-operador" onchange="filtrarTimeline()"><option value="">Operador</option>' + operadores.map(function(o) { return '<option>' + escapeHtml(o) + '</option>'; }).join('') + '</select>';
   html += '<input type="date" id="tl-f-fecha" onchange="filtrarTimeline()">';
   html += '</div>';
 
@@ -41,14 +41,14 @@ function filtrarTimeline() {
 
   lista.innerHTML = regs.map(function(r) {
     var badgeClass = 'badge-' + r.tipo.toLowerCase();
-    var h = '<div class="tl-card" data-tipo="' + r.tipo + '"><div class="tl-content">';
+    var h = '<div class="tl-card" data-tipo="' + escapeHtml(r.tipo) + '"><div class="tl-content">';
     h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
-    h += '<span class="badge ' + badgeClass + '">' + r.tipo + '</span>';
-    h += '<strong>' + r.unidad + '</strong>';
-    if (r.transecto) h += '<span style="font-size:12px;color:#888">' + r.transecto + '</span>';
+    h += '<span class="badge ' + badgeClass + '">' + escapeHtml(r.tipo) + '</span>';
+    h += '<strong>' + escapeHtml(r.unidad) + '</strong>';
+    if (r.transecto) h += '<span style="font-size:12px;color:#888">' + escapeHtml(r.transecto) + '</span>';
     h += '</div>';
-    h += '<div style="font-size:12px;color:#888">' + r.fecha + ' · ' + (r.operador_nombre || '') + '</div>';
-    if (r.datos.observaciones) h += '<div style="font-size:13px;margin-top:4px">' + r.datos.observaciones.substring(0, 100) + '</div>';
+    h += '<div style="font-size:12px;color:#888">' + escapeHtml(r.fecha) + ' · ' + escapeHtml(r.operador_nombre || '') + '</div>';
+    if (r.datos && r.datos.observaciones) h += '<div style="font-size:13px;margin-top:4px">' + escapeHtml(r.datos.observaciones.substring(0, 100)) + '</div>';
 
     // Thumbnails de fotos
     if (r.datos.fotos) {

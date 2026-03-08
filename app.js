@@ -21,7 +21,24 @@ var OBS_OPCIONES = ['A','B','M','N'];
 var OBS_CAMPOS = ['senal','veredas','cagarrutas'];
 var OBS_LABELS = ['Señal Paso','Veredas','Cagarrutas'];
 
+// --- Utilidades de seguridad ---
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function safeParse(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) || fallback; }
+  catch(e) { console.error('JSON parse error for', key, e); return fallback; }
+}
+
+function safeStore(key, data) {
+  try { localStorage.setItem(key, JSON.stringify(data)); }
+  catch(e) { console.error('localStorage write error for', key, e); showToast('Error guardando datos locales. Libera espacio.', 'error'); }
+}
+
 // --- Estado global ---
+var sincronizando = false;
 var sesion = null;
 var registros = [];
 var infraestructuras = [];
@@ -373,16 +390,16 @@ function verificarSesion() {
 // DATOS — Cargar / Guardar
 // ============================================================
 function cargarDatos() {
-  registros = JSON.parse(localStorage.getItem('rapca_registros') || '[]');
-  infraestructuras = JSON.parse(localStorage.getItem('rapca_infraestructuras') || '[]');
-  ganaderos = JSON.parse(localStorage.getItem('rapca_ganaderos') || '[]');
+  registros = safeParse('rapca_registros', []);
+  infraestructuras = safeParse('rapca_infraestructuras', []);
+  ganaderos = safeParse('rapca_ganaderos', []);
   actualizarEstado();
   actualizarContadorFotos();
 }
 
-function guardarRegistros() { localStorage.setItem('rapca_registros', JSON.stringify(registros)); }
-function guardarInfras() { localStorage.setItem('rapca_infraestructuras', JSON.stringify(infraestructuras)); }
-function guardarGanaderosLS() { localStorage.setItem('rapca_ganaderos', JSON.stringify(ganaderos)); }
+function guardarRegistros() { safeStore('rapca_registros', registros); }
+function guardarInfras() { safeStore('rapca_infraestructuras', infraestructuras); }
+function guardarGanaderosLS() { safeStore('rapca_ganaderos', ganaderos); }
 
 function misRegistros() {
   if (!sesion) return [];
@@ -1566,6 +1583,7 @@ async function subirFotosPendientes() {
     var reauth = await reautenticar();
     if (!reauth) {
       showToast('Necesitas iniciar sesión online para subir fotos. Cierra sesión y vuelve a entrar con conexión.', 'error');
+      return;
     }
   }
 
@@ -1761,7 +1779,7 @@ function actualizarMarcadores() {
     if (!r.lat || !r.lon) continue;
     var color = colores[r.tipo] || '#888';
     var marker = L.circleMarker([r.lat, r.lon], {radius: 8, fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.9});
-    marker.bindPopup('<strong>' + r.tipo + '</strong><br>' + r.unidad + '<br>' + r.fecha + '<br><small>' + (r.operador_nombre || '') + '</small>');
+    marker.bindPopup('<strong>' + escapeHtml(r.tipo) + '</strong><br>' + escapeHtml(r.unidad) + '<br>' + escapeHtml(r.fecha) + '<br><small>' + escapeHtml(r.operador_nombre || '') + '</small>');
     mapaMarkers.addLayer(marker);
   }
 
@@ -1774,7 +1792,7 @@ function actualizarMarcadores() {
     var vpCount = regs.filter(function(r) { return r.unidad === inf.idUnidad && r.tipo === 'VP'; }).length;
     var elCount = regs.filter(function(r) { return r.unidad === inf.idUnidad && r.tipo === 'EL'; }).length;
     var eiCount = regs.filter(function(r) { return r.unidad === inf.idUnidad && r.tipo === 'EI'; }).length;
-    m.bindPopup('<strong>' + (inf.nombre || inf.idUnidad) + '</strong><br>' +
+    m.bindPopup('<strong>' + escapeHtml(inf.nombre || inf.idUnidad) + '</strong><br>' +
       '<span class="badge badge-vp">VP:' + vpCount + '</span> ' +
       '<span class="badge badge-el">EL:' + elCount + '</span> ' +
       '<span class="badge badge-ei">EI:' + eiCount + '</span>');
@@ -2589,9 +2607,9 @@ function renderPanel() {
   lista.innerHTML = regs.map(function(r) {
     var badgeClass = 'badge-' + r.tipo.toLowerCase();
     return '<div class="card registro-card">' +
-      '<div class="reg-header"><span class="badge ' + badgeClass + '">' + r.tipo + '</span><h3>' + r.unidad + '</h3>' +
+      '<div class="reg-header"><span class="badge ' + badgeClass + '">' + escapeHtml(r.tipo) + '</span><h3>' + escapeHtml(r.unidad) + '</h3>' +
       (r.enviado ? '<span style="color:#27ae60;font-size:12px">✓ Sync</span>' : '<span style="color:#e74c3c;font-size:12px">● Pendiente</span>') + '</div>' +
-      '<div class="reg-meta">' + r.fecha + (r.transecto ? ' · ' + r.transecto : '') + ' · ' + (r.operador_nombre || '') + '</div>' +
+      '<div class="reg-meta">' + escapeHtml(r.fecha) + (r.transecto ? ' · ' + escapeHtml(r.transecto) : '') + ' · ' + escapeHtml(r.operador_nombre || '') + '</div>' +
       '<div class="reg-actions">' +
       '<button class="btn btn-sm btn-outline" onclick="editarRegistro(' + r.id + ')">✏️ Editar</button>' +
       '<button class="btn btn-sm btn-outline" onclick="exportarPDFRegistro(' + r.id + ')">📄 PDF</button>' +
@@ -2648,6 +2666,7 @@ function eliminarRegistro(id) {
 }
 
 function borrarTodosRegistros() {
+  if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
   if (!confirm('¿BORRAR TODOS los registros? Esta acción no se puede deshacer.')) return;
   if (!confirm('¿Estás seguro? Se borrarán ' + registros.length + ' registros.')) return;
   registros = [];
@@ -2789,6 +2808,9 @@ async function descargarTodasFotosZIP() {
 // SINCRONIZACIÓN
 // ============================================================
 async function sincronizar() {
+  if (sincronizando) return;
+  sincronizando = true;
+  try {
   var pendientes = registros.filter(function(r) { return !r.enviado; });
   if (pendientes.length === 0) { showToast('No hay registros pendientes de sincronizar', 'info'); return; }
 
@@ -2876,6 +2898,7 @@ async function sincronizar() {
   showToast(exitos + '/' + pendientes.length + ' registros sincronizados', exitos > 0 ? 'success' : 'error');
   // Recargar registros del servidor para tener datos actualizados
   if (exitos > 0) cargarRegistrosServidor();
+  } finally { sincronizando = false; }
 }
 
 // ============================================================
@@ -2901,13 +2924,13 @@ function busquedaGlobal(val) {
   // Buscar en infraestructuras
   infraestructuras.forEach(function(inf, i) {
     var match = Object.values(inf).some(function(v) { return v && v.toString().toLowerCase().indexOf(lv) >= 0; });
-    if (match) html += '<div class="search-result" onclick="cerrarBusqueda();irPagina(\'infraestructuras\')"><strong>🏗️ ' + (inf.nombre || inf.idUnidad) + '</strong><small>Infraestructura · ' + (inf.municipio || '') + '</small></div>';
+    if (match) html += '<div class="search-result" onclick="cerrarBusqueda();irPagina(\'infraestructuras\')"><strong>🏗️ ' + escapeHtml(inf.nombre || inf.idUnidad) + '</strong><small>Infraestructura · ' + escapeHtml(inf.municipio || '') + '</small></div>';
   });
 
   // Buscar en registros
   registros.forEach(function(r) {
     if (r.unidad.toLowerCase().indexOf(lv) >= 0 || r.zona.toLowerCase().indexOf(lv) >= 0) {
-      html += '<div class="search-result" onclick="cerrarBusqueda();editarRegistro(' + r.id + ')"><strong>' + r.tipo + ' ' + r.unidad + '</strong><small>' + r.fecha + ' · ' + (r.operador_nombre || '') + '</small></div>';
+      html += '<div class="search-result" onclick="cerrarBusqueda();editarRegistro(' + r.id + ')"><strong>' + escapeHtml(r.tipo) + ' ' + escapeHtml(r.unidad) + '</strong><small>' + escapeHtml(r.fecha) + ' · ' + escapeHtml(r.operador_nombre || '') + '</small></div>';
     }
   });
 
@@ -3046,6 +3069,7 @@ function abrirModalCrearUsuario() {
 }
 
 async function crearUsuario() {
+  if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
   var nombre = document.getElementById('admin-new-nombre').value.trim();
   var email = document.getElementById('admin-new-email').value.trim();
   var pass = document.getElementById('admin-new-pass').value;
@@ -3140,24 +3164,27 @@ async function asegurarTokenServidor() {
 }
 
 function toggleUsuario(idx) {
-  var usuarios = JSON.parse(localStorage.getItem('rapca_usuarios_local') || '[]');
+  if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
+  var usuarios = safeParse('rapca_usuarios_local', []);
   usuarios[idx].activo = !usuarios[idx].activo;
   localStorage.setItem('rapca_usuarios_local', JSON.stringify(usuarios));
   renderAdmin();
 }
 
 function cambiarPassUsuario(idx) {
+  if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
   var pass = prompt('Nueva contraseña (mín 8 caracteres):');
   if (!pass || pass.length < 8) { showToast('Contraseña inválida', 'error'); return; }
-  var usuarios = JSON.parse(localStorage.getItem('rapca_usuarios_local') || '[]');
+  var usuarios = safeParse('rapca_usuarios_local', []);
   usuarios[idx].passHash = simpleHash(pass);
   localStorage.setItem('rapca_usuarios_local', JSON.stringify(usuarios));
   showToast('Contraseña actualizada', 'success');
 }
 
 function eliminarUsuario(idx) {
+  if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
   if (!confirm('¿Eliminar usuario?')) return;
-  var usuarios = JSON.parse(localStorage.getItem('rapca_usuarios_local') || '[]');
+  var usuarios = safeParse('rapca_usuarios_local', []);
   usuarios.splice(idx, 1);
   localStorage.setItem('rapca_usuarios_local', JSON.stringify(usuarios));
   renderAdmin();
