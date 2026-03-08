@@ -1254,6 +1254,40 @@ function switchCamara() {
 
 var miniMapaImg = null; // Imagen capturada del mini mapa para overlay
 
+function capturarMiniMapaDesdeDiv(mapDiv) {
+  try {
+    var mapCanvas = document.createElement('canvas');
+    var mapRect = mapDiv.getBoundingClientRect();
+    if (mapRect.width === 0 || mapRect.height === 0) return;
+    mapCanvas.width = mapRect.width * 2;
+    mapCanvas.height = mapRect.height * 2;
+    var mctx = mapCanvas.getContext('2d');
+
+    var tiles = mapDiv.querySelectorAll('.leaflet-tile');
+    var dibujados = 0;
+    tiles.forEach(function(tile) {
+      if (!tile.complete || tile.naturalWidth === 0) return;
+      var tileRect = tile.getBoundingClientRect();
+      var dx = (tileRect.left - mapRect.left) * 2;
+      var dy = (tileRect.top - mapRect.top) * 2;
+      try { mctx.drawImage(tile, dx, dy, tileRect.width * 2, tileRect.height * 2); dibujados++; } catch(e) {}
+    });
+
+    if (dibujados > 0) {
+      var centerX = mapCanvas.width / 2;
+      var centerY = mapCanvas.height / 2;
+      mctx.beginPath();
+      mctx.arc(centerX, centerY, 12, 0, Math.PI * 2);
+      mctx.fillStyle = '#e74c3c';
+      mctx.fill();
+      mctx.strokeStyle = '#fff';
+      mctx.lineWidth = 4;
+      mctx.stroke();
+      miniMapaImg = mapCanvas;
+    }
+  } catch(e) { console.warn('No se pudo capturar mini mapa:', e); }
+}
+
 function iniciarOverlayCamara() {
   // Brújula
   var handler = function(e) {
@@ -1280,52 +1314,32 @@ function iniciarOverlayCamara() {
         var mapDiv = document.getElementById('camera-minimap');
         if (miniMapaCamera) miniMapaCamera.remove();
         miniMapaCamera = L.map(mapDiv, {zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false}).setView([gpsPos.lat, gpsPos.lon], 12);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {crossOrigin: 'anonymous'}).addTo(miniMapaCamera);
+        // Usar tile layer con CORS forzado en createTile
+        var CORSTileLayer = L.TileLayer.extend({
+          createTile: function(coords, done) {
+            var tile = document.createElement('img');
+            tile.crossOrigin = 'anonymous';
+            tile.alt = '';
+            tile.setAttribute('role', 'presentation');
+            tile.onload = function() { done(null, tile); };
+            tile.onerror = function(e) { done(e, tile); };
+            tile.src = this.getTileUrl(coords);
+            return tile;
+          }
+        });
+        new CORSTileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(miniMapaCamera);
         L.marker([gpsPos.lat, gpsPos.lon], {
           icon: L.divIcon({className: '', html: '<div style="width:14px;height:14px;background:#e74c3c;border:3px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>', iconSize: [14,14], iconAnchor: [7,7]})
         }).addTo(miniMapaCamera);
 
-        // Capturar mapa a imagen tras cargar tiles
-        setTimeout(function() {
-          try {
-            var mapCanvas = document.createElement('canvas');
-            var mapRect = mapDiv.getBoundingClientRect();
-            mapCanvas.width = mapRect.width * 2;
-            mapCanvas.height = mapRect.height * 2;
-            var mctx = mapCanvas.getContext('2d');
-
-            // Capturar tiles del mapa
-            var tiles = mapDiv.querySelectorAll('.leaflet-tile');
-            var origin = mapDiv.querySelector('.leaflet-map-pane');
-            var originTransform = origin ? getComputedStyle(origin).transform : 'none';
-            var ox = 0, oy = 0;
-            if (originTransform && originTransform !== 'none') {
-              var m = originTransform.match(/matrix.*\((.+)\)/);
-              if (m) { var vals = m[1].split(','); ox = parseFloat(vals[4]) || 0; oy = parseFloat(vals[5]) || 0; }
-            }
-
-            tiles.forEach(function(tile) {
-              if (!tile.complete || tile.naturalWidth === 0) return;
-              var tileRect = tile.getBoundingClientRect();
-              var dx = (tileRect.left - mapRect.left) * 2;
-              var dy = (tileRect.top - mapRect.top) * 2;
-              try { mctx.drawImage(tile, dx, dy, tileRect.width * 2, tileRect.height * 2); } catch(e) {}
-            });
-
-            // Dibujar marcador rojo en el centro
-            var centerX = mapCanvas.width / 2;
-            var centerY = mapCanvas.height / 2;
-            mctx.beginPath();
-            mctx.arc(centerX, centerY, 12, 0, Math.PI * 2);
-            mctx.fillStyle = '#e74c3c';
-            mctx.fill();
-            mctx.strokeStyle = '#fff';
-            mctx.lineWidth = 4;
-            mctx.stroke();
-
-            miniMapaImg = mapCanvas;
-          } catch(e) { console.warn('No se pudo capturar mini mapa:', e); }
-        }, 2500);
+        // Esperar al evento 'load' de Leaflet (tiles cargados) + reintentos
+        miniMapaCamera.on('load', function() {
+          setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 300);
+        });
+        // Reintentos por si los tiles tardan
+        setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 3000);
+        setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 6000);
+        setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 10000);
       } catch(e) {}
     }, function() {}, {enableHighAccuracy: true});
   }
@@ -1440,6 +1454,13 @@ function dibujarRosaVientos(ctx, cx, cy, size) {
 
 function capturarFoto() {
   vibrar(30);
+
+  // Intentar capturar mini mapa una última vez si no se tiene
+  if (!miniMapaImg) {
+    var mapDiv = document.getElementById('camera-minimap');
+    if (mapDiv) capturarMiniMapaDesdeDiv(mapDiv);
+  }
+
   var video = document.getElementById('camera-video');
   var canvas = document.getElementById('preview-canvas');
   var W = 3060, H = 4080;
