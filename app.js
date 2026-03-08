@@ -1536,12 +1536,8 @@ function actualizarContadorFotos() {
 // Re-autenticar con el servidor usando credenciales locales guardadas
 async function reautenticar() {
   if (!sesion || !sesion.email) return false;
-  var usuarios = JSON.parse(localStorage.getItem('rapca_usuarios_local') || '[]');
-  var found = usuarios.find(function(u) { return u.email === sesion.email; });
-  if (!found) return false;
 
-  // Necesitamos la contraseña original, que no guardamos por seguridad.
-  // En su lugar, intentamos re-login con las credenciales guardadas en localStorage
+  // Intentar re-login con la contraseña guardada en localStorage
   var passGuardada = localStorage.getItem('rapca_pass_tmp');
   if (!passGuardada) return false;
 

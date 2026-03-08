@@ -100,13 +100,9 @@ function loginAdmin($email, $password) {
 }
 
 function cerrarSesionAdmin() {
-    // Invalidar tokens API del usuario
-    if (isset($_SESSION['admin_user'])) {
-        try {
-            $db = getDB();
-            $db->prepare('UPDATE sesiones SET activo = 0 WHERE usuario_id = ?')->execute([$_SESSION['admin_user']['id']]);
-        } catch (Exception $e) {}
-    }
+    // NO invalidar tokens API: el panel admin usa sesiones PHP independientes.
+    // Los tokens API son para la PWA y no deben verse afectados por el cierre
+    // de sesión del panel admin.
 
     $_SESSION = [];
     if (ini_get('session.use_cookies')) {
