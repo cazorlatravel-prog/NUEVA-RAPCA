@@ -123,7 +123,8 @@ try {
     $db = getDB();
     initDB();
 } catch (Exception $e) {
-    echo '<div class="alert alert-danger">Error de conexión a base de datos: ' . htmlspecialchars($e->getMessage()) . '</div>';
+    error_log('RAPCA Admin DB error: ' . $e->getMessage());
+    echo '<div class="alert alert-danger">Error de conexión a base de datos. Contacte al administrador.</div>';
 }
 
 switch ($page):
@@ -181,7 +182,7 @@ switch ($page):
       if ($_SERVER['REQUEST_METHOD'] === 'POST' && verificarCSRF($_POST['csrf_token'] ?? '')) {
           $action = $_POST['user_action'] ?? '';
           $uid = intval($_POST['user_id'] ?? 0);
-          if ($action === 'toggle') {
+          if ($action === 'toggle' && $uid !== $adminUser['id']) {
               $db->prepare('UPDATE usuarios SET activo = NOT activo WHERE id = ?')->execute([$uid]);
           } elseif ($action === 'delete' && $uid) {
               $db->prepare('DELETE FROM usuarios WHERE id = ? AND email != ?')->execute([$uid, ADMIN_EMAIL]);
@@ -196,17 +197,20 @@ switch ($page):
               $pass = $_POST['new_pass'] ?? '';
               $nombre = $_POST['new_nombre'] ?? '';
               $rol = $_POST['new_rol'] ?? 'operador';
-              if ($email && strlen($pass) >= 8 && $nombre) {
+              if (filter_var($email, FILTER_VALIDATE_EMAIL) && strlen($pass) >= 8 && $nombre) {
                   $hash = password_hash($pass, PASSWORD_BCRYPT, ['cost' => 12]);
                   try {
                       $db->prepare('INSERT INTO usuarios (email, password, nombre, rol) VALUES (?,?,?,?)')->execute([$email, $hash, $nombre, $rol]);
-                  } catch (PDOException $e) {}
+                  } catch (PDOException $e) {
+                      // Manejar duplicados u otros errores
+                      error_log('Error creando usuario: ' . $e->getMessage());
+                  }
               }
           }
           header('Location: index.php?page=usuarios');
           exit;
       }
-      $users = $db->query('SELECT * FROM usuarios ORDER BY creado_at DESC')->fetchAll();
+      $users = $db->query('SELECT id, email, nombre, rol, activo, creado_at FROM usuarios ORDER BY creado_at DESC')->fetchAll();
       ?>
       <div class="table-responsive">
         <table class="table table-hover bg-white rounded">
@@ -299,10 +303,10 @@ switch ($page):
           <tbody>
           <?php foreach($regs as $r): ?>
           <tr style="cursor:pointer" onclick="location='?page=registro&id=<?= $r['id'] ?>'">
-            <td><span class="badge badge-<?= strtolower($r['tipo']) ?>"><?= $r['tipo'] ?></span></td>
+            <td><span class="badge badge-<?= strtolower(htmlspecialchars($r['tipo'])) ?>"><?= htmlspecialchars($r['tipo']) ?></span></td>
             <td><strong><?= htmlspecialchars($r['unidad']) ?></strong></td>
             <td><?= htmlspecialchars($r['zona']) ?></td>
-            <td><?= $r['fecha'] ?></td>
+            <td><?= htmlspecialchars($r['fecha'] ?? '') ?></td>
             <td><?= htmlspecialchars($r['transecto']) ?></td>
             <td class="small"><?= htmlspecialchars($r['email']) ?></td>
             <td class="small"><?= $r['lat'] ? round($r['lat'],4).','.round($r['lon'],4) : '—' ?></td>
@@ -333,13 +337,13 @@ switch ($page):
       <div class="card p-4">
         <h4><span class="badge badge-<?= strtolower($r['tipo']) ?>"><?= $r['tipo'] ?></span> <?= htmlspecialchars($r['unidad']) ?></h4>
         <table class="table mt-3">
-          <tr><th>Fecha</th><td><?= $r['fecha'] ?></td><th>Zona</th><td><?= htmlspecialchars($r['zona']) ?></td></tr>
+          <tr><th>Fecha</th><td><?= htmlspecialchars($r['fecha'] ?? '') ?></td><th>Zona</th><td><?= htmlspecialchars($r['zona']) ?></td></tr>
           <tr><th>Transecto</th><td><?= htmlspecialchars($r['transecto']) ?></td><th>Operador</th><td><?= htmlspecialchars($r['email']) ?></td></tr>
-          <tr><th>Coordenadas</th><td colspan="3"><?= $r['lat'] ? $r['lat'].', '.$r['lon'] : '—' ?></td></tr>
+          <tr><th>Coordenadas</th><td colspan="3"><?= $r['lat'] ? htmlspecialchars($r['lat']).', '.htmlspecialchars($r['lon']) : '—' ?></td></tr>
         </table>
         <?php if (!empty($datos['pastoreo'])): ?>
         <h5>Pastoreo</h5>
-        <p><?= implode(', ', $datos['pastoreo']) ?></p>
+        <p><?= implode(', ', array_map('htmlspecialchars', $datos['pastoreo'])) ?></p>
         <?php endif; ?>
         <?php if (!empty($datos['observaciones'])): ?>
         <h5>Observaciones</h5>
@@ -349,13 +353,13 @@ switch ($page):
         <h5>Plantas</h5>
         <table class="table table-sm"><thead><tr><th>Especie</th><th>Notas</th><th>Media</th></tr></thead><tbody>
         <?php foreach($datos['plantas'] as $pl): ?>
-        <tr><td><em><?= htmlspecialchars($pl['nombre'] ?? '') ?></em></td><td><?= implode(', ', $pl['notas'] ?? []) ?></td><td><strong><?= $pl['media'] ?? '—' ?></strong></td></tr>
+        <tr><td><em><?= htmlspecialchars($pl['nombre'] ?? '') ?></em></td><td><?= implode(', ', array_map('htmlspecialchars', $pl['notas'] ?? [])) ?></td><td><strong><?= htmlspecialchars($pl['media'] ?? '—') ?></strong></td></tr>
         <?php endforeach; ?>
         </tbody></table>
         <?php endif; ?>
         <?php if (!empty($datos['matorral'])): ?>
         <h5>Matorralización</h5>
-        <p>Volumen: <strong><?= $datos['matorral']['volumen'] ?? '—' ?> m³/ha</strong></p>
+        <p>Volumen: <strong><?= htmlspecialchars($datos['matorral']['volumen'] ?? '—') ?> m³/ha</strong></p>
         <?php endif; ?>
       </div>
       <?php break;
@@ -373,7 +377,7 @@ switch ($page):
       $regs = $db->query('SELECT tipo,unidad,fecha,email,lat,lon FROM registros_sync WHERE lat IS NOT NULL')->fetchAll();
       $colores = ['VP'=>'#88d8b0','EL'=>'#2ecc71','EI'=>'#fd9853'];
       foreach($regs as $r): if(!$r['lat']) continue; ?>
-      markers.addLayer(L.circleMarker([<?= $r['lat'] ?>,<?= $r['lon'] ?>],{radius:8,fillColor:'<?= $colores[$r['tipo']]??'#888' ?>',color:'#fff',weight:2,fillOpacity:.9}).bindPopup('<b><?= $r['tipo'] ?></b><br><?= htmlspecialchars($r['unidad']) ?><br><?= $r['fecha'] ?>'));
+      markers.addLayer(L.circleMarker([<?= floatval($r['lat']) ?>,<?= floatval($r['lon']) ?>],{radius:8,fillColor:'<?= $colores[$r['tipo']]??'#888' ?>',color:'#fff',weight:2,fillOpacity:.9}).bindPopup('<b><?= htmlspecialchars($r['tipo']) ?></b><br><?= htmlspecialchars($r['unidad']) ?><br><?= htmlspecialchars($r['fecha'] ?? '') ?>'));
       <?php endforeach; ?>
       map.addLayer(markers);
       <?php if(count($regs)>0): ?>try{map.fitBounds(markers.getBounds().pad(.1))}catch(e){}<?php endif; ?>

@@ -19,8 +19,9 @@ switch ($accion) {
     case 'upsert':
         if (!$user) jsonResponse(['ok' => false, 'error' => 'No autorizado'], 401);
 
-        $registro_id = $input['registro_id'] ?? 0;
-        $email = $input['email'] ?? $user['email'];
+        $registro_id = intval($input['registro_id'] ?? 0);
+        // Solo admin puede especificar email de otro operador
+        $email = ($user['rol'] === 'admin') ? ($input['email'] ?? $user['email']) : $user['email'];
         $tipo = $input['tipo'] ?? '';
         $fecha = $input['fecha'] ?? null;
         $zona = $input['zona'] ?? '';

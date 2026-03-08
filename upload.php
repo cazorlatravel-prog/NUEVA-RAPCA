@@ -19,9 +19,24 @@ if (!$codigo || !$imagen) {
     jsonResponse(['ok' => false, 'error' => 'Código e imagen requeridos'], 400);
 }
 
+// Validar tipo contra lista permitida
+if (!in_array($tipo, ['VP', 'EL', 'EI'], true)) {
+    jsonResponse(['ok' => false, 'error' => 'Tipo no válido'], 400);
+}
+
+// Sanitizar codigo - solo alfanuméricos, guiones y guiones bajos
+if (!preg_match('/^[a-zA-Z0-9_-]+$/', $codigo)) {
+    jsonResponse(['ok' => false, 'error' => 'Código contiene caracteres no permitidos'], 400);
+}
+
+// Limitar tamaño del base64 (max ~10MB encoded = ~7.5MB imagen)
+if (strlen($imagen) > 10 * 1024 * 1024) {
+    jsonResponse(['ok' => false, 'error' => 'Imagen demasiado grande (máx 7.5MB)'], 400);
+}
+
 // Extraer unidad del código (ej: 23AJE01_VP_1 -> 23AJE01)
 $parts = explode('_', $codigo);
-$unidad = $parts[0] ?? 'sin_unidad';
+$unidad = preg_replace('/[^a-zA-Z0-9_-]/', '', $parts[0] ?? 'sin_unidad');
 
 // Carpeta en Cloudinary: rapca/{tipo}/{unidad}/{codigo}
 $folder = "rapca/{$tipo}/{$unidad}";
@@ -34,12 +49,18 @@ if ($imageData === false) {
     jsonResponse(['ok' => false, 'error' => 'Imagen inválida'], 400);
 }
 
+// Validar que el contenido sea realmente una imagen
+$imageInfo = @getimagesizefromstring($imageData);
+if ($imageInfo === false) {
+    jsonResponse(['ok' => false, 'error' => 'El archivo no es una imagen válida'], 400);
+}
+
 // Guardar siempre una copia local como respaldo
 $uploadDir = __DIR__ . '/uploads/' . $folder;
 if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
-$localPath = $uploadDir . '/' . $codigo . '.jpg';
+$localPath = $uploadDir . '/' . basename($codigo) . '.jpg';
 file_put_contents($localPath, $imageData);
-$localUrl = '/uploads/' . $folder . '/' . $codigo . '.jpg';
+$localUrl = '/uploads/' . $folder . '/' . basename($codigo) . '.jpg';
 
 if (!CLOUDINARY_CLOUD || !CLOUDINARY_KEY || !CLOUDINARY_SECRET) {
     jsonResponse(['ok' => true, 'url' => $localUrl, 'modo' => 'local', 'aviso' => 'Cloudinary no configurado. Foto guardada solo en servidor local.']);
@@ -103,11 +124,11 @@ if ($httpCode >= 200 && $httpCode < 300) {
     } catch (Exception $e) {}
 
     // Devolver éxito parcial: la foto está en local aunque Cloudinary falló
+    error_log('Cloudinary upload error: ' . $errorDetail);
     jsonResponse([
         'ok' => true,
         'url' => $localUrl,
         'modo' => 'local_fallback',
-        'aviso' => 'Cloudinary falló (' . $httpCode . '). Foto guardada en servidor local.',
-        'cloudinary_error' => $errorDetail
+        'aviso' => 'Cloudinary no disponible. Foto guardada en servidor local.'
     ]);
 }

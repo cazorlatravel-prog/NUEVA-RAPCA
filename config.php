@@ -131,12 +131,15 @@ function checkRateLimit($key) {
     return true;
 }
 
-// Validar token de sesión
+// Validar token de sesión (expira en 8 horas)
 function validarToken($token) {
     if (!$token) return null;
     try {
         $db = getDB();
-        $stmt = $db->prepare('SELECT u.id, u.email, u.nombre, u.rol FROM sesiones s JOIN usuarios u ON s.usuario_id = u.id WHERE s.token = ? AND s.activo = 1');
+        // Limpiar sesiones antiguas (> 24h) periódicamente
+        $db->exec('DELETE FROM sesiones WHERE creado_at < NOW() - INTERVAL 24 HOUR');
+        // Token válido si activo y creado en las últimas 8 horas
+        $stmt = $db->prepare('SELECT u.id, u.email, u.nombre, u.rol FROM sesiones s JOIN usuarios u ON s.usuario_id = u.id WHERE s.token = ? AND s.activo = 1 AND s.creado_at > NOW() - INTERVAL 8 HOUR');
         $stmt->execute([$token]);
         return $stmt->fetch();
     } catch (Exception $e) {

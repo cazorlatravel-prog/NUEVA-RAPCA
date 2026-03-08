@@ -32,31 +32,23 @@ switch ($accion) {
         $user = $stmt->fetch();
 
         if (!$user) {
-            jsonResponse(['ok' => false, 'error' => 'Usuario no encontrado'], 401);
+            jsonResponse(['ok' => false, 'error' => 'Credenciales incorrectas'], 401);
         }
 
-        // Verificar contraseña: soporta bcrypt y texto plano (migración)
-        $passOk = false;
-        if (password_verify($password, $user['password'])) {
-            $passOk = true;
-            // Rehashear si el coste es antiguo
-            if (password_needs_rehash($user['password'], PASSWORD_BCRYPT, ['cost' => 12])) {
-                $newHash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
-                $db->prepare('UPDATE usuarios SET password = ? WHERE id = ?')->execute([$newHash, $user['id']]);
-            }
-        } elseif ($user['password'] === $password) {
-            // Contraseña en texto plano (creada manualmente en BD) — migrar a bcrypt
-            $passOk = true;
-            $newHash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
-            $db->prepare('UPDATE usuarios SET password = ? WHERE id = ?')->execute([$newHash, $user['id']]);
-        }
-
-        if (!$passOk) {
-            jsonResponse(['ok' => false, 'error' => 'Contraseña incorrecta'], 401);
-        }
-
+        // Verificar cuenta activa antes de password (evitar rehash de cuentas desactivadas)
         if (!$user['activo']) {
             jsonResponse(['ok' => false, 'error' => 'Cuenta desactivada'], 403);
+        }
+
+        // Verificar contraseña solo con bcrypt
+        if (!password_verify($password, $user['password'])) {
+            jsonResponse(['ok' => false, 'error' => 'Credenciales incorrectas'], 401);
+        }
+
+        // Rehashear si el coste es antiguo
+        if (password_needs_rehash($user['password'], PASSWORD_BCRYPT, ['cost' => 12])) {
+            $newHash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+            $db->prepare('UPDATE usuarios SET password = ? WHERE id = ?')->execute([$newHash, $user['id']]);
         }
 
         // Generar token
@@ -104,8 +96,8 @@ switch ($accion) {
         $nombre = $input['nombre'] ?? '';
         $rol = $input['rol'] ?? 'operador';
 
-        if (!$email || strlen($password) < 8 || !$nombre) {
-            jsonResponse(['ok' => false, 'error' => 'Datos inválidos (contraseña mín 8 caracteres)'], 400);
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($password) < 8 || !$nombre) {
+            jsonResponse(['ok' => false, 'error' => 'Datos inválidos (email válido, contraseña mín 8 caracteres, nombre requerido)'], 400);
         }
 
         if (!in_array($rol, ['admin', 'operador'])) $rol = 'operador';

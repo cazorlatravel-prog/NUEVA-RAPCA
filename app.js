@@ -272,8 +272,6 @@ function iniciarSesion() {
     if (data.ok) {
       sesion = {token: data.token, email: data.email, nombre: data.nombre, rol: data.rol, id: data.id};
       localStorage.setItem('rapca_sesion', JSON.stringify(sesion));
-      // Guardar contraseña para re-autenticación automática (subida de fotos)
-      localStorage.setItem('rapca_pass_tmp', pass);
       // Guardar también en local para acceso offline futuro
       guardarUsuarioLocal(email, pass, data.nombre, data.rol);
       loginExito();
@@ -300,22 +298,12 @@ function iniciarSesion() {
 }
 
 function loginLocal(email, pass, errDiv) {
-  // Admin por defecto
-  if (email === 'rapcajaen@gmail.com' && pass === 'Gallito9431%') {
-    sesion = {token: 'local_' + Date.now(), email: email, nombre: 'Administrador', rol: 'admin', id: 1};
-    localStorage.setItem('rapca_sesion', JSON.stringify(sesion));
-    localStorage.setItem('rapca_pass_tmp', pass);
-    guardarUsuarioLocal(email, pass, 'Administrador', 'admin');
-    loginExito();
-    return true;
-  }
   // Usuarios locales (guardados tras logins previos exitosos con servidor)
   var usuarios = JSON.parse(localStorage.getItem('rapca_usuarios_local') || '[]');
   var found = usuarios.find(function(u) { return u.email === email && u.passHash === simpleHash(pass) && u.activo; });
   if (found) {
     sesion = {token: 'local_' + Date.now(), email: found.email, nombre: found.nombre, rol: found.rol, id: found.id};
     localStorage.setItem('rapca_sesion', JSON.stringify(sesion));
-    localStorage.setItem('rapca_pass_tmp', pass);
     loginExito();
     return true;
   }
@@ -1539,19 +1527,19 @@ function actualizarContadorFotos() {
 // SUBIDA DE FOTOS
 // ============================================================
 
-// Re-autenticar con el servidor usando credenciales locales guardadas
+// Re-autenticar pidiendo contraseña al usuario si el token expiró
 async function reautenticar() {
   if (!sesion || !sesion.email) return false;
 
-  // Intentar re-login con la contraseña guardada en localStorage
-  var passGuardada = localStorage.getItem('rapca_pass_tmp');
-  if (!passGuardada) return false;
+  // Pedir contraseña al usuario
+  var pass = prompt('Tu sesión ha expirado. Introduce tu contraseña para continuar:');
+  if (!pass) return false;
 
   try {
     var resp = await fetch(API_BASE + 'auth.php', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({accion: 'login', email: sesion.email, password: passGuardada})
+      body: JSON.stringify({accion: 'login', email: sesion.email, password: pass})
     });
     var data = await resp.json();
     if (data.ok) {
@@ -1559,6 +1547,8 @@ async function reautenticar() {
       localStorage.setItem('rapca_sesion', JSON.stringify(sesion));
       console.log('Re-autenticación exitosa');
       return true;
+    } else {
+      showToast('Contraseña incorrecta', 'error');
     }
   } catch (e) {
     console.warn('Re-autenticación falló:', e.message);
@@ -3133,7 +3123,6 @@ async function asegurarTokenServidor() {
         if (data.ok) {
           sesion = {token: data.token, email: data.email, nombre: data.nombre, rol: data.rol, id: data.id};
           localStorage.setItem('rapca_sesion', JSON.stringify(sesion));
-          localStorage.setItem('rapca_pass_tmp', passInput);
           cerrarModal();
           showToast('Autenticado correctamente', 'success');
           resolve(true);
