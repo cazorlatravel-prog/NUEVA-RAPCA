@@ -250,61 +250,17 @@ function cerrarInstallBanner() {
 }
 
 function instalarApp() {
-  // Android/Chrome: usar beforeinstallprompt
-  if (deferredPrompt) {
-    deferredPrompt.prompt();
-    deferredPrompt.userChoice.then(function(r) {
-      if (r.outcome === 'accepted') {
-        showToast('App instalada', 'success');
-        localStorage.setItem('rapca_installed', '1');
-      }
-      deferredPrompt = null;
-      ocultarInstallBanner();
-    });
-    return;
-  }
-  // iOS Safari: mostrar instrucciones manuales
-  if (esIOS()) {
-    mostrarInstruccionesIOS();
-    return;
-  }
-  // Fallback para otros navegadores
-  showToast('Abre el menú del navegador y selecciona "Añadir a pantalla de inicio"', 'info');
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(function(r) {
+    if (r.outcome === 'accepted') {
+      showToast('App instalada', 'success');
+      localStorage.setItem('rapca_installed', '1');
+    }
+    deferredPrompt = null;
+    ocultarInstallBanner();
+  });
 }
-
-function esIOS() {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-}
-
-function esPWAInstalada() {
-  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-}
-
-function mostrarInstruccionesIOS() {
-  var modal = document.createElement('div');
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
-  modal.innerHTML = '<div style="background:#fff;border-radius:16px;padding:24px;max-width:320px;text-align:center">' +
-    '<h3 style="margin:0 0 12px;color:#1a3d2e">Instalar RAPCA Campo</h3>' +
-    '<p style="font-size:14px;color:#555;margin:0 0 16px">En Safari, pulsa el botón <strong>Compartir</strong> ' +
-    '<span style="font-size:20px">⬆</span> y luego <strong>"Añadir a pantalla de inicio"</strong></p>' +
-    '<div style="background:#f5f5f0;border-radius:12px;padding:16px;margin-bottom:16px">' +
-    '<div style="font-size:13px;color:#666;text-align:left">' +
-    '1. Pulsa <strong>⬆ Compartir</strong> abajo<br>' +
-    '2. Desplaza y pulsa <strong>"Añadir a pantalla de inicio"</strong><br>' +
-    '3. Confirma pulsando <strong>"Añadir"</strong></div></div>' +
-    '<button onclick="this.closest(\'div[style]\').remove()" style="background:#1a3d2e;color:#fff;border:none;padding:10px 24px;border-radius:20px;font-size:14px;font-weight:700;cursor:pointer">Entendido</button></div>';
-  document.body.appendChild(modal);
-}
-
-// Comprobar al iniciar si mostrar banner de instalación
-setTimeout(function() {
-  if (esPWAInstalada()) return; // ya está instalada
-  if (esIOS() && !localStorage.getItem('rapca_install_dismissed')) {
-    // iOS no lanza beforeinstallprompt, mostrar banner manualmente
-    mostrarInstallBanner();
-  }
-  // En Android el banner se muestra cuando se lanza beforeinstallprompt
-}, 3000);
 
 // --- Online/Offline ---
 function actualizarEstado() {
