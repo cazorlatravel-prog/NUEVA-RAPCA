@@ -1209,10 +1209,14 @@ function abrirCamara(tipo, subtipo) {
   });
 
   // Usar el mayor entre el contador localStorage y el máximo en registros
+  // Si se reiniciaron manualmente, ignorar registros anteriores
   var contadorLocal = contadores[contKey] || 0;
-  var nuevoContador = Math.max(contadorLocal, maxEnRegistros) + 1;
+  var reiniciados = localStorage.getItem('rapca_contadores_reiniciados') === 'true';
+  var nuevoContador = reiniciados ? contadorLocal + 1 : Math.max(contadorLocal, maxEnRegistros) + 1;
   contadores[contKey] = nuevoContador;
   safeStore('rapca_contadores_' + tipo, contadores);
+  // Quitar flag de reinicio tras la primera foto nueva
+  if (reiniciados) localStorage.removeItem('rapca_contadores_reiniciados');
 
   if (subtipo === 'G') {
     fotoCodigo = unidad + '_' + codeTipo + '_' + nuevoContador;
@@ -3250,6 +3254,7 @@ function renderPanel() {
       '<button class="btn btn-sm btn-primary" onclick="exportarTodosPDF()">📄 Exportar todos PDF</button>' +
       '<button class="btn btn-sm btn-primary" onclick="descargarTodasFotosZIP()">📷 Descargar fotos ZIP</button>' +
       '<button class="btn btn-sm btn-outline" onclick="exportarKMLRegistros()">🗺️ Exportar KML</button>' +
+      '<button class="btn btn-sm btn-outline" onclick="reiniciarContadoresFotos()">🔢 Reiniciar contadores</button>' +
       '<button class="btn btn-sm btn-danger" onclick="borrarTodosRegistros()">🗑️ Borrar todo</button>';
   }
 }
@@ -3298,6 +3303,15 @@ function eliminarRegistro(id) {
   guardarRegistros();
   renderPanel();
   showToast('Registro eliminado', 'info');
+}
+
+function reiniciarContadoresFotos() {
+  if (!confirm('¿Reiniciar los contadores de numeración de fotos?\n\nLas fotos nuevas empezarán a numerarse desde 1. Usa esto solo si quieres empezar de nuevo.')) return;
+  localStorage.removeItem('rapca_contadores_VP');
+  localStorage.removeItem('rapca_contadores_EL');
+  localStorage.removeItem('rapca_contadores_EI');
+  localStorage.setItem('rapca_contadores_reiniciados', 'true');
+  showToast('Contadores reiniciados. Las fotos empezarán desde 1.', 'success');
 }
 
 function borrarTodosRegistros() {
@@ -4081,8 +4095,10 @@ async function cargarRegistrosServidor() {
 // RECONSTRUIR CONTADORES DE FOTOS DESDE REGISTROS
 // ============================================================
 // Se ejecuta tras cargar registros del servidor para asegurar que
-// los contadores nunca están por debajo del máximo real usado
+// los contadores nunca están por debajo del máximo real usado.
+// No se ejecuta si el usuario los reinició manualmente desde el panel.
 function reconstruirContadores() {
+  if (localStorage.getItem('rapca_contadores_reiniciados') === 'true') return;
   var tipos = ['VP', 'EL', 'EI'];
   tipos.forEach(function(tipo) {
     var contadores = safeParse('rapca_contadores_' + tipo, {});
