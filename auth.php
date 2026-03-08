@@ -179,6 +179,52 @@ switch ($accion) {
         jsonResponse(['ok' => true]);
         break;
 
+    case 'editar_usuario':
+        $token = getToken();
+        $admin = validarToken($token);
+        if (!$admin || $admin['rol'] !== 'admin') {
+            jsonResponse(['ok' => false, 'error' => 'No autorizado'], 403);
+        }
+
+        $id = intval($input['id'] ?? 0);
+        if (!$id) jsonResponse(['ok' => false, 'error' => 'ID requerido'], 400);
+
+        $db = getDB();
+        $campos = [];
+        $valores = [];
+
+        if (!empty($input['nombre'])) {
+            $campos[] = 'nombre = ?';
+            $valores[] = trim($input['nombre']);
+        }
+        if (!empty($input['email'])) {
+            if (!filter_var($input['email'], FILTER_VALIDATE_EMAIL)) {
+                jsonResponse(['ok' => false, 'error' => 'Email no válido'], 400);
+            }
+            $campos[] = 'email = ?';
+            $valores[] = trim($input['email']);
+        }
+        if (!empty($input['password'])) {
+            if (strlen($input['password']) < 8) {
+                jsonResponse(['ok' => false, 'error' => 'Contraseña mínimo 8 caracteres'], 400);
+            }
+            $campos[] = 'password = ?';
+            $valores[] = password_hash($input['password'], PASSWORD_BCRYPT, ['cost' => 12]);
+        }
+
+        if (empty($campos)) {
+            jsonResponse(['ok' => false, 'error' => 'Nada que actualizar'], 400);
+        }
+
+        $valores[] = $id;
+        try {
+            $db->prepare('UPDATE usuarios SET ' . implode(', ', $campos) . ' WHERE id = ?')->execute($valores);
+            jsonResponse(['ok' => true]);
+        } catch (PDOException $e) {
+            jsonResponse(['ok' => false, 'error' => 'El email ya existe'], 409);
+        }
+        break;
+
     case 'eliminar_usuario':
         $token = getToken();
         $admin = validarToken($token);

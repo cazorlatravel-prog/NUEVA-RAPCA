@@ -400,7 +400,6 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 <div id="login-overlay">
   <div class="login-box">
     <h2>RAPCA Campo</h2>
-    <p>Evaluación de Medios Agropecuarios</p>
     <div id="login-error"></div>
     <input type="email" id="login-email" placeholder="Email" autocomplete="email">
     <input type="password" id="login-pass" placeholder="Contraseña" autocomplete="current-password">
@@ -424,6 +423,16 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
       <button class="btn-icon" onclick="abrirBusqueda()" title="Buscar">🔍</button>
       <button class="btn-icon" onclick="cerrarSesion()" title="Cerrar sesión">⏻</button>
     </div>
+  </div>
+
+  <div class="install-banner" id="install-banner" style="margin:8px 12px">
+    <div class="install-icon">📲</div>
+    <div class="install-text">
+      <strong>Descargar RAPCA Campo</strong>
+      <small>Funciona sin internet · Acceso directo en tu móvil</small>
+    </div>
+    <button class="btn btn-sm" onclick="instalarApp()">Descargar</button>
+    <button class="btn-dismiss" onclick="cerrarInstallBanner()" title="Cerrar">&times;</button>
   </div>
 
   <div class="menu-category" id="menu-campo-label">Trabajo de campo</div>
@@ -459,15 +468,6 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     </div>
     <button class="btn btn-primary btn-block" id="btn-sync-manual" onclick="sincronizar()" style="display:none">🔄 Sincronizar registros pendientes</button>
     <button class="btn btn-secondary btn-block" id="btn-fotos-manual" onclick="subirFotosPendientes()" style="display:none">📤 Subir fotos pendientes (<span id="menu-pending-fotos">0</span>)</button>
-    <div class="install-banner" id="install-banner">
-      <div class="install-icon">📲</div>
-      <div class="install-text">
-        <strong>Descargar RAPCA Campo</strong>
-        <small>Funciona sin internet · Acceso directo en tu móvil</small>
-      </div>
-      <button class="btn btn-sm" onclick="instalarApp()">Descargar</button>
-      <button class="btn-dismiss" onclick="cerrarInstallBanner()" title="Cerrar">&times;</button>
-    </div>
   </div>
 </div>
 

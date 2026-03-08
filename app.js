@@ -3975,13 +3975,18 @@ async function cargarUsuariosServidor() {
     var data = await resp.json();
     if (data.ok && data.usuarios) {
       var lista = document.getElementById('admin-users-list');
+      window._serverUsers = data.usuarios;
       if (data.usuarios.length > 0) {
         lista.innerHTML = '<h3 style="margin:10px 0 5px;color:var(--c-primary)">Usuarios en servidor (' + data.usuarios.length + ')</h3>';
-        data.usuarios.forEach(function(u) {
+        data.usuarios.forEach(function(u, idx) {
           lista.innerHTML += '<div class="card admin-user-card">' +
             '<div class="user-info"><h3>' + u.nombre + ' <span class="badge" style="background:' + (u.rol === 'admin' ? '#333' : 'var(--c-secondary)') + '">' + u.rol + '</span></h3>' +
             '<small>' + u.email + ' · ' + (u.activo ? 'Activo' : 'Inactivo') + ' · Servidor</small></div>' +
-            '</div>';
+            '<div class="admin-user-actions">' +
+            '<button class="btn btn-sm btn-outline" onclick="editarUsuarioServidor(' + idx + ')">✏️</button>' +
+            '<button class="btn btn-sm btn-outline" onclick="toggleUsuarioServidor(' + u.id + ')">' + (u.activo ? '⏸' : '▶') + '</button>' +
+            '<button class="btn btn-sm btn-danger" onclick="eliminarUsuarioServidor(' + u.id + ', \'' + u.email.replace(/'/g, "\\'") + '\')">🗑️</button>' +
+            '</div></div>';
         });
       }
     }
@@ -4121,6 +4126,101 @@ function eliminarUsuario(idx) {
   localStorage.setItem('rapca_usuarios_local', JSON.stringify(usuarios));
   renderAdmin();
   showToast('Usuario eliminado', 'info');
+}
+
+function editarUsuarioServidor(idx) {
+  if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
+  var u = window._serverUsers[idx];
+  if (!u) return;
+  var html = '<h2>Editar Usuario</h2>';
+  html += '<div class="form-group"><label>Nombre</label><input type="text" id="edit-user-nombre" value="' + (u.nombre || '') + '"></div>';
+  html += '<div class="form-group"><label>Email</label><input type="email" id="edit-user-email" value="' + (u.email || '') + '"></div>';
+  html += '<div class="form-group"><label>Nueva contraseña (dejar vacío para no cambiar)</label><input type="password" id="edit-user-pass" placeholder="Mín. 8 caracteres"></div>';
+  html += '<div class="modal-actions"><button class="btn btn-primary" onclick="guardarEdicionUsuario(' + u.id + ')">Guardar</button><button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button></div>';
+  abrirModal(html);
+}
+
+async function guardarEdicionUsuario(userId) {
+  var nombre = document.getElementById('edit-user-nombre').value.trim();
+  var email = document.getElementById('edit-user-email').value.trim();
+  var pass = document.getElementById('edit-user-pass').value;
+
+  if (!nombre && !email && !pass) { showToast('No hay cambios', 'info'); return; }
+  if (pass && pass.length < 8) { showToast('Contraseña mínimo 8 caracteres', 'error'); return; }
+  if (email && !email.includes('@')) { showToast('Email no válido', 'error'); return; }
+
+  var tokenOk = await asegurarTokenServidor();
+  if (!tokenOk) { showToast('No se pudo autenticar', 'error'); return; }
+
+  var body = {accion: 'editar_usuario', id: userId};
+  if (nombre) body.nombre = nombre;
+  if (email) body.email = email;
+  if (pass) body.password = pass;
+
+  try {
+    var resp = await fetch(API_BASE + 'auth.php', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
+      body: JSON.stringify(body)
+    });
+    var data = await resp.json();
+    if (data.ok) {
+      showToast('Usuario actualizado', 'success');
+      cerrarModal();
+      renderAdmin();
+    } else {
+      showToast(data.error || 'Error al actualizar', 'error');
+    }
+  } catch(e) {
+    showToast('Error de conexión', 'error');
+  }
+}
+
+async function toggleUsuarioServidor(userId) {
+  if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
+  var tokenOk = await asegurarTokenServidor();
+  if (!tokenOk) { showToast('No se pudo autenticar', 'error'); return; }
+
+  try {
+    var resp = await fetch(API_BASE + 'auth.php', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
+      body: JSON.stringify({accion: 'toggle_usuario', id: userId})
+    });
+    var data = await resp.json();
+    if (data.ok) {
+      showToast('Estado actualizado', 'success');
+      renderAdmin();
+    } else {
+      showToast(data.error || 'Error', 'error');
+    }
+  } catch(e) {
+    showToast('Error de conexión', 'error');
+  }
+}
+
+async function eliminarUsuarioServidor(userId, email) {
+  if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
+  if (!confirm('¿Eliminar usuario ' + email + ' del servidor?')) return;
+  var tokenOk = await asegurarTokenServidor();
+  if (!tokenOk) { showToast('No se pudo autenticar', 'error'); return; }
+
+  try {
+    var resp = await fetch(API_BASE + 'auth.php', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
+      body: JSON.stringify({accion: 'eliminar_usuario', id: userId})
+    });
+    var data = await resp.json();
+    if (data.ok) {
+      showToast('Usuario eliminado del servidor', 'success');
+      renderAdmin();
+    } else {
+      showToast(data.error || 'Error', 'error');
+    }
+  } catch(e) {
+    showToast('Error de conexión', 'error');
+  }
 }
 
 async function cargarRegistrosServidor() {
