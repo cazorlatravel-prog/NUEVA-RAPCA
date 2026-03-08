@@ -420,8 +420,8 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     </div>
   </div>
 
-  <div class="menu-category">Trabajo de campo</div>
-  <div class="menu-grid">
+  <div class="menu-category" id="menu-campo-label">Trabajo de campo</div>
+  <div class="menu-grid" id="menu-campo">
     <button class="menu-btn" onclick="irPagina('vp')"><div class="icon" style="background:var(--c-vp)">📋</div><span>Visita Previa</span></button>
     <button class="menu-btn" onclick="irPagina('el')"><div class="icon" style="background:var(--c-el)">📝</div><span>Eval. Ligera</span></button>
     <button class="menu-btn" onclick="irPagina('ei')"><div class="icon" style="background:var(--c-ei)">📊</div><span>Eval. Intensa</span></button>
@@ -722,13 +722,7 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
       <input type="date" id="panel-filtro-hasta" onchange="filtrarPanel()" placeholder="Hasta">
     </div>
     <div id="panel-lista"></div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:14px">
-      <button class="btn btn-sm btn-primary" onclick="exportarExcelRegistros()">📊 Exportar Excel</button>
-      <button class="btn btn-sm btn-primary" onclick="exportarTodosPDF()">📄 Exportar todos PDF</button>
-      <button class="btn btn-sm btn-primary" onclick="descargarTodasFotosZIP()">📷 Descargar fotos ZIP</button>
-      <button class="btn btn-sm btn-outline" onclick="exportarKMLRegistros()">🗺️ Exportar KML</button>
-      <button class="btn btn-sm btn-danger" onclick="borrarTodosRegistros()">🗑️ Borrar todo</button>
-    </div>
+    <div id="panel-acciones-globales" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:14px"></div>
   </div>
 </div>
 

@@ -358,7 +358,14 @@ function loginExito() {
   document.getElementById('login-error').style.display = 'none';
   document.getElementById('menu-user-name').textContent = sesion.nombre + ' (' + sesion.rol + ')';
   document.getElementById('status-user').textContent = sesion.email;
-  if (sesion.rol === 'admin') document.getElementById('menu-admin').style.display = 'grid';
+  if (sesion.rol === 'admin') {
+    document.getElementById('menu-admin').style.display = 'grid';
+    document.getElementById('menu-campo').style.display = 'none';
+    document.getElementById('menu-campo-label').style.display = 'none';
+  } else {
+    document.getElementById('menu-campo').style.display = '';
+    document.getElementById('menu-campo-label').style.display = '';
+  }
   showToast('Bienvenido, ' + sesion.nombre, 'success');
   cargarDatos();
   // Descargar registros del servidor (admin ve todos, operador los suyos)
@@ -3034,19 +3041,45 @@ function renderPanel() {
     lista.innerHTML = '<div class="card" style="text-align:center;color:#888;padding:30px">No hay registros</div>';
     return;
   }
+  var esAdmin = sesion && sesion.rol === 'admin';
   lista.innerHTML = regs.map(function(r) {
     var badgeClass = 'badge-' + r.tipo.toLowerCase();
+    var actions = '';
+    if (esAdmin) {
+      actions =
+        '<button class="btn btn-sm btn-outline" onclick="exportarPDFRegistro(' + r.id + ')">📄 PDF</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="descargarFotosZIP(' + r.id + ')">📷 Fotos</button>' +
+        '<button class="btn btn-sm btn-danger" onclick="eliminarRegistro(' + r.id + ')">🗑️</button>';
+    } else {
+      actions =
+        '<button class="btn btn-sm btn-outline" onclick="editarRegistro(' + r.id + ')">✏️ Editar</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="exportarPDFRegistro(' + r.id + ')">📄 PDF</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="descargarFotosZIP(' + r.id + ')">📷 ZIP</button>' +
+        '<button class="btn btn-sm btn-danger" onclick="eliminarRegistro(' + r.id + ')">🗑️</button>';
+    }
     return '<div class="card registro-card">' +
       '<div class="reg-header"><span class="badge ' + badgeClass + '">' + escapeHtml(r.tipo) + '</span><h3>' + escapeHtml(r.unidad) + '</h3>' +
       (r.enviado ? '<span style="color:#27ae60;font-size:12px">✓ Sync</span>' : '<span style="color:#e74c3c;font-size:12px">● Pendiente</span>') + '</div>' +
       '<div class="reg-meta">' + escapeHtml(r.fecha) + (r.transecto ? ' · ' + escapeHtml(r.transecto) : '') + ' · ' + escapeHtml(r.operador_nombre || '') + '</div>' +
-      '<div class="reg-actions">' +
-      '<button class="btn btn-sm btn-outline" onclick="editarRegistro(' + r.id + ')">✏️ Editar</button>' +
-      '<button class="btn btn-sm btn-outline" onclick="exportarPDFRegistro(' + r.id + ')">📄 PDF</button>' +
-      '<button class="btn btn-sm btn-outline" onclick="descargarFotosZIP(' + r.id + ')">📷 ZIP</button>' +
-      '<button class="btn btn-sm btn-danger" onclick="eliminarRegistro(' + r.id + ')">🗑️</button>' +
-      '</div></div>';
+      '<div class="reg-actions">' + actions + '</div></div>';
   }).join('');
+
+  // Botones globales según rol
+  var accionesDiv = document.getElementById('panel-acciones-globales');
+  if (esAdmin) {
+    accionesDiv.innerHTML =
+      '<button class="btn btn-sm btn-primary" onclick="exportarExcelRegistros()">📊 Exportar Excel</button>' +
+      '<button class="btn btn-sm btn-primary" onclick="exportarTodosPDF()">📄 Exportar todos PDF</button>' +
+      '<button class="btn btn-sm btn-primary" onclick="descargarTodasFotosZIP()">📷 Descargar todas fotos</button>' +
+      '<button class="btn btn-sm btn-danger" onclick="borrarTodosRegistros()">🗑️ Borrar todo</button>';
+  } else {
+    accionesDiv.innerHTML =
+      '<button class="btn btn-sm btn-primary" onclick="exportarExcelRegistros()">📊 Exportar Excel</button>' +
+      '<button class="btn btn-sm btn-primary" onclick="exportarTodosPDF()">📄 Exportar todos PDF</button>' +
+      '<button class="btn btn-sm btn-primary" onclick="descargarTodasFotosZIP()">📷 Descargar fotos ZIP</button>' +
+      '<button class="btn btn-sm btn-outline" onclick="exportarKMLRegistros()">🗺️ Exportar KML</button>' +
+      '<button class="btn btn-sm btn-danger" onclick="borrarTodosRegistros()">🗑️ Borrar todo</button>';
+  }
 }
 
 function filtrarPanel() { renderPanel(); }
