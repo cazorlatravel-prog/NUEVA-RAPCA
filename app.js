@@ -3059,13 +3059,10 @@ async function crearUsuario() {
   if (!nombre || !email || pass.length < 8) { showToast('Datos inválidos (contraseña mín 8 caracteres)', 'error'); return; }
   guardarUsuarioLocal(email, pass, nombre, rol);
 
-  // Re-autenticar si es necesario
-  if (!sesion || !sesion.token || sesion.token.startsWith('local_')) {
-    await reautenticar();
-  }
+  // Asegurar token de servidor válido
+  var tokenOk = await asegurarTokenServidor();
 
-  // Crear en servidor
-  if (sesion && sesion.token && !sesion.token.startsWith('local_')) {
+  if (tokenOk) {
     try {
       var resp = await fetch(API_BASE + 'auth.php', {
         method: 'POST',
@@ -3074,58 +3071,79 @@ async function crearUsuario() {
       });
       var data = await resp.json();
       if (data.ok) {
-        showToast('Usuario creado en servidor', 'success');
+        showToast('Usuario creado correctamente', 'success');
+      } else if (data.error === 'No autorizado') {
+        showToast('Token expirado. Cierra sesión y vuelve a entrar.', 'error');
       } else {
-        showToast('Usuario guardado local. Servidor: ' + (data.error || 'error'), 'info');
+        showToast('Servidor: ' + (data.error || 'error'), 'info');
       }
     } catch(e) {
-      showToast('Usuario guardado local (sin conexión al servidor)', 'info');
+      showToast('Usuario guardado local (sin conexión)', 'info');
     }
   } else {
-    showToast('Usuario guardado local (sin token de servidor)', 'info');
+    showToast('Usuario guardado solo en local. Cierra sesión y entra online para crear en servidor.', 'info');
   }
 
   cerrarModal();
   renderAdmin();
 }
 
-// Sincronizar usuarios locales al servidor
-async function sincronizarUsuarios() {
-  if (!sesion || !sesion.token || sesion.token.startsWith('local_')) {
-    var reauth = await reautenticar();
-    if (!reauth) {
-      showToast('Inicia sesión online para sincronizar usuarios', 'error');
-      return;
-    }
-  }
-
-  var usuarios = JSON.parse(localStorage.getItem('rapca_usuarios_local') || '[]');
-  if (usuarios.length === 0) { showToast('No hay usuarios locales para sincronizar', 'info'); return; }
-
-  var creados = 0;
-  var existentes = 0;
-  for (var i = 0; i < usuarios.length; i++) {
-    var u = usuarios[i];
-    // No podemos enviar la contraseña original porque solo guardamos el hash local
-    // Pero si el usuario tiene pass guardada en localStorage (sesión activa), usamos esa
-    var passGuardada = localStorage.getItem('rapca_pass_tmp');
-    // Para usuarios que no son el actual, necesitamos una contraseña temporal
-    var passEnviar = (u.email === sesion.email && passGuardada) ? passGuardada : null;
-
-    if (!passEnviar) continue; // No podemos recrear sin contraseña
-
+// Obtener un token de servidor válido, re-autenticando si es necesario
+async function asegurarTokenServidor() {
+  // Si ya tenemos token de servidor, verificar que funciona
+  if (sesion && sesion.token && !sesion.token.startsWith('local_')) {
     try {
       var resp = await fetch(API_BASE + 'auth.php', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
-        body: JSON.stringify({accion: 'crear_usuario', email: u.email, password: passEnviar, nombre: u.nombre, rol: u.rol})
+        body: JSON.stringify({accion: 'verificar'})
       });
       var data = await resp.json();
-      if (data.ok) creados++;
-      else existentes++;
+      if (data.ok) return true;
     } catch(e) {}
   }
-  showToast(creados + ' usuarios sincronizados al servidor', creados > 0 ? 'success' : 'info');
+
+  // Intentar re-autenticación automática
+  var reauth = await reautenticar();
+  if (reauth) return true;
+
+  // Último recurso: pedir contraseña al admin
+  return new Promise(function(resolve) {
+    var html = '<h2>Autenticación requerida</h2>';
+    html += '<p style="color:#666;margin-bottom:15px">Para crear usuarios en el servidor, necesitas autenticarte con tu contraseña de admin.</p>';
+    html += '<div class="form-group"><label>Email</label><input type="email" id="reauth-email" value="' + (sesion ? sesion.email : '') + '" readonly></div>';
+    html += '<div class="form-group"><label>Contraseña</label><input type="password" id="reauth-pass" placeholder="Contraseña del servidor"></div>';
+    html += '<div class="modal-actions"><button class="btn btn-primary" id="reauth-btn">Autenticar</button><button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button></div>';
+    abrirModal(html);
+
+    document.getElementById('reauth-btn').onclick = async function() {
+      var passInput = document.getElementById('reauth-pass').value;
+      if (!passInput) { showToast('Introduce la contraseña', 'error'); return; }
+      try {
+        var resp = await fetch(API_BASE + 'auth.php', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({accion: 'login', email: sesion.email, password: passInput})
+        });
+        var data = await resp.json();
+        if (data.ok) {
+          sesion = {token: data.token, email: data.email, nombre: data.nombre, rol: data.rol, id: data.id};
+          localStorage.setItem('rapca_sesion', JSON.stringify(sesion));
+          localStorage.setItem('rapca_pass_tmp', passInput);
+          cerrarModal();
+          showToast('Autenticado correctamente', 'success');
+          resolve(true);
+        } else {
+          showToast('Error: ' + (data.error || 'Contraseña incorrecta'), 'error');
+          resolve(false);
+        }
+      } catch(e) {
+        showToast('Sin conexión al servidor', 'error');
+        cerrarModal();
+        resolve(false);
+      }
+    };
+  });
 }
 
 function toggleUsuario(idx) {
