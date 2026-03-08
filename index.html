@@ -851,7 +851,8 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     <!-- Controles ghost -->
     <div id="ghost-controls" style="display:none;position:absolute;bottom:80px;left:50%;transform:translateX(-50%);z-index:5;background:rgba(0,0,0,0.6);border-radius:20px;padding:6px 14px;align-items:center;gap:10px">
       <button onclick="toggleGhost()" id="ghost-toggle-btn" style="background:none;border:2px solid #00e5ff;color:#00e5ff;border-radius:12px;padding:4px 10px;font-size:13px;font-weight:600;cursor:pointer">👻 Ghost ON</button>
-      <input type="range" id="ghost-slider" min="10" max="70" value="35" oninput="ajustarGhost(this.value)" style="width:90px;accent-color:#00e5ff">
+      <span id="ghost-label" style="color:#fff;font-size:11px;min-width:32px;text-align:center">50%</span>
+      <input type="range" id="ghost-slider" min="0" max="100" value="50" oninput="ajustarGhost(this.value)" style="width:110px;accent-color:#00e5ff">
     </div>
   </div>
   <div class="camera-controls">

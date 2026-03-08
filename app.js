@@ -55,7 +55,7 @@ var fotoCapturada = null;
 var fotoCodigo = '';
 var fotosPagina = {};
 var ghostingActivo = false;
-var ghostOpacity = 0.35;
+var ghostOpacity = 50;
 var transectoActual = 'T1';
 var transectosDatos = {T1:null,T2:null,T3:null};
 var editandoRegistro = null;
@@ -480,6 +480,7 @@ function cargarDatos() {
   ganaderos = safeParse('rapca_ganaderos', []);
   actualizarEstado();
   actualizarContadorFotos();
+  reconstruirContadores();
 }
 
 function guardarRegistros() { safeStore('rapca_registros', registros); }
@@ -1171,28 +1172,40 @@ function abrirCamara(tipo, subtipo) {
   var contKey = unidad + '_' + codeTipo + '_' + subtipo;
   var contadores = safeParse('rapca_contadores_' + tipo, {});
 
-  // Buscar el máximo número usado en registros existentes para evitar colisiones
+  // Buscar el máximo número usado en TODOS los registros (locales + servidor) para evitar colisiones
   var maxEnRegistros = 0;
   var prefijoBuscar = subtipo === 'G' ? unidad + '_' + codeTipo + '_' : unidad + '_' + codeTipo + '_' + subtipo + '_';
+
+  function extraerNumDeCodigo(codigo) {
+    if (!codigo || codigo.indexOf(prefijoBuscar) !== 0) return 0;
+    var num = parseInt(codigo.substring(prefijoBuscar.length));
+    return isNaN(num) ? 0 : num;
+  }
+
   registros.forEach(function(r) {
-    if (r.datos && r.datos.fotos) {
+    if (!r.datos) return;
+    // Buscar en fotos generales
+    if (r.datos.fotos && typeof r.datos.fotos === 'string') {
       r.datos.fotos.split(',').forEach(function(f) {
-        f = f.trim();
-        if (f.indexOf(prefijoBuscar) === 0) {
-          var num = parseInt(f.substring(prefijoBuscar.length));
-          if (!isNaN(num) && num > maxEnRegistros) maxEnRegistros = num;
-        }
+        var n = extraerNumDeCodigo(f.trim());
+        if (n > maxEnRegistros) maxEnRegistros = n;
+      });
+    }
+    // Buscar en fotos comparativas (fotosComp)
+    if (r.datos.fotosComp && Array.isArray(r.datos.fotosComp)) {
+      r.datos.fotosComp.forEach(function(fc) {
+        var n = extraerNumDeCodigo(fc.numero || '');
+        if (n > maxEnRegistros) maxEnRegistros = n;
       });
     }
   });
-  // También buscar en fotos de la página actual
+
+  // También buscar en fotos de la página/formulario actual
   var todasFotosPagina = [].concat(fotosPagina['G'] || [], fotosPagina['W1'] || [], fotosPagina['W2'] || []);
   todasFotosPagina.forEach(function(f) {
     var codigo = typeof f === 'object' ? f.codigo : f;
-    if (codigo && codigo.indexOf(prefijoBuscar) === 0) {
-      var num = parseInt(codigo.substring(prefijoBuscar.length));
-      if (!isNaN(num) && num > maxEnRegistros) maxEnRegistros = num;
-    }
+    var n = extraerNumDeCodigo(codigo);
+    if (n > maxEnRegistros) maxEnRegistros = n;
   });
 
   // Usar el mayor entre el contador localStorage y el máximo en registros
@@ -1702,6 +1715,8 @@ function ajustarGhost(val) {
   if (ghostingActivo) {
     ghostEl.style.opacity = ghostOpacity / 100;
   }
+  var label = document.getElementById('ghost-label');
+  if (label) label.textContent = ghostOpacity + '%';
 }
 
 function repetirFoto() {
@@ -4046,6 +4061,7 @@ async function cargarRegistrosServidor() {
       });
 
       guardarRegistros();
+      reconstruirContadores();
 
       // Actualizar panel admin si existe
       var div = document.getElementById('admin-server-records');
@@ -4059,6 +4075,50 @@ async function cargarRegistrosServidor() {
   } catch(e) {
     console.warn('No se pudo cargar registros del servidor:', e.message);
   }
+}
+
+// ============================================================
+// RECONSTRUIR CONTADORES DE FOTOS DESDE REGISTROS
+// ============================================================
+// Se ejecuta tras cargar registros del servidor para asegurar que
+// los contadores nunca están por debajo del máximo real usado
+function reconstruirContadores() {
+  var tipos = ['VP', 'EL', 'EI'];
+  tipos.forEach(function(tipo) {
+    var contadores = safeParse('rapca_contadores_' + tipo, {});
+    var codeTipo = (tipo === 'EI' || tipo === 'EL') ? 'EV' : tipo;
+    var actualizado = false;
+
+    registros.forEach(function(r) {
+      if (!r.datos || !r.unidad) return;
+
+      function procesarCodigo(codigo, subtipo) {
+        if (!codigo) return;
+        var prefijo = subtipo === 'G' ? r.unidad + '_' + codeTipo + '_' : r.unidad + '_' + codeTipo + '_' + subtipo + '_';
+        if (codigo.indexOf(prefijo) !== 0) return;
+        var num = parseInt(codigo.substring(prefijo.length));
+        if (isNaN(num)) return;
+        var contKey = r.unidad + '_' + codeTipo + '_' + subtipo;
+        if (!contadores[contKey] || contadores[contKey] < num) {
+          contadores[contKey] = num;
+          actualizado = true;
+        }
+      }
+
+      // Fotos generales
+      if (r.datos.fotos && typeof r.datos.fotos === 'string') {
+        r.datos.fotos.split(',').forEach(function(f) { procesarCodigo(f.trim(), 'G'); });
+      }
+      // Fotos comparativas
+      if (r.datos.fotosComp && Array.isArray(r.datos.fotosComp)) {
+        r.datos.fotosComp.forEach(function(fc) { procesarCodigo(fc.numero || '', fc.waypoint || 'W1'); });
+      }
+    });
+
+    if (actualizado) {
+      safeStore('rapca_contadores_' + tipo, contadores);
+    }
+  });
 }
 
 // ============================================================
