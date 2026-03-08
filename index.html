@@ -433,7 +433,6 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     <button class="menu-btn" onclick="irPagina('ganaderos')"><div class="icon" style="background:var(--c-secondary)">🐄</div><span>Ganaderos</span></button>
     <button class="menu-btn" onclick="irPagina('infraestructuras')"><div class="icon" style="background:var(--c-infra)">🌳</div><span>Infraestructuras</span></button>
     <button class="menu-btn" onclick="irPagina('panel')"><div class="icon" style="background:var(--c-primary)">📁</div><span>Panel</span></button>
-    <button class="menu-btn" onclick="irPagina('dashboard')"><div class="icon" style="background:var(--c-dash)">📈</div><span>Dashboard</span></button>
   </div>
 
   <div class="menu-category">Herramientas</div>
@@ -726,15 +725,6 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
   </div>
 </div>
 
-<!-- ==================== DASHBOARD ==================== -->
-<div class="page" id="dashboard-page">
-  <div class="page-header" style="background:var(--c-dash)">
-    <button class="btn-back" onclick="irPagina('menu')">←</button>
-    <h1>Dashboard</h1>
-  </div>
-  <div style="padding:12px;overflow-y:auto;flex:1" id="dashboard-content"></div>
-</div>
-
 <!-- ==================== TIMELINE ==================== -->
 <div class="page" id="timeline-page">
   <div class="page-header" style="background:var(--c-tl)">
@@ -865,7 +855,6 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 
 <!-- App scripts -->
 <script src="app.js"></script>
-<script src="dashboard.js"></script>
 <script src="timeline.js"></script>
 <script src="comparador.js"></script>
 <script src="galeria.js"></script>

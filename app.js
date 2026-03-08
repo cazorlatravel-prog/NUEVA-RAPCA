@@ -235,7 +235,6 @@ function irPagina(id) {
   if (id === 'ei') initFormEI();
   if (id === 'mapa') initMapa();
   if (id === 'panel') renderPanel();
-  if (id === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
   if (id === 'timeline' && typeof renderTimeline === 'function') renderTimeline();
   if (id === 'comparador' && typeof renderComparador === 'function') renderComparador();
   if (id === 'galeria' && typeof renderGaleria === 'function') renderGaleria();

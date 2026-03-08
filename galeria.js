@@ -37,9 +37,14 @@ function renderGaleria() {
   html += '<input type="date" id="gal-f-fecha" onchange="filtrarGaleria()">';
   html += '</div>';
 
+  // Acciones globales
+  html += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
+  html += '<button class="btn btn-sm btn-primary" onclick="galDescargarTodas()">📥 Descargar todas</button>';
+  html += '</div>';
+
   // Acciones multi-selección
   html += '<div id="gal-multi-actions" style="display:none;margin-bottom:10px;gap:6px">';
-  html += '<button class="btn btn-sm btn-primary" onclick="galDescargarSel()">📥 Descargar</button>';
+  html += '<button class="btn btn-sm btn-primary" onclick="galDescargarSel()">📥 Descargar selección</button>';
   html += '<button class="btn btn-sm btn-outline" onclick="galCompararSel()">🔀 Comparar</button>';
   html += '<button class="btn btn-sm btn-outline" onclick="galDeseleccionar()">✕ Deseleccionar</button>';
   html += '</div>';
@@ -236,4 +241,48 @@ function galCompararSel() {
   wrap.addEventListener('click', function(e) { updateSlider(e.clientX); });
 
   galSeleccionadas = [];
+}
+
+async function galDescargarTodas() {
+  var regs = misRegistros();
+  var unidad = document.getElementById('gal-f-unidad').value;
+  var tipo = document.getElementById('gal-f-tipo').value;
+  var fecha = document.getElementById('gal-f-fecha').value;
+  if (unidad) regs = regs.filter(function(r) { return r.unidad === unidad; });
+  if (tipo) regs = regs.filter(function(r) { return r.tipo === tipo; });
+  if (fecha) regs = regs.filter(function(r) { return r.fecha === fecha; });
+
+  var codigos = [];
+  regs.forEach(function(r) {
+    if (r.datos.fotos) {
+      r.datos.fotos.split(',').forEach(function(f) {
+        var cod = f.trim();
+        if (cod && codigos.indexOf(cod) < 0) codigos.push(cod);
+      });
+    }
+    if (r.datos.fotosComp) {
+      r.datos.fotosComp.forEach(function(fc) {
+        if (fc.numero && codigos.indexOf(fc.numero) < 0) codigos.push(fc.numero);
+      });
+    }
+  });
+
+  if (codigos.length === 0) { showToast('No hay fotos para descargar', 'error'); return; }
+
+  showToast('Preparando ' + codigos.length + ' fotos...', 'info');
+  var zip = new JSZip();
+  for (var i = 0; i < codigos.length; i++) {
+    var foto = await obtenerDeDB('fotos', codigos[i]);
+    if (foto && foto.data) {
+      var base64 = foto.data.split(',')[1];
+      zip.file(codigos[i] + '.jpg', base64, {base64: true});
+    }
+  }
+  zip.generateAsync({type: 'blob'}).then(function(blob) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'rapca_galeria_fotos.zip';
+    a.click();
+    showToast('Descarga completada', 'success');
+  });
 }
