@@ -2949,17 +2949,35 @@ function renderPanel() {
   var regs = misRegistros();
   var tipoFiltro = document.getElementById('panel-filtro-tipo').value;
   var opFiltro = document.getElementById('panel-filtro-operador').value;
+  var unidadFiltro = document.getElementById('panel-filtro-unidad').value;
+  var desdeFiltro = document.getElementById('panel-filtro-desde').value;
+  var hastaFiltro = document.getElementById('panel-filtro-hasta').value;
 
-  // Poblar operadores
+  // Poblar operadores (siempre refrescar, preservando selección)
   var opSelect = document.getElementById('panel-filtro-operador');
   var ops = [];
   registros.forEach(function(r) { if (r.operador_nombre && ops.indexOf(r.operador_nombre) < 0) ops.push(r.operador_nombre); });
-  if (opSelect.options.length <= 1) {
-    ops.forEach(function(o) { var opt = document.createElement('option'); opt.value = o; opt.textContent = o; opSelect.appendChild(opt); });
-  }
+  var opActual = opSelect.value;
+  opSelect.innerHTML = '<option value="">Todos operadores</option>';
+  ops.sort();
+  ops.forEach(function(o) { var opt = document.createElement('option'); opt.value = o; opt.textContent = o; opSelect.appendChild(opt); });
+  opSelect.value = opActual;
+
+  // Poblar unidades (siempre refrescar, preservando selección)
+  var unidadSelect = document.getElementById('panel-filtro-unidad');
+  var unidades = [];
+  registros.forEach(function(r) { if (r.unidad && unidades.indexOf(r.unidad) < 0) unidades.push(r.unidad); });
+  var unidadActual = unidadSelect.value;
+  unidadSelect.innerHTML = '<option value="">Todas unidades</option>';
+  unidades.sort();
+  unidades.forEach(function(u) { var opt = document.createElement('option'); opt.value = u; opt.textContent = u; unidadSelect.appendChild(opt); });
+  unidadSelect.value = unidadActual;
 
   if (tipoFiltro) regs = regs.filter(function(r) { return r.tipo === tipoFiltro; });
   if (opFiltro) regs = regs.filter(function(r) { return r.operador_nombre === opFiltro; });
+  if (unidadFiltro) regs = regs.filter(function(r) { return r.unidad === unidadFiltro; });
+  if (desdeFiltro) regs = regs.filter(function(r) { return r.fecha >= desdeFiltro; });
+  if (hastaFiltro) regs = regs.filter(function(r) { return r.fecha <= hastaFiltro; });
 
   regs.sort(function(a, b) { return b.id - a.id; });
 

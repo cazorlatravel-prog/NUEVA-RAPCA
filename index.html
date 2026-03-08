@@ -714,6 +714,9 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     <div class="panel-filters">
       <select id="panel-filtro-tipo" onchange="filtrarPanel()"><option value="">Todos</option><option value="VP">VP</option><option value="EL">EL</option><option value="EI">EI</option></select>
       <select id="panel-filtro-operador" onchange="filtrarPanel()"><option value="">Todos operadores</option></select>
+      <select id="panel-filtro-unidad" onchange="filtrarPanel()"><option value="">Todas unidades</option></select>
+      <input type="date" id="panel-filtro-desde" onchange="filtrarPanel()" placeholder="Desde">
+      <input type="date" id="panel-filtro-hasta" onchange="filtrarPanel()" placeholder="Hasta">
     </div>
     <div id="panel-lista"></div>
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:14px">
