@@ -541,7 +541,14 @@ function initFormEI() {
   transectosDatos = {T1: null, T2: null, T3: null};
   actualizarTransectoTabs();
   cargarBorrador('EI');
-  if (editandoRegistro && editandoRegistro.tipo === 'EI') cargarRegistroEnForm(editandoRegistro, 'ev');
+  if (editandoRegistro && editandoRegistro.tipo === 'EI') {
+    cargarRegistroEnForm(editandoRegistro, 'ev');
+    // Restaurar datos de plantas, palatables, herbáceas y matorral
+    if (editandoRegistro.datos) {
+      restaurarDatosEI(editandoRegistro.datos);
+      transectosDatos[transectoActual] = editandoRegistro.datos;
+    }
+  }
 }
 
 // ============================================================
@@ -1213,31 +1220,91 @@ function anotarFoto() {
   var numAnot = anotaciones.length + 1;
   var circleSize = 50; // Radio en píxeles de pantalla
 
-  // Crear elemento de anotación
-  var anot = document.createElement('div');
-  anot.className = 'anot-circle';
-  anot.dataset.num = numAnot;
-  anot.dataset.radius = circleSize;
-  anot.style.cssText = 'position:absolute;left:50%;top:50%;width:' + (circleSize * 2) + 'px;height:' + (circleSize * 2) + 'px;' +
-    'margin-left:-' + circleSize + 'px;margin-top:-' + circleSize + 'px;' +
-    'border:3px solid #e74c3c;border-radius:50%;pointer-events:auto;touch-action:none;cursor:grab;' +
-    'display:flex;align-items:center;justify-content:center;z-index:10;';
-  anot.innerHTML = '<span style="color:#e74c3c;font-weight:700;font-size:18px;pointer-events:none;text-shadow:0 0 3px #fff,0 0 5px #fff;">' + numAnot + '</span>' +
-    '<div class="anot-resize-handle" style="position:absolute;bottom:-6px;right:-6px;width:18px;height:18px;background:#e74c3c;border-radius:50%;cursor:nwse-resize;pointer-events:auto;touch-action:none;border:2px solid #fff;"></div>';
+  // Mostrar diálogo para escribir la anotación
+  mostrarDialogoAnotacion(numAnot, function(texto) {
+    if (texto === null) return; // Cancelado
 
-  overlay.appendChild(anot);
+    // Crear elemento de anotación
+    var anot = document.createElement('div');
+    anot.className = 'anot-circle';
+    anot.dataset.num = numAnot;
+    anot.dataset.radius = circleSize;
+    anot.dataset.texto = texto;
+    anot.style.cssText = 'position:absolute;left:50%;top:50%;width:' + (circleSize * 2) + 'px;height:' + (circleSize * 2) + 'px;' +
+      'margin-left:-' + circleSize + 'px;margin-top:-' + circleSize + 'px;' +
+      'border:3px solid #e74c3c;border-radius:50%;pointer-events:auto;touch-action:none;cursor:grab;' +
+      'display:flex;align-items:center;justify-content:center;z-index:10;';
+    anot.innerHTML = '<span style="color:#e74c3c;font-weight:700;font-size:18px;pointer-events:none;text-shadow:0 0 3px #fff,0 0 5px #fff;">' + numAnot + '</span>' +
+      '<div class="anot-resize-handle" style="position:absolute;bottom:-6px;right:-6px;width:18px;height:18px;background:#e74c3c;border-radius:50%;cursor:nwse-resize;pointer-events:auto;touch-action:none;border:2px solid #fff;"></div>';
 
-  // Eventos táctiles y ratón para arrastrar
-  anot.addEventListener('mousedown', anotStartDrag);
-  anot.addEventListener('touchstart', anotStartDrag, {passive: false});
+    // Etiqueta de texto debajo del círculo
+    if (texto) {
+      var label = document.createElement('div');
+      label.className = 'anot-label';
+      label.style.cssText = 'position:absolute;top:' + (circleSize * 2 + 4) + 'px;left:50%;transform:translateX(-50%);' +
+        'background:rgba(231,76,60,0.9);color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;' +
+        'white-space:nowrap;pointer-events:none;max-width:200px;overflow:hidden;text-overflow:ellipsis;';
+      label.textContent = texto;
+      anot.appendChild(label);
+    }
 
-  // Eventos para redimensionar
-  var handle = anot.querySelector('.anot-resize-handle');
-  handle.addEventListener('mousedown', anotStartResize);
-  handle.addEventListener('touchstart', anotStartResize, {passive: false});
+    overlay.appendChild(anot);
 
-  anotaciones.push({el: anot, num: numAnot, radius: circleSize});
-  showToast('Anotación ' + numAnot + '. Arrastra para mover, esquina para cambiar tamaño.', 'info');
+    // Eventos táctiles y ratón para arrastrar
+    anot.addEventListener('mousedown', anotStartDrag);
+    anot.addEventListener('touchstart', anotStartDrag, {passive: false});
+
+    // Eventos para redimensionar
+    var handle = anot.querySelector('.anot-resize-handle');
+    handle.addEventListener('mousedown', anotStartResize);
+    handle.addEventListener('touchstart', anotStartResize, {passive: false});
+
+    anotaciones.push({el: anot, num: numAnot, radius: circleSize, texto: texto});
+    showToast('Anotación ' + numAnot + (texto ? ': ' + texto : '') + '. Arrastra para mover.', 'info');
+  });
+}
+
+function mostrarDialogoAnotacion(numAnot, callback) {
+  // Crear modal de anotación
+  var modal = document.createElement('div');
+  modal.id = 'anot-dialog';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);' +
+    'display:flex;align-items:center;justify-content:center;z-index:10000;';
+
+  var box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:12px;padding:20px;max-width:90vw;width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.3);';
+  box.innerHTML = '<h3 style="margin:0 0 12px;color:#1a3d2e;font-size:16px;">Anotación ' + numAnot + '</h3>' +
+    '<textarea id="anot-texto-input" placeholder="Escribe la anotación..." ' +
+    'style="width:100%;height:80px;padding:10px;border:2px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" autofocus></textarea>' +
+    '<div style="display:flex;gap:10px;margin-top:12px;">' +
+    '<button id="anot-cancelar-btn" style="flex:1;padding:10px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;font-size:14px;cursor:pointer;">Cancelar</button>' +
+    '<button id="anot-guardar-btn" style="flex:1;padding:10px;border:none;border-radius:8px;background:#1a3d2e;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">Guardar</button>' +
+    '</div>';
+
+  modal.appendChild(box);
+  document.body.appendChild(modal);
+
+  var input = document.getElementById('anot-texto-input');
+  setTimeout(function() { input.focus(); }, 100);
+
+  document.getElementById('anot-guardar-btn').addEventListener('click', function() {
+    var texto = input.value.trim();
+    document.body.removeChild(modal);
+    callback(texto);
+  });
+
+  document.getElementById('anot-cancelar-btn').addEventListener('click', function() {
+    document.body.removeChild(modal);
+    callback(null);
+  });
+
+  // Enter para guardar
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById('anot-guardar-btn').click();
+    }
+  });
 }
 
 function anotStartDrag(e) {
@@ -1360,6 +1427,28 @@ function renderizarAnotaciones() {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(a.num.toString(), cx, cy);
+
+    // Dibujar texto de anotación debajo del círculo
+    if (a.texto) {
+      var fontSize = Math.max(18, radius * 0.35);
+      ctx.font = 'bold ' + fontSize + 'px sans-serif';
+      var textWidth = ctx.measureText(a.texto).width;
+      var padding = 8 * scaleX;
+      var textY = cy + radius + fontSize + padding;
+      // Fondo del texto
+      ctx.fillStyle = 'rgba(231,76,60,0.85)';
+      ctx.beginPath();
+      var rr = 6 * scaleX;
+      var bx = cx - textWidth / 2 - padding;
+      var by = textY - fontSize;
+      var bw = textWidth + padding * 2;
+      var bh = fontSize + padding;
+      ctx.roundRect(bx, by, bw, bh, rr);
+      ctx.fill();
+      // Texto
+      ctx.fillStyle = '#fff';
+      ctx.fillText(a.texto, cx, textY - padding / 2);
+    }
   }
   ctx.textAlign = 'start';
   ctx.textBaseline = 'alphabetic';
@@ -1457,13 +1546,27 @@ async function subirFotosPendientes() {
     var ok = false;
 
     // Intento 1: Subir al servidor (que sube a Cloudinary)
+    if (!sesion || !sesion.token) {
+      showToast('Sesión no iniciada. Inicia sesión para subir fotos.', 'error');
+      fallos++;
+      continue;
+    }
     for (var intento = 0; intento < 3; intento++) {
       try {
         var resp = await fetch(API_BASE + 'upload.php', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (sesion ? sesion.token : '')},
+          headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
           body: JSON.stringify({codigo: foto.codigo, tipo: foto.tipo, imagen: foto.data})
         });
+        if (!resp.ok) {
+          console.warn('Upload HTTP error:', foto.codigo, resp.status, resp.statusText);
+          if (resp.status === 401) {
+            showToast('Token expirado. Vuelve a iniciar sesión.', 'error');
+            break;
+          }
+          if (intento < 2) await new Promise(function(r) { setTimeout(r, 1000 * (intento + 1)); });
+          continue;
+        }
         var result = await resp.json();
         if (result.ok) {
           await eliminarDeDB('subidas_pendientes', foto.codigo);
@@ -1547,6 +1650,10 @@ async function subirDirectoCloudinary(foto) {
     method: 'POST',
     body: formData
   });
+  if (!resp.ok) {
+    console.warn('Cloudinary directo HTTP error:', resp.status, resp.statusText);
+    return false;
+  }
   var result = await resp.json();
   if (result.secure_url) {
     console.log('Cloudinary directo OK:', result.secure_url);
@@ -2654,29 +2761,35 @@ async function sincronizar() {
 
     // Intentar PHP backend
     try {
-      var resp = await fetch(API_BASE + 'datos.php', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (sesion ? sesion.token : '')},
-        body: JSON.stringify({
-          accion: 'upsert',
-          registro_id: r.id,
-          email: r.operador_email,
-          tipo: r.tipo,
-          fecha: r.fecha,
-          zona: r.zona,
-          unidad: r.unidad,
-          transecto: r.transecto,
-          datos: JSON.stringify(r.datos),
-          lat: r.lat,
-          lon: r.lon
-        })
-      });
-      var result = await resp.json();
-      if (result.ok) {
-        r.enviado = true;
-        exitos++;
+      if (sesion && sesion.token) {
+        var resp = await fetch(API_BASE + 'datos.php', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
+          body: JSON.stringify({
+            accion: 'upsert',
+            registro_id: r.id,
+            email: r.operador_email,
+            tipo: r.tipo,
+            fecha: r.fecha,
+            zona: r.zona,
+            unidad: r.unidad,
+            transecto: r.transecto,
+            datos: JSON.stringify(r.datos),
+            lat: r.lat,
+            lon: r.lon
+          })
+        });
+        if (resp.ok) {
+          var result = await resp.json();
+          if (result.ok) {
+            r.enviado = true;
+            exitos++;
+          }
+        } else {
+          console.warn('Sync HTTP error:', r.id, resp.status);
+        }
       }
-    } catch(e) {}
+    } catch(e) { console.warn('Sync error:', r.id, e.message); }
 
     // Stagger
     if (i < pendientes.length - 1) await new Promise(function(res) { setTimeout(res, 600); });
