@@ -30,9 +30,9 @@ if (file_exists(__DIR__ . '/.env')) {
 
 // Base de datos MySQL
 define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
-define('DB_NAME', getenv('DB_NAME') ?: 'u919343704_rapcajaen');
-define('DB_USER', getenv('DB_USER') ?: 'u919343704_datosrapca');
-define('DB_PASS', getenv('DB_PASS') ?: '');
+define('DB_NAME', getenv('DB_NAME') ?: 'u919343704_rapcanueva');
+define('DB_USER', getenv('DB_USER') ?: 'u919343704_rapcanueva');
+define('DB_PASS', getenv('DB_PASS') ?: 'Gallito9431%');
 
 // Cloudinary
 define('CLOUDINARY_CLOUD', getenv('CLOUDINARY_CLOUD_NAME') ?: 'drnqs1jwl');
@@ -198,7 +198,11 @@ function initDB() {
             lon DECIMAL(10,6),
             creado_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             actualizado_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY uq_registro (registro_id, email)
+            UNIQUE KEY uq_registro (registro_id, email),
+            INDEX idx_email (email),
+            INDEX idx_tipo (tipo),
+            INDEX idx_fecha (fecha),
+            INDEX idx_unidad (unidad)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
         CREATE TABLE IF NOT EXISTS infraestructuras (
