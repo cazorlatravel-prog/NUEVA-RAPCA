@@ -2143,7 +2143,30 @@ function actualizarMarcadores() {
     if (!r.lat || !r.lon) continue;
     var color = colores[r.tipo] || '#888';
     var marker = L.circleMarker([r.lat, r.lon], {radius: 8, fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.9});
-    marker.bindPopup('<strong>' + escapeHtml(r.tipo) + '</strong><br>' + escapeHtml(r.unidad) + '<br>' + escapeHtml(r.fecha) + '<br><small>' + escapeHtml(r.operador_nombre || '') + '</small>');
+    var primerFoto = r.datos && r.datos.fotos ? r.datos.fotos.split(',')[0].trim() : '';
+    var popupHtml = '<strong>' + escapeHtml(r.tipo) + '</strong><br>' + escapeHtml(r.unidad) + '<br>' + escapeHtml(r.fecha) + '<br><small>' + escapeHtml(r.operador_nombre || '') + '</small>';
+    if (primerFoto) {
+      popupHtml += '<div id="popup-foto-' + r.id + '" style="margin-top:6px;text-align:center"><span style="color:#888;font-size:11px">Cargando foto...</span></div>';
+    }
+    marker.bindPopup(popupHtml, {minWidth: 140, maxWidth: 200});
+    if (primerFoto) {
+      (function(regId, codigo) {
+        marker.on('popupopen', function() {
+          var container = document.getElementById('popup-foto-' + regId);
+          if (!container || container.dataset.loaded) return;
+          container.dataset.loaded = '1';
+          obtenerDeDB('fotos', codigo).then(function(f) {
+            if (f && container) {
+              container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeHtml(codigo) + '\')">';
+            } else if (container) {
+              container.innerHTML = '<span style="color:#888;font-size:11px">' + escapeHtml(codigo) + '</span>';
+            }
+          }).catch(function() {
+            if (container) container.innerHTML = '';
+          });
+        });
+      })(r.id, primerFoto);
+    }
     mapaMarkers.addLayer(marker);
   }
 
@@ -2177,10 +2200,29 @@ function actualizarMarcadores() {
         if (!fLat || !fLon) continue;
         var wColor = coloresWP[foto.waypoint] || '#888';
         var wMarker = L.circleMarker([fLat, fLon], {radius: 6, fillColor: wColor, color: '#fff', weight: 2, fillOpacity: 0.9});
-        wMarker.bindPopup('<strong>' + foto.waypoint + '</strong><br>' +
-          '<small>' + foto.numero + '</small><br>' +
-          r.tipo + ' - ' + r.unidad + '<br>' +
-          r.fecha);
+        var wPopupId = 'popup-wfoto-' + r.id + '-' + j;
+        wMarker.bindPopup('<strong>' + escapeHtml(foto.waypoint) + '</strong><br>' +
+          '<small>' + escapeHtml(foto.numero) + '</small><br>' +
+          escapeHtml(r.tipo) + ' - ' + escapeHtml(r.unidad) + '<br>' +
+          escapeHtml(r.fecha) +
+          '<div id="' + wPopupId + '" style="margin-top:6px;text-align:center"><span style="color:#888;font-size:11px">Cargando foto...</span></div>',
+          {minWidth: 140, maxWidth: 200});
+        (function(popId, codigo) {
+          wMarker.on('popupopen', function() {
+            var container = document.getElementById(popId);
+            if (!container || container.dataset.loaded) return;
+            container.dataset.loaded = '1';
+            obtenerDeDB('fotos', codigo).then(function(f) {
+              if (f && container) {
+                container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeHtml(codigo) + '\')">';
+              } else if (container) {
+                container.innerHTML = '<span style="color:#888;font-size:11px">' + escapeHtml(codigo) + '</span>';
+              }
+            }).catch(function() {
+              if (container) container.innerHTML = '';
+            });
+          });
+        })(wPopupId, foto.numero);
         capaFotosComp.addLayer(wMarker);
       }
     }
