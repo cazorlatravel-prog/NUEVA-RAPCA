@@ -1785,6 +1785,12 @@ function aceptarFoto() {
 
   var canvas = document.getElementById('preview-canvas');
 
+  // Verificar db disponible
+  if (!db) {
+    showToast('Base de datos no disponible. Reintenta.', 'error');
+    return;
+  }
+
   // Guardar thumbnail en IndexedDB
   var thumbCanvas = document.createElement('canvas');
   thumbCanvas.width = 400;
@@ -1793,40 +1799,62 @@ function aceptarFoto() {
   tCtx.drawImage(canvas, 0, 0, 400, 533);
   var thumbData = thumbCanvas.toDataURL('image/jpeg', 0.5);
 
-  guardarEnDB('fotos', {codigo: fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
-    // Guardar en cola de subida
-    var uploadData = canvas.toDataURL('image/jpeg', 0.85);
-    return guardarEnDB('subidas_pendientes', {codigo: fotoCodigo, data: uploadData, tipo: camaraTipo, fecha: Date.now()});
+  // Capturar datos de upload antes de cerrar (evitar múltiples toDataURL)
+  var uploadData;
+  var downloadData;
+  try {
+    uploadData = canvas.toDataURL('image/jpeg', 0.85);
+    downloadData = canvas.toDataURL('image/jpeg', 0.95);
+  } catch(e) {
+    showToast('Error al procesar foto. Memoria insuficiente.', 'error');
+    return;
+  }
+
+  // Capturar variables en closure antes de cerrar modal
+  var _fotoCodigo = fotoCodigo;
+  var _camaraSubtipo = camaraSubtipo;
+  var _camaraTipo = camaraTipo;
+  var _gpsLat = gpsPos ? gpsPos.lat : null;
+  var _gpsLon = gpsPos ? gpsPos.lon : null;
+
+  // Limpiar anotaciones y cerrar inmediatamente
+  limpiarAnotaciones();
+  document.getElementById('preview-modal').classList.remove('open');
+
+  guardarEnDB('fotos', {codigo: _fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
+    return guardarEnDB('subidas_pendientes', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
   }).then(function() {
     // Auto-descarga full-res
     var link = document.createElement('a');
-    link.href = canvas.toDataURL('image/jpeg', 0.95);
-    link.download = fotoCodigo + '.jpg';
+    link.href = downloadData;
+    link.download = _fotoCodigo + '.jpg';
     link.click();
+    setTimeout(function() { URL.revokeObjectURL(link.href); }, 2000);
 
     // Añadir preview a la página
-    if (!fotosPagina[camaraSubtipo]) fotosPagina[camaraSubtipo] = [];
-    if (camaraSubtipo === 'W1' || camaraSubtipo === 'W2') {
-      fotosPagina[camaraSubtipo].push({codigo: fotoCodigo, lat: gpsPos ? gpsPos.lat : null, lon: gpsPos ? gpsPos.lon : null});
+    if (!fotosPagina[_camaraSubtipo]) fotosPagina[_camaraSubtipo] = [];
+    if (_camaraSubtipo === 'W1' || _camaraSubtipo === 'W2') {
+      fotosPagina[_camaraSubtipo].push({codigo: _fotoCodigo, lat: _gpsLat, lon: _gpsLon});
     } else {
-      fotosPagina[camaraSubtipo].push(fotoCodigo);
+      fotosPagina[_camaraSubtipo].push(_fotoCodigo);
     }
 
-    var prefix = camaraTipo === 'EI' ? 'ev' : camaraTipo.toLowerCase();
+    var prefix = _camaraTipo === 'EI' ? 'ev' : _camaraTipo.toLowerCase();
     var previewGrid = document.getElementById(prefix + '-fotos-preview');
-    var img = document.createElement('img');
-    img.src = thumbData;
-    img.title = fotoCodigo;
-    img.onclick = function() { abrirLightboxFoto(this.src, fotoCodigo); };
-    previewGrid.appendChild(img);
+    if (previewGrid) {
+      var img = document.createElement('img');
+      img.src = thumbData;
+      img.title = _fotoCodigo;
+      img.onclick = function() { abrirLightboxFoto(this.src, _fotoCodigo); };
+      previewGrid.appendChild(img);
+    }
 
     actualizarContadorFotos();
-    showToast('Foto ' + fotoCodigo + ' guardada', 'success');
+    showToast('Foto ' + _fotoCodigo + ' guardada', 'success');
+  }).catch(function(err) {
+    console.error('Error guardando foto:', err);
+    showToast('Error al guardar foto: ' + (err.message || err), 'error');
   });
-
-  // Limpiar anotaciones y cerrar
-  limpiarAnotaciones();
-  document.getElementById('preview-modal').classList.remove('open');
 }
 
 function actualizarContadorFotos() {
@@ -2918,7 +2946,7 @@ function renderPanel() {
 function filtrarPanel() { renderPanel(); }
 
 function editarRegistro(id) {
-  var r = registros.find(function(r) { return r.id === id; });
+  var r = registros.find(function(r) { return r.id == id; });
   if (!r) return;
   editandoRegistro = r;
   if (r.tipo === 'VP') irPagina('vp');
@@ -2955,7 +2983,7 @@ function cargarRegistroEnForm(r, prefix) {
 
 function eliminarRegistro(id) {
   if (!confirm('¿Eliminar registro?')) return;
-  registros = registros.filter(function(r) { return r.id !== id; });
+  registros = registros.filter(function(r) { return r.id != id; });
   guardarRegistros();
   renderPanel();
   showToast('Registro eliminado', 'info');
@@ -2975,7 +3003,7 @@ function borrarTodosRegistros() {
 // EXPORTAR PDF
 // ============================================================
 async function exportarPDFRegistro(id) {
-  var r = registros.find(function(r) { return r.id === id; });
+  var r = registros.find(function(r) { return r.id == id; });
   if (!r) return;
 
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>RAPCA ' + r.tipo + ' - ' + r.unidad + '</title>';
@@ -3063,7 +3091,7 @@ function exportarTodosPDF() {
 }
 
 async function descargarFotosZIP(id) {
-  var r = registros.find(function(r) { return r.id === id; });
+  var r = registros.find(function(r) { return r.id == id; });
   if (!r || !r.datos.fotos) { showToast('No hay fotos', 'error'); return; }
   var zip = new JSZip();
   var codigos = r.datos.fotos.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
@@ -3518,7 +3546,8 @@ async function cargarRegistrosServidor() {
       registros.forEach(function(r) { localesIds[r.id] = true; });
 
       data.registros.forEach(function(sr) {
-        var localId = sr.registro_id || sr.id;
+        // Asegurar que localId sea siempre número (PDO devuelve BIGINT como string)
+        var localId = sr.registro_id ? Number(sr.registro_id) : Number(sr.id);
         if (!localesIds[localId]) {
           // Parsear datos JSON si viene como string
           var datos = sr.datos;

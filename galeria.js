@@ -5,6 +5,18 @@
 var galTab = 'todas';
 var galSeleccionadas = [];
 
+// Cargar foto desde servidor (fallback cuando no está en IndexedDB local)
+function cargarFotoServidor(img, foto) {
+  // Construir URL del servidor: /uploads/rapca/{tipo}/{unidad}/{codigo}.jpg
+  var serverUrl = API_BASE + 'uploads/rapca/' + foto.tipo + '/' + foto.unidad + '/' + foto.codigo + '.jpg';
+  img.onerror = function() {
+    // Segundo intento: Cloudinary directo
+    img.onerror = function() { img.alt = foto.codigo; };
+    img.src = 'https://res.cloudinary.com/drnqs1jwl/image/upload/rapca/' + foto.tipo + '/' + foto.unidad + '/' + foto.codigo;
+  };
+  img.src = serverUrl;
+}
+
 function renderGaleria() {
   var content = document.getElementById('galeria-content');
 
@@ -104,14 +116,27 @@ function filtrarGaleria() {
 
   grid.innerHTML = html;
 
-  // Cargar thumbnails
+  // Cargar thumbnails (IndexedDB local → fallback servidor)
   fotos.forEach(function(f) {
-    obtenerDeDB('fotos', f.codigo).then(function(foto) {
-      if (foto) {
-        var img = document.getElementById('gal-img-' + f.codigo.replace(/[^a-zA-Z0-9]/g, '_'));
-        if (img) img.src = foto.data;
-      }
-    });
+    var imgId = 'gal-img-' + f.codigo.replace(/[^a-zA-Z0-9]/g, '_');
+    if (db) {
+      obtenerDeDB('fotos', f.codigo).then(function(foto) {
+        var img = document.getElementById(imgId);
+        if (!img) return;
+        if (foto && foto.data) {
+          img.src = foto.data;
+        } else {
+          // Fallback: cargar desde servidor
+          cargarFotoServidor(img, f);
+        }
+      }).catch(function() {
+        var img = document.getElementById(imgId);
+        if (img) cargarFotoServidor(img, f);
+      });
+    } else {
+      var img = document.getElementById(imgId);
+      if (img) cargarFotoServidor(img, f);
+    }
   });
 }
 
@@ -147,10 +172,11 @@ function galDeseleccionar() {
 async function galDescargarSel() {
   if (galSeleccionadas.length === 0) return;
   if (galSeleccionadas.length === 1) {
-    var foto = await obtenerDeDB('fotos', galSeleccionadas[0]);
-    if (foto) {
+    // Intentar descargar desde la imagen visible (funciona con server URLs)
+    var imgEl = document.getElementById('gal-img-' + galSeleccionadas[0].replace(/[^a-zA-Z0-9]/g, '_'));
+    if (imgEl && imgEl.src) {
       var a = document.createElement('a');
-      a.href = foto.data;
+      a.href = imgEl.src;
       a.download = galSeleccionadas[0] + '.jpg';
       a.click();
     }
