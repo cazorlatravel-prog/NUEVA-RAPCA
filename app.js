@@ -430,9 +430,11 @@ function loginExito() {
     document.getElementById('menu-admin').style.display = 'grid';
     document.getElementById('menu-campo').style.display = 'none';
     document.getElementById('menu-campo-label').style.display = 'none';
+    document.getElementById('menu-btn-precarga').style.display = 'none';
   } else {
     document.getElementById('menu-campo').style.display = '';
     document.getElementById('menu-campo-label').style.display = '';
+    document.getElementById('menu-btn-precarga').style.display = '';
   }
   showToast('Bienvenido, ' + sesion.nombre, 'success');
   cargarDatos();
@@ -4080,6 +4082,11 @@ var precargaFotosListadas = [];
 var precargaDescargando = false;
 
 function irPrecarga() {
+  if (sesion && sesion.rol === 'admin') {
+    showToast('Función disponible solo para operadores', 'info');
+    irPagina('menu');
+    return;
+  }
   if (!navigator.onLine) {
     showToast('Necesitas conexión para precargar fotos', 'error');
     return;
