@@ -2997,6 +2997,48 @@ function renderAdmin() {
       '<button class="btn btn-sm btn-danger" onclick="eliminarUsuario(' + i + ')">🗑️</button>' +
       '</div></div>';
   }).join('') || '<div style="color:#888;padding:10px">No hay usuarios locales</div>';
+
+  // Cargar usuarios del servidor
+  cargarUsuariosServidor();
+}
+
+async function cargarUsuariosServidor() {
+  if (!sesion || !sesion.token || sesion.token.startsWith('local_')) {
+    await reautenticar();
+  }
+  if (!sesion || !sesion.token || sesion.token.startsWith('local_')) return;
+
+  try {
+    var resp = await fetch(API_BASE + 'auth.php', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
+      body: JSON.stringify({accion: 'listar_usuarios'})
+    });
+    if (resp.status === 401) {
+      var reauth = await reautenticar();
+      if (!reauth) return;
+      resp = await fetch(API_BASE + 'auth.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
+        body: JSON.stringify({accion: 'listar_usuarios'})
+      });
+    }
+    var data = await resp.json();
+    if (data.ok && data.usuarios) {
+      var lista = document.getElementById('admin-users-list');
+      if (data.usuarios.length > 0) {
+        lista.innerHTML = '<h3 style="margin:10px 0 5px;color:var(--c-primary)">Usuarios en servidor (' + data.usuarios.length + ')</h3>';
+        data.usuarios.forEach(function(u) {
+          lista.innerHTML += '<div class="card admin-user-card">' +
+            '<div class="user-info"><h3>' + u.nombre + ' <span class="badge" style="background:' + (u.rol === 'admin' ? '#333' : 'var(--c-secondary)') + '">' + u.rol + '</span></h3>' +
+            '<small>' + u.email + ' · ' + (u.activo ? 'Activo' : 'Inactivo') + ' · Servidor</small></div>' +
+            '</div>';
+        });
+      }
+    }
+  } catch(e) {
+    console.warn('No se pudieron cargar usuarios del servidor:', e.message);
+  }
 }
 
 function abrirModalCrearUsuario() {
@@ -3009,7 +3051,7 @@ function abrirModalCrearUsuario() {
   abrirModal(html);
 }
 
-function crearUsuario() {
+async function crearUsuario() {
   var nombre = document.getElementById('admin-new-nombre').value.trim();
   var email = document.getElementById('admin-new-email').value.trim();
   var pass = document.getElementById('admin-new-pass').value;
@@ -3017,16 +3059,73 @@ function crearUsuario() {
   if (!nombre || !email || pass.length < 8) { showToast('Datos inválidos (contraseña mín 8 caracteres)', 'error'); return; }
   guardarUsuarioLocal(email, pass, nombre, rol);
 
-  // Intentar crear en servidor
-  fetch(API_BASE + 'auth.php', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
-    body: JSON.stringify({accion: 'crear_usuario', email: email, password: pass, nombre: nombre, rol: rol})
-  }).catch(function() {});
+  // Re-autenticar si es necesario
+  if (!sesion || !sesion.token || sesion.token.startsWith('local_')) {
+    await reautenticar();
+  }
+
+  // Crear en servidor
+  if (sesion && sesion.token && !sesion.token.startsWith('local_')) {
+    try {
+      var resp = await fetch(API_BASE + 'auth.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
+        body: JSON.stringify({accion: 'crear_usuario', email: email, password: pass, nombre: nombre, rol: rol})
+      });
+      var data = await resp.json();
+      if (data.ok) {
+        showToast('Usuario creado en servidor', 'success');
+      } else {
+        showToast('Usuario guardado local. Servidor: ' + (data.error || 'error'), 'info');
+      }
+    } catch(e) {
+      showToast('Usuario guardado local (sin conexión al servidor)', 'info');
+    }
+  } else {
+    showToast('Usuario guardado local (sin token de servidor)', 'info');
+  }
 
   cerrarModal();
   renderAdmin();
-  showToast('Usuario creado', 'success');
+}
+
+// Sincronizar usuarios locales al servidor
+async function sincronizarUsuarios() {
+  if (!sesion || !sesion.token || sesion.token.startsWith('local_')) {
+    var reauth = await reautenticar();
+    if (!reauth) {
+      showToast('Inicia sesión online para sincronizar usuarios', 'error');
+      return;
+    }
+  }
+
+  var usuarios = JSON.parse(localStorage.getItem('rapca_usuarios_local') || '[]');
+  if (usuarios.length === 0) { showToast('No hay usuarios locales para sincronizar', 'info'); return; }
+
+  var creados = 0;
+  var existentes = 0;
+  for (var i = 0; i < usuarios.length; i++) {
+    var u = usuarios[i];
+    // No podemos enviar la contraseña original porque solo guardamos el hash local
+    // Pero si el usuario tiene pass guardada en localStorage (sesión activa), usamos esa
+    var passGuardada = localStorage.getItem('rapca_pass_tmp');
+    // Para usuarios que no son el actual, necesitamos una contraseña temporal
+    var passEnviar = (u.email === sesion.email && passGuardada) ? passGuardada : null;
+
+    if (!passEnviar) continue; // No podemos recrear sin contraseña
+
+    try {
+      var resp = await fetch(API_BASE + 'auth.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
+        body: JSON.stringify({accion: 'crear_usuario', email: u.email, password: passEnviar, nombre: u.nombre, rol: u.rol})
+      });
+      var data = await resp.json();
+      if (data.ok) creados++;
+      else existentes++;
+    } catch(e) {}
+  }
+  showToast(creados + ' usuarios sincronizados al servidor', creados > 0 ? 'success' : 'info');
 }
 
 function toggleUsuario(idx) {
