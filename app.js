@@ -530,7 +530,11 @@ function obtenerObservacion(prefix) {
 // INIT FORMS
 // ============================================================
 function initFormVP() {
-  if (!document.getElementById('vp-fecha').value) document.getElementById('vp-fecha').value = hoy();
+  // Resetear todos los campos del formulario
+  document.getElementById('vp-fecha').value = hoy();
+  document.getElementById('vp-unidad').value = '';
+  document.getElementById('vp-zona').value = '';
+  document.getElementById('vp-observaciones').value = '';
   generarPastoreo('vp-pastoreo-container', 'vp');
   generarObservacion('vp-obs-container', 'vp');
   fotosPagina = {};
@@ -540,7 +544,11 @@ function initFormVP() {
 }
 
 function initFormEL() {
-  if (!document.getElementById('el-fecha').value) document.getElementById('el-fecha').value = hoy();
+  // Resetear todos los campos del formulario
+  document.getElementById('el-fecha').value = hoy();
+  document.getElementById('el-unidad').value = '';
+  document.getElementById('el-zona').value = '';
+  document.getElementById('el-observaciones').value = '';
   generarPastoreo('el-pastoreo-container', 'el');
   generarObservacion('el-obs-container', 'el');
   fotosPagina = {};
@@ -550,7 +558,11 @@ function initFormEL() {
 }
 
 function initFormEI() {
-  if (!document.getElementById('ev-fecha').value) document.getElementById('ev-fecha').value = hoy();
+  // Resetear todos los campos del formulario
+  document.getElementById('ev-fecha').value = hoy();
+  document.getElementById('ev-unidad').value = '';
+  document.getElementById('ev-zona').value = '';
+  document.getElementById('ev-observaciones').value = '';
   generarPastoreo('ev-pastoreo-container', 'ev');
   generarObservacion('ev-obs-container', 'ev');
   generarPlantas();
@@ -1060,13 +1072,41 @@ function abrirCamara(tipo, subtipo) {
   var codeTipo = (tipo === 'EI' || tipo === 'EL') ? 'EV' : tipo;
   var contKey = unidad + '_' + codeTipo + '_' + subtipo;
   var contadores = safeParse('rapca_contadores_' + tipo, {});
-  contadores[contKey] = (contadores[contKey] || 0) + 1;
+
+  // Buscar el máximo número usado en registros existentes para evitar colisiones
+  var maxEnRegistros = 0;
+  var prefijoBuscar = subtipo === 'G' ? unidad + '_' + codeTipo + '_' : unidad + '_' + codeTipo + '_' + subtipo + '_';
+  registros.forEach(function(r) {
+    if (r.datos && r.datos.fotos) {
+      r.datos.fotos.split(',').forEach(function(f) {
+        f = f.trim();
+        if (f.indexOf(prefijoBuscar) === 0) {
+          var num = parseInt(f.substring(prefijoBuscar.length));
+          if (!isNaN(num) && num > maxEnRegistros) maxEnRegistros = num;
+        }
+      });
+    }
+  });
+  // También buscar en fotos de la página actual
+  var todasFotosPagina = [].concat(fotosPagina['G'] || [], fotosPagina['W1'] || [], fotosPagina['W2'] || []);
+  todasFotosPagina.forEach(function(f) {
+    var codigo = typeof f === 'object' ? f.codigo : f;
+    if (codigo && codigo.indexOf(prefijoBuscar) === 0) {
+      var num = parseInt(codigo.substring(prefijoBuscar.length));
+      if (!isNaN(num) && num > maxEnRegistros) maxEnRegistros = num;
+    }
+  });
+
+  // Usar el mayor entre el contador localStorage y el máximo en registros
+  var contadorLocal = contadores[contKey] || 0;
+  var nuevoContador = Math.max(contadorLocal, maxEnRegistros) + 1;
+  contadores[contKey] = nuevoContador;
   safeStore('rapca_contadores_' + tipo, contadores);
 
   if (subtipo === 'G') {
-    fotoCodigo = unidad + '_' + codeTipo + '_' + contadores[contKey];
+    fotoCodigo = unidad + '_' + codeTipo + '_' + nuevoContador;
   } else {
-    fotoCodigo = unidad + '_' + codeTipo + '_' + subtipo + '_' + contadores[contKey];
+    fotoCodigo = unidad + '_' + codeTipo + '_' + subtipo + '_' + nuevoContador;
   }
 
   document.getElementById('cam-code').textContent = fotoCodigo;
