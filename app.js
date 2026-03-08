@@ -189,6 +189,10 @@ function sincronizarAuto() {
     var badge = document.getElementById('pending-sync');
     badge.textContent = pend.length;
     badge.style.display = 'inline';
+    // Sincronizar automáticamente si hay token válido del servidor
+    if (sesion && sesion.token && !sesion.token.startsWith('local_')) {
+      sincronizar();
+    }
   }
 }
 
@@ -2795,9 +2799,20 @@ async function descargarTodasFotosZIP() {
 async function sincronizar() {
   var pendientes = registros.filter(function(r) { return !r.enviado; });
   if (pendientes.length === 0) { showToast('No hay registros pendientes de sincronizar', 'info'); return; }
+
+  // Si el token es local o no existe, intentar re-autenticar antes de sincronizar
+  if (!sesion || !sesion.token || sesion.token.startsWith('local_')) {
+    var reauth = await reautenticar();
+    if (!reauth) {
+      showToast('Necesitas iniciar sesión online para sincronizar. Cierra sesión y vuelve a entrar.', 'error');
+      return;
+    }
+  }
+
   showToast('Sincronizando ' + pendientes.length + ' registros...', 'info');
 
   var exitos = 0;
+  var yaReautenticado = false;
   for (var i = 0; i < pendientes.length; i++) {
     var r = pendientes[i];
     // Intentar Google Forms
@@ -2840,9 +2855,23 @@ async function sincronizar() {
             r.enviado = true;
             exitos++;
           }
+        } else if (resp.status === 401 && !yaReautenticado) {
+          // Token expirado, intentar re-autenticar y reintentar este registro
+          yaReautenticado = true;
+          var reauth = await reautenticar();
+          if (reauth) {
+            console.log('Re-autenticado durante sync, reintentando registro', r.id);
+            i--; // Reintentar este mismo registro
+            continue;
+          } else {
+            showToast('Token expirado. Cierra sesión y vuelve a entrar.', 'error');
+            break;
+          }
         } else {
           console.warn('Sync HTTP error:', r.id, resp.status);
         }
+      } else {
+        console.warn('Sync: sin token válido para registro', r.id);
       }
     } catch(e) { console.warn('Sync error:', r.id, e.message); }
 
@@ -3025,10 +3054,32 @@ function eliminarUsuario(idx) {
   showToast('Usuario eliminado', 'info');
 }
 
-function cargarRegistrosServidor() {
-  fetch(API_BASE + 'datos.php?accion=listar', {
-    headers: {'Authorization': 'Bearer ' + sesion.token}
-  }).then(function(r) { return r.json(); }).then(function(data) {
+async function cargarRegistrosServidor() {
+  // Si el token es local, intentar re-autenticar primero
+  if (!sesion || !sesion.token || sesion.token.startsWith('local_')) {
+    var reauth = await reautenticar();
+    if (!reauth) {
+      showToast('Inicia sesión online para ver registros del servidor', 'error');
+      return;
+    }
+  }
+
+  try {
+    var resp = await fetch(API_BASE + 'datos.php?accion=listar', {
+      headers: {'Authorization': 'Bearer ' + sesion.token}
+    });
+    if (resp.status === 401) {
+      var reauth = await reautenticar();
+      if (reauth) {
+        resp = await fetch(API_BASE + 'datos.php?accion=listar', {
+          headers: {'Authorization': 'Bearer ' + sesion.token}
+        });
+      } else {
+        showToast('Token expirado. Cierra sesión y vuelve a entrar.', 'error');
+        return;
+      }
+    }
+    var data = await resp.json();
     if (data.registros) {
       var div = document.getElementById('admin-server-records');
       div.innerHTML = '<p>' + data.registros.length + ' registros en servidor</p>';
@@ -3036,7 +3087,9 @@ function cargarRegistrosServidor() {
         div.innerHTML += '<div class="card" style="font-size:12px"><strong>' + r.tipo + '</strong> ' + r.unidad + ' · ' + r.fecha + '</div>';
       });
     }
-  }).catch(function() { showToast('No se pudo conectar al servidor', 'error'); });
+  } catch(e) {
+    showToast('No se pudo conectar al servidor', 'error');
+  }
 }
 
 // ============================================================
