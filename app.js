@@ -3426,8 +3426,10 @@ async function exportarPDFRegistro(id) {
   var r = registros.find(function(r) { return r.id == id; });
   if (!r) return;
 
+  showToast('Preparando informe con fotos...', 'info');
+
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>RAPCA ' + r.tipo + ' - ' + r.unidad + '</title>';
-  html += '<style>body{font-family:sans-serif;padding:20px;max-width:800px;margin:0 auto}h1{color:#1a3d2e}table{width:100%;border-collapse:collapse;margin:10px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f0}.badge{padding:3px 8px;border-radius:12px;color:#fff;font-weight:700}.fotos{display:flex;flex-wrap:wrap;gap:10px}.fotos img{width:200px;border-radius:6px}</style></head><body>';
+  html += '<style>body{font-family:sans-serif;padding:20px;max-width:800px;margin:0 auto}h1{color:#1a3d2e}h2{color:#1a3d2e;margin-top:24px}table{width:100%;border-collapse:collapse;margin:10px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f0}.badge{padding:3px 8px;border-radius:12px;color:#fff;font-weight:700}img{max-width:100%}@media print{div[style*="page-break"]{page-break-before:always}img{break-inside:avoid}}</style></head><body>';
   html += '<h1>RAPCA EMA — ' + r.tipo + '</h1>';
   html += '<table><tr><th>Fecha</th><td>' + r.fecha + '</td><th>Unidad</th><td>' + r.unidad + '</td></tr>';
   html += '<tr><th>Zona</th><td>' + r.zona + '</td><th>Transecto</th><td>' + (r.transecto || '—') + '</td></tr>';
@@ -3481,17 +3483,63 @@ async function exportarPDFRegistro(id) {
 
   if (r.datos.observaciones) html += '<h3>Observaciones</h3><p>' + r.datos.observaciones + '</p>';
 
-  // Fotos thumbnails desde IndexedDB
-  if (r.datos.fotos) {
-    html += '<h3>Fotos</h3><div class="fotos">';
-    var codigos = r.datos.fotos.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
-    for (var i = 0; i < codigos.length; i++) {
-      try {
-        var foto = await obtenerDeDB('fotos', codigos[i]);
-        if (foto) html += '<img src="' + foto.data + '" title="' + codigos[i] + '">';
-      } catch(e) {}
+  // ---- FOTOS COMPARATIVAS (prioridad alta, más grandes) ----
+  if (r.datos.fotosComp && r.datos.fotosComp.length > 0) {
+    html += '<div style="page-break-before:always"></div>';
+    html += '<h2 style="color:#1a3d2e;border-bottom:2px solid #1a3d2e;padding-bottom:4px">Fotos Comparativas</h2>';
+
+    // Agrupar por waypoint
+    var porWP = {};
+    r.datos.fotosComp.forEach(function(fc) {
+      var wp = fc.waypoint || 'W';
+      if (!porWP[wp]) porWP[wp] = [];
+      porWP[wp].push(fc);
+    });
+
+    var waypoints = Object.keys(porWP).sort();
+    for (var w = 0; w < waypoints.length; w++) {
+      var wp = waypoints[w];
+      var label = wp === 'W1' ? 'Waypoint 1' : wp === 'W2' ? 'Waypoint 2' : wp;
+      html += '<h3 style="color:#2e7d32">' + label + '</h3>';
+      var fcs = porWP[wp];
+      for (var c = 0; c < fcs.length; c++) {
+        var fc = fcs[c];
+        try {
+          var fotoData = await buscarFotoData(fc.numero || '', r.tipo, r.unidad);
+          if (fotoData) {
+            html += '<div style="margin-bottom:12px;text-align:center">';
+            html += '<img src="' + fotoData + '" style="max-width:100%;width:500px;border-radius:8px;border:2px solid #2e7d32;box-shadow:0 2px 8px rgba(0,0,0,0.15)">';
+            html += '<div style="font-size:11px;color:#555;margin-top:4px">' + (fc.numero || '') + (fc.lat ? ' · ' + formatCoordNW(fc.lat, fc.lon) : '') + '</div>';
+            html += '</div>';
+          } else {
+            html += '<p style="color:#888;font-size:12px;font-style:italic">' + (fc.numero || '') + ' — foto no disponible</p>';
+          }
+        } catch(e) {
+          html += '<p style="color:#888;font-size:12px;font-style:italic">' + (fc.numero || '') + ' — error cargando foto</p>';
+        }
+      }
     }
-    html += '</div>';
+  }
+
+  // ---- FOTOS GENERALES ----
+  if (r.datos.fotos) {
+    var codigos = r.datos.fotos.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
+    if (codigos.length > 0) {
+      html += '<h2 style="color:#1a3d2e;border-bottom:2px solid #1a3d2e;padding-bottom:4px;margin-top:20px">Fotos Generales</h2>';
+      html += '<div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center">';
+      for (var i = 0; i < codigos.length; i++) {
+        try {
+          var fotoData = await buscarFotoData(codigos[i], r.tipo, r.unidad);
+          if (fotoData) {
+            html += '<div style="text-align:center">';
+            html += '<img src="' + fotoData + '" style="width:220px;border-radius:6px;border:1px solid #ddd">';
+            html += '<div style="font-size:10px;color:#888;margin-top:2px">' + codigos[i] + '</div>';
+            html += '</div>';
+          }
+        } catch(e) {}
+      }
+      html += '</div>';
+    }
   }
 
   html += '<hr><p style="color:#888;font-size:11px">Generado por RAPCA Campo · ' + new Date().toLocaleString('es-ES') + '</p></body></html>';
