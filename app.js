@@ -348,6 +348,12 @@ function loginExito() {
   if (sesion.rol === 'admin') document.getElementById('menu-admin').style.display = 'grid';
   showToast('Bienvenido, ' + sesion.nombre, 'success');
   cargarDatos();
+  // Descargar registros del servidor (admin ve todos, operador los suyos)
+  if (sesion.token && !sesion.token.startsWith('local_') && navigator.onLine) {
+    cargarRegistrosServidor().then(function() {
+      actualizarEstado();
+    });
+  }
 }
 
 function cerrarSesion() {
@@ -2878,6 +2884,8 @@ async function sincronizar() {
   guardarRegistros();
   actualizarEstado();
   showToast(exitos + '/' + pendientes.length + ' registros sincronizados', exitos > 0 ? 'success' : 'error');
+  // Recargar registros del servidor para tener datos actualizados
+  if (exitos > 0) cargarRegistrosServidor();
 }
 
 // ============================================================
@@ -3172,7 +3180,6 @@ async function cargarRegistrosServidor() {
   if (!sesion || !sesion.token || sesion.token.startsWith('local_')) {
     var reauth = await reautenticar();
     if (!reauth) {
-      showToast('Inicia sesión online para ver registros del servidor', 'error');
       return;
     }
   }
@@ -3188,20 +3195,59 @@ async function cargarRegistrosServidor() {
           headers: {'Authorization': 'Bearer ' + sesion.token}
         });
       } else {
-        showToast('Token expirado. Cierra sesión y vuelve a entrar.', 'error');
         return;
       }
     }
     var data = await resp.json();
-    if (data.registros) {
-      var div = document.getElementById('admin-server-records');
-      div.innerHTML = '<p>' + data.registros.length + ' registros en servidor</p>';
-      data.registros.forEach(function(r) {
-        div.innerHTML += '<div class="card" style="font-size:12px"><strong>' + r.tipo + '</strong> ' + r.unidad + ' · ' + r.fecha + '</div>';
+    if (data.ok && data.registros) {
+      // Integrar registros del servidor en el array local
+      // Los del servidor tienen registro_id que corresponde al id local
+      var localesIds = {};
+      registros.forEach(function(r) { localesIds[r.id] = true; });
+
+      data.registros.forEach(function(sr) {
+        var localId = sr.registro_id || sr.id;
+        if (!localesIds[localId]) {
+          // Parsear datos JSON si viene como string
+          var datos = sr.datos;
+          if (typeof datos === 'string') {
+            try { datos = JSON.parse(datos); } catch(e) { datos = {}; }
+          }
+          registros.push({
+            id: localId,
+            server_id: sr.id,
+            tipo: sr.tipo,
+            fecha: sr.fecha,
+            zona: sr.zona || '',
+            unidad: sr.unidad || '',
+            transecto: sr.transecto || '',
+            datos: datos || {},
+            enviado: true,
+            lat: sr.lat ? parseFloat(sr.lat) : null,
+            lon: sr.lon ? parseFloat(sr.lon) : null,
+            operador_email: sr.email,
+            operador_nombre: sr.operador_nombre || sr.email
+          });
+        } else {
+          // Marcar como enviado si ya existe localmente
+          var idx = registros.findIndex(function(r) { return r.id === localId; });
+          if (idx >= 0) registros[idx].enviado = true;
+        }
       });
+
+      guardarRegistros();
+
+      // Actualizar panel admin si existe
+      var div = document.getElementById('admin-server-records');
+      if (div) {
+        div.innerHTML = '<p>' + data.registros.length + ' registros en servidor</p>';
+        data.registros.forEach(function(r) {
+          div.innerHTML += '<div class="card" style="font-size:12px"><strong>' + r.tipo + '</strong> ' + (r.unidad || '') + ' · ' + r.fecha + ' · <small>' + r.email + '</small></div>';
+        });
+      }
     }
   } catch(e) {
-    showToast('No se pudo conectar al servidor', 'error');
+    console.warn('No se pudo cargar registros del servidor:', e.message);
   }
 }
 

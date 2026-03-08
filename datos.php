@@ -49,9 +49,9 @@ switch ($accion) {
 
         $db = getDB();
         if ($user['rol'] === 'admin') {
-            $stmt = $db->query('SELECT * FROM registros_sync ORDER BY fecha DESC, creado_at DESC');
+            $stmt = $db->query('SELECT r.*, u.nombre as operador_nombre FROM registros_sync r LEFT JOIN usuarios u ON r.email = u.email ORDER BY r.fecha DESC, r.creado_at DESC');
         } else {
-            $stmt = $db->prepare('SELECT * FROM registros_sync WHERE email = ? ORDER BY fecha DESC, creado_at DESC');
+            $stmt = $db->prepare('SELECT r.*, u.nombre as operador_nombre FROM registros_sync r LEFT JOIN usuarios u ON r.email = u.email WHERE r.email = ? ORDER BY r.fecha DESC, r.creado_at DESC');
             $stmt->execute([$user['email']]);
         }
 
