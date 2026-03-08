@@ -3105,7 +3105,7 @@ function borrarTodosRegistros() {
   setTimeout(function() { document.getElementById('confirmar-borrar-input').focus(); }, 100);
 }
 
-function ejecutarBorrarTodo() {
+async function ejecutarBorrarTodo() {
   var input = document.getElementById('confirmar-borrar-input');
   if (!input || input.value.trim().toUpperCase() !== 'BORRAR') {
     showToast('Escribe BORRAR para confirmar', 'error');
@@ -3113,6 +3113,28 @@ function ejecutarBorrarTodo() {
     input.focus();
     return;
   }
+
+  // Borrar en el servidor primero
+  if (sesion && sesion.token && !sesion.token.startsWith('local_') && navigator.onLine) {
+    try {
+      var resp = await fetch(API_BASE + 'datos.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
+        body: JSON.stringify({accion: 'borrar_todo', confirmacion: 'BORRAR'})
+      });
+      var data = await resp.json();
+      if (!data.ok) {
+        showToast('Error del servidor: ' + (data.error || 'desconocido'), 'error');
+        return;
+      }
+      showToast('Borrados ' + (data.borrados || 0) + ' registros del servidor', 'info');
+    } catch(e) {
+      showToast('No se pudo conectar al servidor. Inténtalo con conexión.', 'error');
+      return;
+    }
+  }
+
+  // Borrar localmente
   registros = [];
   guardarRegistros();
 

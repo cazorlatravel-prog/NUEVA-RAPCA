@@ -74,6 +74,34 @@ switch ($accion) {
         jsonResponse(['ok' => true]);
         break;
 
+    case 'borrar_todo':
+        if (!$user || $user['rol'] !== 'admin') jsonResponse(['ok' => false, 'error' => 'Solo administradores'], 403);
+
+        $confirmacion = $input['confirmacion'] ?? '';
+        if ($confirmacion !== 'BORRAR') jsonResponse(['ok' => false, 'error' => 'Confirmación requerida'], 400);
+
+        $db = getDB();
+
+        // Contar registros antes de borrar
+        $count = $db->query('SELECT COUNT(*) as total FROM registros_sync')->fetch()['total'];
+
+        // Borrar todos los registros
+        $db->exec('DELETE FROM registros_sync');
+
+        // Borrar fotos locales del servidor
+        $uploadsDir = __DIR__ . '/uploads/rapca';
+        if (is_dir($uploadsDir)) {
+            $it = new RecursiveDirectoryIterator($uploadsDir, RecursiveDirectoryIterator::SKIP_DOTS);
+            $files = new RecursiveIteratorIterator($it, RecursiveIteratorIterator::CHILD_FIRST);
+            foreach ($files as $file) {
+                if ($file->isDir()) rmdir($file->getRealPath());
+                else unlink($file->getRealPath());
+            }
+        }
+
+        jsonResponse(['ok' => true, 'borrados' => intval($count)]);
+        break;
+
     case 'stats':
         if (!$user) jsonResponse(['ok' => false, 'error' => 'No autorizado'], 401);
 
