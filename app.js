@@ -54,6 +54,8 @@ var camaraFacing = 'environment';
 var fotoCapturada = null;
 var fotoCodigo = '';
 var fotosPagina = {};
+var ghostingActivo = false;
+var ghostOpacity = 0.35;
 var transectoActual = 'T1';
 var transectosDatos = {T1:null,T2:null,T3:null};
 var editandoRegistro = null;
@@ -1054,15 +1056,17 @@ function abrirCamara(tipo, subtipo) {
   // Generar código de foto
   var prefix = tipo === 'EI' ? 'ev' : tipo.toLowerCase();
   var unidad = document.getElementById(prefix + '-unidad').value || 'SIN_ID';
-  var contKey = unidad + '_' + tipo + '_' + subtipo;
-  var contadores = JSON.parse(localStorage.getItem('rapca_contadores_' + tipo) || '{}');
+  // EI y EL usan 'EV' en el código de foto, VP usa 'VP'
+  var codeTipo = (tipo === 'EI' || tipo === 'EL') ? 'EV' : tipo;
+  var contKey = unidad + '_' + codeTipo + '_' + subtipo;
+  var contadores = safeParse('rapca_contadores_' + tipo, {});
   contadores[contKey] = (contadores[contKey] || 0) + 1;
-  localStorage.setItem('rapca_contadores_' + tipo, JSON.stringify(contadores));
+  safeStore('rapca_contadores_' + tipo, contadores);
 
   if (subtipo === 'G') {
-    fotoCodigo = unidad + '_' + tipo + '_' + contadores[contKey];
+    fotoCodigo = unidad + '_' + codeTipo + '_' + contadores[contKey];
   } else {
-    fotoCodigo = unidad + '_' + tipo + '_' + subtipo + '_' + contadores[contKey];
+    fotoCodigo = unidad + '_' + codeTipo + '_' + subtipo + '_' + contadores[contKey];
   }
 
   document.getElementById('cam-code').textContent = fotoCodigo;
@@ -1075,11 +1079,12 @@ function abrirCamara(tipo, subtipo) {
     video.srcObject = stream;
     document.getElementById('camera-modal').classList.add('open');
     iniciarOverlayCamara();
+    cargarGhostFoto(tipo, subtipo);
   }).catch(function(err) {
     showToast('Error al acceder a la cámara: ' + err.message, 'error');
     // Decrementar contador
     contadores[contKey]--;
-    localStorage.setItem('rapca_contadores_' + tipo, JSON.stringify(contadores));
+    safeStore('rapca_contadores_' + tipo, contadores);
   });
 }
 
@@ -1090,14 +1095,19 @@ function cerrarCamara() {
   }
   document.getElementById('camera-modal').classList.remove('open');
   if (miniMapaCamera) { miniMapaCamera.remove(); miniMapaCamera = null; }
+  // Limpiar ghost
+  document.getElementById('ghost-overlay').style.display = 'none';
+  document.getElementById('ghost-controls').style.display = 'none';
+  ghostingActivo = false;
 
   // Decrementar contador si se cancela
   var prefix = camaraTipo === 'EI' ? 'ev' : camaraTipo.toLowerCase();
   var unidad = document.getElementById(prefix + '-unidad').value || 'SIN_ID';
-  var contKey = unidad + '_' + camaraTipo + '_' + camaraSubtipo;
-  var contadores = JSON.parse(localStorage.getItem('rapca_contadores_' + camaraTipo) || '{}');
+  var codeTipo = (camaraTipo === 'EI' || camaraTipo === 'EL') ? 'EV' : camaraTipo;
+  var contKey = unidad + '_' + codeTipo + '_' + camaraSubtipo;
+  var contadores = safeParse('rapca_contadores_' + camaraTipo, {});
   if (contadores[contKey] > 0) contadores[contKey]--;
-  localStorage.setItem('rapca_contadores_' + camaraTipo, JSON.stringify(contadores));
+  safeStore('rapca_contadores_' + camaraTipo, contadores);
 }
 
 function switchCamara() {
@@ -1112,18 +1122,22 @@ function switchCamara() {
   });
 }
 
+var miniMapaImg = null; // Imagen capturada del mini mapa para overlay
+
 function iniciarOverlayCamara() {
   // Brújula
   var handler = function(e) {
     compassHeading = e.alpha ? Math.round(e.alpha) : 0;
     var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
-    var dir = dirs[Math.round(compassHeading / 45) % 8];
+    var dir = dirs[Math.floor((compassHeading + 22.5) / 45) % 8];
     document.getElementById('cam-compass').textContent = dir + ' ' + compassHeading + '°';
   };
   if (window.DeviceOrientationEvent) {
     window.addEventListener('deviceorientationabsolute', handler, true);
     window.addEventListener('deviceorientation', handler, true);
   }
+
+  miniMapaImg = null;
 
   // GPS para overlay
   if (navigator.geolocation) {
@@ -1132,16 +1146,167 @@ function iniciarOverlayCamara() {
       var utm = latLonToUTM(gpsPos.lat, gpsPos.lon);
       document.getElementById('cam-coords').textContent = utm;
 
-      // Mini mapa
+      // Mini mapa a escala ~1:50000 (zoom 12)
       try {
         var mapDiv = document.getElementById('camera-minimap');
         if (miniMapaCamera) miniMapaCamera.remove();
-        miniMapaCamera = L.map(mapDiv, {zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false}).setView([gpsPos.lat, gpsPos.lon], 16);
+        miniMapaCamera = L.map(mapDiv, {zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false}).setView([gpsPos.lat, gpsPos.lon], 12);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(miniMapaCamera);
-        L.circleMarker([gpsPos.lat, gpsPos.lon], {radius: 5, color: '#e74c3c', fillColor: '#e74c3c', fillOpacity: 1}).addTo(miniMapaCamera);
+        L.marker([gpsPos.lat, gpsPos.lon], {
+          icon: L.divIcon({className: '', html: '<div style="width:14px;height:14px;background:#e74c3c;border:3px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>', iconSize: [14,14], iconAnchor: [7,7]})
+        }).addTo(miniMapaCamera);
+
+        // Capturar mapa a imagen tras cargar tiles
+        setTimeout(function() {
+          try {
+            var mapCanvas = document.createElement('canvas');
+            var mapRect = mapDiv.getBoundingClientRect();
+            mapCanvas.width = mapRect.width * 2;
+            mapCanvas.height = mapRect.height * 2;
+            var mctx = mapCanvas.getContext('2d');
+
+            // Capturar tiles del mapa
+            var tiles = mapDiv.querySelectorAll('.leaflet-tile');
+            var origin = mapDiv.querySelector('.leaflet-map-pane');
+            var originTransform = origin ? getComputedStyle(origin).transform : 'none';
+            var ox = 0, oy = 0;
+            if (originTransform && originTransform !== 'none') {
+              var m = originTransform.match(/matrix.*\((.+)\)/);
+              if (m) { var vals = m[1].split(','); ox = parseFloat(vals[4]) || 0; oy = parseFloat(vals[5]) || 0; }
+            }
+
+            tiles.forEach(function(tile) {
+              if (!tile.complete || tile.naturalWidth === 0) return;
+              var tileRect = tile.getBoundingClientRect();
+              var dx = (tileRect.left - mapRect.left) * 2;
+              var dy = (tileRect.top - mapRect.top) * 2;
+              try { mctx.drawImage(tile, dx, dy, tileRect.width * 2, tileRect.height * 2); } catch(e) {}
+            });
+
+            // Dibujar marcador rojo en el centro
+            var centerX = mapCanvas.width / 2;
+            var centerY = mapCanvas.height / 2;
+            mctx.beginPath();
+            mctx.arc(centerX, centerY, 12, 0, Math.PI * 2);
+            mctx.fillStyle = '#e74c3c';
+            mctx.fill();
+            mctx.strokeStyle = '#fff';
+            mctx.lineWidth = 4;
+            mctx.stroke();
+
+            miniMapaImg = mapCanvas;
+          } catch(e) { console.warn('No se pudo capturar mini mapa:', e); }
+        }, 2500);
       } catch(e) {}
     }, function() {}, {enableHighAccuracy: true});
   }
+}
+
+// Dibujar rosa de los vientos en canvas
+function dibujarRosaVientos(ctx, cx, cy, size) {
+  ctx.save();
+  // Fondo circular semitransparente
+  ctx.beginPath();
+  ctx.arc(cx, cy, size, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(80,80,80,0.7)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Circulo interior
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * 0.85, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  var r = size * 0.7; // radio de las puntas
+
+  // Flecha Norte (cian/turquesa como en la imagen)
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);           // punta norte
+  ctx.lineTo(cx - r * 0.18, cy);    // base izq
+  ctx.lineTo(cx, cy - r * 0.15);    // muesca central
+  ctx.closePath();
+  ctx.fillStyle = '#00e5ff';
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);
+  ctx.lineTo(cx + r * 0.18, cy);
+  ctx.lineTo(cx, cy - r * 0.15);
+  ctx.closePath();
+  ctx.fillStyle = '#00b8d4';
+  ctx.fill();
+
+  // Flecha Sur (gris oscuro)
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + r);
+  ctx.lineTo(cx - r * 0.18, cy);
+  ctx.lineTo(cx, cy + r * 0.15);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + r);
+  ctx.lineTo(cx + r * 0.18, cy);
+  ctx.lineTo(cx, cy + r * 0.15);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.fill();
+
+  // Flecha Este
+  ctx.beginPath();
+  ctx.moveTo(cx + r * 0.6, cy);
+  ctx.lineTo(cx, cy - r * 0.12);
+  ctx.lineTo(cx + r * 0.1, cy);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cx + r * 0.6, cy);
+  ctx.lineTo(cx, cy + r * 0.12);
+  ctx.lineTo(cx + r * 0.1, cy);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.fill();
+
+  // Flecha Oeste
+  ctx.beginPath();
+  ctx.moveTo(cx - r * 0.6, cy);
+  ctx.lineTo(cx, cy - r * 0.12);
+  ctx.lineTo(cx - r * 0.1, cy);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cx - r * 0.6, cy);
+  ctx.lineTo(cx, cy + r * 0.12);
+  ctx.lineTo(cx - r * 0.1, cy);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.fill();
+
+  // Letras cardinales
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  var fs = size * 0.28;
+  ctx.font = 'bold ' + fs + 'px sans-serif';
+
+  // N (en cian)
+  ctx.fillStyle = '#00e5ff';
+  ctx.fillText('N', cx, cy - size * 0.88);
+  // S
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.fillText('S', cx, cy + size * 0.90);
+  // E
+  ctx.fillText('E', cx + size * 0.88, cy);
+  // W
+  ctx.fillText('W', cx - size * 0.88, cy);
+
+  ctx.restore();
 }
 
 function capturarFoto() {
@@ -1160,37 +1325,95 @@ function capturarFoto() {
   var sx = (vw - sw) / 2, sy = (vh - sh) / 2;
   ctx.drawImage(video, sx, sy, sw, sh, 0, 0, W, H);
 
-  // Overlay brújula (esquina superior izquierda)
-  ctx.fillStyle = 'rgba(0,0,0,0.5)';
-  ctx.fillRect(20, 20, 180, 50);
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 28px sans-serif';
-  var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
-  var dir = dirs[Math.round(compassHeading / 45) % 8];
-  ctx.fillText(dir + ' ' + compassHeading + '°', 35, 55);
+  // --- ROSA DE LOS VIENTOS (esquina superior izquierda) ---
+  dibujarRosaVientos(ctx, 120, 120, 95);
 
-  // Info panel (esquina inferior derecha)
-  ctx.fillStyle = 'rgba(26,61,46,0.85)';
-  ctx.fillRect(W - 520, H - 200, 500, 180);
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 24px sans-serif';
-  var utm = gpsPos ? latLonToUTM(gpsPos.lat, gpsPos.lon) : 'Sin GPS';
-  ctx.fillText('UTM: ' + utm, W - 500, H - 155);
-  ctx.font = '20px sans-serif';
-  ctx.fillText('RAPCA EMA', W - 500, H - 120);
-  ctx.fillText(hoy() + ' ' + new Date().toLocaleTimeString('es-ES'), W - 500, H - 90);
-  ctx.font = 'bold 22px sans-serif';
-  ctx.fillText(fotoCodigo, W - 500, H - 55);
-
-  // Mini mapa overlay (esquina inferior izquierda) - simplificado con texto
-  if (gpsPos) {
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(20, H - 120, 300, 100);
-    ctx.fillStyle = '#fff';
-    ctx.font = '18px sans-serif';
-    ctx.fillText('Lat: ' + gpsPos.lat.toFixed(6), 35, H - 85);
-    ctx.fillText('Lon: ' + gpsPos.lon.toFixed(6), 35, H - 55);
+  // --- MINI MAPA (esquina inferior izquierda, ~1:50000) ---
+  var mapSize = 500;
+  var mapX = 30, mapY = H - mapSize - 30;
+  if (miniMapaImg) {
+    // Borde redondeado para el mapa
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
+    ctx.clip();
+    ctx.drawImage(miniMapaImg, mapX, mapY, mapSize, mapSize);
+    ctx.restore();
+    // Borde
+    ctx.beginPath();
+    ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  } else if (gpsPos) {
+    // Fallback: recuadro con coordenadas si no se capturó el mapa
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
+    ctx.fillStyle = 'rgba(200,220,200,0.7)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.restore();
+    // Marcador rojo centrado
+    ctx.beginPath();
+    ctx.arc(mapX + mapSize / 2, mapY + mapSize / 2, 16, 0, Math.PI * 2);
+    ctx.fillStyle = '#e74c3c';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    // Texto posición
+    ctx.fillStyle = '#333';
+    ctx.font = '22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('1:50.000', mapX + mapSize / 2, mapY + mapSize - 20);
+    ctx.textAlign = 'start';
   }
+
+  // --- INFO PANEL (esquina inferior derecha, texto amarillo sin fondo) ---
+  var utm = gpsPos ? latLonToUTM(gpsPos.lat, gpsPos.lon) : 'Sin GPS';
+  var fechaFoto = new Date();
+  var dd = ('0' + fechaFoto.getDate()).slice(-2);
+  var mm = ('0' + (fechaFoto.getMonth() + 1)).slice(-2);
+  var yyyy = fechaFoto.getFullYear();
+  var fechaStr = dd + '/' + mm + '/' + yyyy;
+
+  // Sombra para legibilidad
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetX = 2;
+  ctx.shadowOffsetY = 2;
+
+  ctx.textAlign = 'right';
+
+  // RAPCA EMA
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 56px sans-serif';
+  ctx.fillText('RAPCA EMA', W - 50, H - 230);
+
+  // Código foto
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 48px sans-serif';
+  ctx.fillText(fotoCodigo, W - 50, H - 165);
+
+  // Fecha (sin hora)
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '42px sans-serif';
+  ctx.fillText(fechaStr, W - 50, H - 110);
+
+  // Coordenadas UTM 30N ETRS89
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '38px sans-serif';
+  ctx.fillText(utm, W - 50, H - 55);
+
+  // Resetear sombra y alineación
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.textAlign = 'start';
 
   fotoCapturada = canvas;
   anotaciones = [];
@@ -1202,6 +1425,79 @@ function capturarFoto() {
   }
   document.getElementById('camera-modal').classList.remove('open');
   document.getElementById('preview-modal').classList.add('open');
+}
+
+// --- SISTEMA DE GHOSTING PARA FOTOS COMPARATIVAS ---
+
+function cargarGhostFoto(tipo, subtipo) {
+  // Buscar foto previa del mismo waypoint y unidad para usar como ghost
+  var ghostEl = document.getElementById('ghost-overlay');
+  var ghostControls = document.getElementById('ghost-controls');
+  ghostEl.style.display = 'none';
+  ghostControls.style.display = 'none';
+  ghostingActivo = false;
+
+  // Solo para fotos comparativas W1/W2
+  if (subtipo !== 'W1' && subtipo !== 'W2') return;
+
+  var prefix = tipo === 'EI' ? 'ev' : tipo.toLowerCase();
+  var unidad = document.getElementById(prefix + '-unidad').value || '';
+  if (!unidad) return;
+
+  // Buscar en registros anteriores fotos comparativas del mismo waypoint/unidad
+  var codeTipo = (tipo === 'EI' || tipo === 'EL') ? 'EV' : tipo;
+  var patronBusqueda = unidad + '_' + codeTipo + '_' + subtipo;
+
+  // Buscar en IndexedDB el thumbnail más reciente que coincida
+  if (!db) return;
+  obtenerTodosDB('fotos').then(function(fotos) {
+    // Buscar la foto más reciente cuyo código empiece con el patrón
+    var matches = fotos.filter(function(f) {
+      return f.codigo && f.codigo.indexOf(patronBusqueda) === 0;
+    }).sort(function(a, b) { return (b.fecha || 0) - (a.fecha || 0); });
+
+    if (matches.length > 0) {
+      ghostEl.src = matches[0].data;
+      ghostEl.style.display = 'block';
+      ghostEl.style.opacity = ghostOpacity / 100;
+      ghostControls.style.display = 'flex';
+      ghostingActivo = true;
+
+      var btn = document.getElementById('ghost-toggle-btn');
+      btn.textContent = '👻 Ghost ON';
+      btn.style.color = '#00e5ff';
+      btn.style.borderColor = '#00e5ff';
+
+      var slider = document.getElementById('ghost-slider');
+      slider.value = ghostOpacity;
+    }
+  });
+}
+
+function toggleGhost() {
+  var ghostEl = document.getElementById('ghost-overlay');
+  var btn = document.getElementById('ghost-toggle-btn');
+  ghostingActivo = !ghostingActivo;
+  if (ghostingActivo) {
+    ghostEl.style.display = 'block';
+    ghostEl.style.opacity = ghostOpacity / 100;
+    btn.textContent = '👻 Ghost ON';
+    btn.style.color = '#00e5ff';
+    btn.style.borderColor = '#00e5ff';
+  } else {
+    ghostEl.style.display = 'none';
+    btn.textContent = '👻 Ghost OFF';
+    btn.style.color = '#888';
+    btn.style.borderColor = '#888';
+  }
+}
+
+function ajustarGhost(val) {
+  ghostOpacity = parseInt(val);
+  var ghostEl = document.getElementById('ghost-overlay');
+  if (ghostingActivo) {
+    ghostEl.style.opacity = ghostOpacity / 100;
+  }
 }
 
 function repetirFoto() {
