@@ -268,6 +268,8 @@ function iniciarSesion() {
     if (data.ok) {
       sesion = {token: data.token, email: data.email, nombre: data.nombre, rol: data.rol, id: data.id};
       localStorage.setItem('rapca_sesion', JSON.stringify(sesion));
+      // Guardar contraseña para re-autenticación automática (subida de fotos)
+      localStorage.setItem('rapca_pass_tmp', pass);
       // Guardar también en local para acceso offline futuro
       guardarUsuarioLocal(email, pass, data.nombre, data.rol);
       loginExito();
@@ -298,6 +300,7 @@ function loginLocal(email, pass, errDiv) {
   if (email === 'rapcajaen@gmail.com' && pass === 'Gallito9431%') {
     sesion = {token: 'local_' + Date.now(), email: email, nombre: 'Administrador', rol: 'admin', id: 1};
     localStorage.setItem('rapca_sesion', JSON.stringify(sesion));
+    localStorage.setItem('rapca_pass_tmp', pass);
     guardarUsuarioLocal(email, pass, 'Administrador', 'admin');
     loginExito();
     return true;
@@ -308,6 +311,7 @@ function loginLocal(email, pass, errDiv) {
   if (found) {
     sesion = {token: 'local_' + Date.now(), email: found.email, nombre: found.nombre, rol: found.rol, id: found.id};
     localStorage.setItem('rapca_sesion', JSON.stringify(sesion));
+    localStorage.setItem('rapca_pass_tmp', pass);
     loginExito();
     return true;
   }
@@ -344,6 +348,7 @@ function loginExito() {
 
 function cerrarSesion() {
   if (!confirm('¿Cerrar sesión?')) return;
+  localStorage.removeItem('rapca_pass_tmp');
   // Invalidar token en servidor
   if (sesion && sesion.token && !sesion.token.startsWith('local_')) {
     fetch(API_BASE + 'auth.php', {
@@ -1523,10 +1528,50 @@ function actualizarContadorFotos() {
 // ============================================================
 // SUBIDA DE FOTOS
 // ============================================================
+
+// Re-autenticar con el servidor usando credenciales locales guardadas
+async function reautenticar() {
+  if (!sesion || !sesion.email) return false;
+  var usuarios = JSON.parse(localStorage.getItem('rapca_usuarios_local') || '[]');
+  var found = usuarios.find(function(u) { return u.email === sesion.email; });
+  if (!found) return false;
+
+  // Necesitamos la contraseña original, que no guardamos por seguridad.
+  // En su lugar, intentamos re-login con las credenciales guardadas en localStorage
+  var passGuardada = localStorage.getItem('rapca_pass_tmp');
+  if (!passGuardada) return false;
+
+  try {
+    var resp = await fetch(API_BASE + 'auth.php', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({accion: 'login', email: sesion.email, password: passGuardada})
+    });
+    var data = await resp.json();
+    if (data.ok) {
+      sesion = {token: data.token, email: data.email, nombre: data.nombre, rol: data.rol, id: data.id};
+      localStorage.setItem('rapca_sesion', JSON.stringify(sesion));
+      console.log('Re-autenticación exitosa');
+      return true;
+    }
+  } catch (e) {
+    console.warn('Re-autenticación falló:', e.message);
+  }
+  return false;
+}
+
 async function subirFotosPendientes() {
   if (!db) { showToast('Base de datos no lista', 'error'); return; }
   var pendientes = await obtenerTodosDB('subidas_pendientes');
   if (pendientes.length === 0) { showToast('No hay fotos pendientes', 'info'); return; }
+
+  // Si el token es local o no existe, intentar re-autenticar antes de subir
+  if (!sesion || !sesion.token || sesion.token.startsWith('local_')) {
+    var reauth = await reautenticar();
+    if (!reauth) {
+      showToast('Necesitas iniciar sesión online para subir fotos. Cierra sesión y vuelve a entrar con conexión.', 'error');
+    }
+  }
 
   var progDiv = document.getElementById('upload-progress');
   var progText = document.getElementById('prog-text');
@@ -1551,6 +1596,7 @@ async function subirFotosPendientes() {
       fallos++;
       continue;
     }
+    var yaReautenticado = false;
     for (var intento = 0; intento < 3; intento++) {
       try {
         var resp = await fetch(API_BASE + 'upload.php', {
@@ -1560,8 +1606,17 @@ async function subirFotosPendientes() {
         });
         if (!resp.ok) {
           console.warn('Upload HTTP error:', foto.codigo, resp.status, resp.statusText);
-          if (resp.status === 401) {
-            showToast('Token expirado. Vuelve a iniciar sesión.', 'error');
+          if (resp.status === 401 && !yaReautenticado) {
+            // Intentar re-autenticar una vez y reintentar
+            yaReautenticado = true;
+            var reauth = await reautenticar();
+            if (reauth) {
+              console.log('Re-autenticado, reintentando subida...');
+              continue;
+            }
+            showToast('Token expirado. Cierra sesión y vuelve a entrar.', 'error');
+            break;
+          } else if (resp.status === 401) {
             break;
           }
           if (intento < 2) await new Promise(function(r) { setTimeout(r, 1000 * (intento + 1)); });
