@@ -78,18 +78,35 @@ switch ($accion) {
 
         $db = getDB();
         $stats = [];
+        $isAdmin = $user['rol'] === 'admin';
 
-        $stmt = $db->query('SELECT tipo, COUNT(*) as total FROM registros_sync GROUP BY tipo');
-        $stats['por_tipo'] = $stmt->fetchAll();
+        if ($isAdmin) {
+            $stmt = $db->query('SELECT tipo, COUNT(*) as total FROM registros_sync GROUP BY tipo');
+            $stats['por_tipo'] = $stmt->fetchAll();
 
-        $stmt = $db->query('SELECT COUNT(DISTINCT unidad) as total FROM registros_sync');
-        $stats['unidades'] = $stmt->fetch()['total'];
+            $stmt = $db->query('SELECT COUNT(DISTINCT unidad) as total FROM registros_sync');
+            $stats['unidades'] = $stmt->fetch()['total'];
 
-        $stmt = $db->query('SELECT COUNT(DISTINCT email) as total FROM registros_sync');
-        $stats['operadores'] = $stmt->fetch()['total'];
+            $stmt = $db->query('SELECT COUNT(DISTINCT email) as total FROM registros_sync');
+            $stats['operadores'] = $stmt->fetch()['total'];
 
-        $stmt = $db->query('SELECT fecha, tipo, COUNT(*) as total FROM registros_sync WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) GROUP BY fecha, tipo ORDER BY fecha');
-        $stats['actividad_30d'] = $stmt->fetchAll();
+            $stmt = $db->query('SELECT fecha, tipo, COUNT(*) as total FROM registros_sync WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) GROUP BY fecha, tipo ORDER BY fecha');
+            $stats['actividad_30d'] = $stmt->fetchAll();
+        } else {
+            $stmt = $db->prepare('SELECT tipo, COUNT(*) as total FROM registros_sync WHERE email = ? GROUP BY tipo');
+            $stmt->execute([$user['email']]);
+            $stats['por_tipo'] = $stmt->fetchAll();
+
+            $stmt = $db->prepare('SELECT COUNT(DISTINCT unidad) as total FROM registros_sync WHERE email = ?');
+            $stmt->execute([$user['email']]);
+            $stats['unidades'] = $stmt->fetch()['total'];
+
+            $stats['operadores'] = 1;
+
+            $stmt = $db->prepare('SELECT fecha, tipo, COUNT(*) as total FROM registros_sync WHERE email = ? AND fecha >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) GROUP BY fecha, tipo ORDER BY fecha');
+            $stmt->execute([$user['email']]);
+            $stats['actividad_30d'] = $stmt->fetchAll();
+        }
 
         jsonResponse(['ok' => true, 'stats' => $stats]);
         break;
