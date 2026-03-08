@@ -3091,12 +3091,48 @@ function eliminarRegistro(id) {
 
 function borrarTodosRegistros() {
   if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
-  if (!confirm('¿BORRAR TODOS los registros? Esta acción no se puede deshacer.')) return;
-  if (!confirm('¿Estás seguro? Se borrarán ' + registros.length + ' registros.')) return;
+  var nRegs = registros.length;
+  var html = '<h2 style="color:#e74c3c">Borrar todos los datos</h2>' +
+    '<p style="margin:10px 0">Se eliminarán <strong>' + nRegs + ' registros</strong>, todas las fotos y archivos pendientes de subir.</p>' +
+    '<p style="margin:10px 0;color:#e74c3c;font-weight:600">Esta acción NO se puede deshacer.</p>' +
+    '<div class="form-group"><label>Escribe <strong>BORRAR</strong> para confirmar:</label>' +
+    '<input type="text" id="confirmar-borrar-input" placeholder="Escribe BORRAR" autocomplete="off" style="text-transform:uppercase"></div>' +
+    '<div class="modal-actions">' +
+    '<button class="btn btn-danger" onclick="ejecutarBorrarTodo()">Eliminar todo</button>' +
+    '<button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button>' +
+    '</div>';
+  abrirModal(html);
+  setTimeout(function() { document.getElementById('confirmar-borrar-input').focus(); }, 100);
+}
+
+function ejecutarBorrarTodo() {
+  var input = document.getElementById('confirmar-borrar-input');
+  if (!input || input.value.trim().toUpperCase() !== 'BORRAR') {
+    showToast('Escribe BORRAR para confirmar', 'error');
+    input.value = '';
+    input.focus();
+    return;
+  }
   registros = [];
   guardarRegistros();
+
+  // Limpiar fotos e IndexedDB
+  if (db) {
+    try {
+      var tx = db.transaction(['fotos', 'subidas_pendientes'], 'readwrite');
+      tx.objectStore('fotos').clear();
+      tx.objectStore('subidas_pendientes').clear();
+    } catch(e) { console.error('Error limpiando IndexedDB:', e); }
+  }
+
+  // Limpiar contadores de fotos
+  localStorage.removeItem('rapca_contadores_VP');
+  localStorage.removeItem('rapca_contadores_EL');
+  localStorage.removeItem('rapca_contadores_EI');
+
+  cerrarModal();
   renderPanel();
-  showToast('Todos los registros borrados', 'info');
+  showToast('Todos los registros y fotos eliminados', 'info');
 }
 
 // ============================================================
