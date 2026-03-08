@@ -21,6 +21,19 @@ switch ($accion) {
         jsonResponse(['ok' => true, 'msg' => 'Rate limits reseteados']);
         break;
 
+    case 'reset_admin':
+        // Resetear contraseña del admin al valor por defecto y limpiar rate limits
+        $db = getDB();
+        $hash = password_hash(ADMIN_PASS_DEFAULT, PASSWORD_BCRYPT, ['cost' => 12]);
+        $db->prepare('UPDATE usuarios SET password = ?, activo = 1 WHERE email = ?')->execute([$hash, ADMIN_EMAIL]);
+        // Limpiar rate limits también
+        if (is_dir(RATE_LIMIT_DIR)) {
+            $files = glob(RATE_LIMIT_DIR . '/*.json');
+            foreach ($files as $f) unlink($f);
+        }
+        jsonResponse(['ok' => true, 'msg' => 'Admin reseteado con contraseña por defecto']);
+        break;
+
     case 'login':
         $email = $input['email'] ?? '';
         $password = $input['password'] ?? '';
