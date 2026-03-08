@@ -155,12 +155,12 @@ function compCargarFotos() {
   compModoSlider();
 }
 
-// Buscar el código de foto para una unidad/waypoint/fecha
+// Buscar el código y tipo de foto para una unidad/waypoint/fecha
 function compBuscarFoto(unidad, wp, fecha) {
   var porWP = compObtenerFotosUnidad(unidad);
   var fotos = porWP[wp] || [];
   var match = fotos.filter(function(f) { return f.fecha === fecha; });
-  return match.length > 0 ? match[0].codigo : '';
+  return match.length > 0 ? {codigo: match[0].codigo, tipo: match[0].tipo} : null;
 }
 
 // Limpiar event listeners anteriores del slider
@@ -189,16 +189,17 @@ function compModoSlider() {
     return;
   }
 
-  var cod1 = compBuscarFoto(unidad, wp, f1);
-  var cod2 = compBuscarFoto(unidad, wp, f2);
+  var foto1 = compBuscarFoto(unidad, wp, f1);
+  var foto2 = compBuscarFoto(unidad, wp, f2);
 
-  if (!cod1 && !cod2) {
+  if (!foto1 && !foto2) {
     document.getElementById('comp-display').innerHTML = '<p style="text-align:center;color:#888">No se encontraron fotos para las fechas seleccionadas</p>';
     return;
   }
 
   var display = document.getElementById('comp-display');
   display.innerHTML = '<div class="comp-slider-wrap" id="comp-slider-wrap">' +
+    '<div id="comp-loading" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:10;color:#fff;font-size:14px;background:rgba(0,0,0,0.6);padding:8px 16px;border-radius:8px">Cargando fotos...</div>' +
     '<img id="comp-img-before" src="" alt="Antes" style="z-index:1">' +
     '<img id="comp-img-after" class="comp-after" src="" alt="Después" style="z-index:2">' +
     '<div class="comp-slider-line" id="comp-slider-line"></div>' +
@@ -207,32 +208,28 @@ function compModoSlider() {
     '<div class="comp-label comp-label-right">' + escapeHtml(f2) + '</div>' +
     '</div>';
 
-  // Cargar fotos desde IndexedDB
-  var loaded = 0;
-  var total = (cod1 ? 1 : 0) + (cod2 ? 1 : 0);
+  // Cargar fotos desde todas las fuentes disponibles (local, precarga, Cloudinary)
+  var promesas = [];
 
-  function checkLoaded(which) {
-    loaded++;
-    if (loaded >= total && total > 0) return;
-    if (total === 0) display.innerHTML += '<p style="text-align:center;color:#e74c3c;font-size:13px;margin-top:8px">Las fotos no están disponibles en el dispositivo</p>';
-  }
-
-  if (cod1) {
-    obtenerDeDB('fotos', cod1).then(function(f) {
+  if (foto1) {
+    promesas.push(buscarFotoData(foto1.codigo, foto1.tipo, unidad).then(function(data) {
       var el = document.getElementById('comp-img-before');
-      if (el) el.src = f ? f.data : '';
-      if (!f) display.innerHTML += '<p style="color:#e74c3c;font-size:12px;margin-top:4px">Foto "antes" no disponible en dispositivo</p>';
-      checkLoaded('before');
-    }).catch(function() { checkLoaded('before'); });
+      if (el && data) el.src = data;
+      else if (el) display.innerHTML += '<p style="color:#e74c3c;font-size:12px;margin-top:4px">Foto "antes" no disponible</p>';
+    }));
   }
-  if (cod2) {
-    obtenerDeDB('fotos', cod2).then(function(f) {
+  if (foto2) {
+    promesas.push(buscarFotoData(foto2.codigo, foto2.tipo, unidad).then(function(data) {
       var el = document.getElementById('comp-img-after');
-      if (el) el.src = f ? f.data : '';
-      if (!f) display.innerHTML += '<p style="color:#e74c3c;font-size:12px;margin-top:4px">Foto "después" no disponible en dispositivo</p>';
-      checkLoaded('after');
-    }).catch(function() { checkLoaded('after'); });
+      if (el && data) el.src = data;
+      else if (el) display.innerHTML += '<p style="color:#e74c3c;font-size:12px;margin-top:4px">Foto "después" no disponible</p>';
+    }));
   }
+
+  Promise.all(promesas).then(function() {
+    var loading = document.getElementById('comp-loading');
+    if (loading) loading.remove();
+  });
 
   // Limpiar listeners anteriores y configurar slider
   compLimpiarListeners();
@@ -276,8 +273,8 @@ function compModoSide() {
 
   compLimpiarListeners();
 
-  var cod1 = compBuscarFoto(unidad, wp, f1);
-  var cod2 = compBuscarFoto(unidad, wp, f2);
+  var foto1 = compBuscarFoto(unidad, wp, f1);
+  var foto2 = compBuscarFoto(unidad, wp, f2);
 
   var display = document.getElementById('comp-display');
   display.innerHTML = '<div class="comp-side">' +
@@ -285,12 +282,12 @@ function compModoSide() {
     '<div><img id="comp-side-2" src="" style="width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:6px"><div style="text-align:center;font-size:12px;color:#888;margin-top:4px">' + escapeHtml(f2) + '</div></div>' +
     '</div>';
 
-  if (cod1) obtenerDeDB('fotos', cod1).then(function(f) {
+  if (foto1) buscarFotoData(foto1.codigo, foto1.tipo, unidad).then(function(data) {
     var el = document.getElementById('comp-side-1');
-    if (el) el.src = f ? f.data : '';
+    if (el && data) el.src = data;
   });
-  if (cod2) obtenerDeDB('fotos', cod2).then(function(f) {
+  if (foto2) buscarFotoData(foto2.codigo, foto2.tipo, unidad).then(function(data) {
     var el = document.getElementById('comp-side-2');
-    if (el) el.src = f ? f.data : '';
+    if (el && data) el.src = data;
   });
 }

@@ -121,27 +121,22 @@ function filtrarGaleria() {
 
   grid.innerHTML = html;
 
-  // Cargar thumbnails (IndexedDB local → fallback servidor)
+  // Cargar thumbnails desde todas las fuentes (local, precarga, Cloudinary)
   fotos.forEach(function(f) {
     var imgId = 'gal-img-' + f.codigo.replace(/[^a-zA-Z0-9]/g, '_');
-    if (db) {
-      obtenerDeDB('fotos', f.codigo).then(function(foto) {
-        var img = document.getElementById(imgId);
-        if (!img) return;
-        if (foto && foto.data) {
-          img.src = foto.data;
-        } else {
-          // Fallback: cargar desde servidor
-          cargarFotoServidor(img, f);
-        }
-      }).catch(function() {
-        var img = document.getElementById(imgId);
-        if (img) cargarFotoServidor(img, f);
-      });
-    } else {
+    buscarFotoData(f.codigo, f.tipo, f.unidad).then(function(data) {
+      var img = document.getElementById(imgId);
+      if (!img) return;
+      if (data) {
+        img.src = data;
+      } else {
+        // Último fallback con tag img directo
+        cargarFotoServidor(img, f);
+      }
+    }).catch(function() {
       var img = document.getElementById(imgId);
       if (img) cargarFotoServidor(img, f);
-    }
+    });
   });
 }
 

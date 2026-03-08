@@ -130,6 +130,43 @@ function eliminarDeDB(store, key) {
   });
 }
 
+// Buscar foto en todas las fuentes disponibles:
+// 1. IndexedDB 'fotos' (thumbnails sesión actual)
+// 2. IndexedDB 'fotos_precargadas' (precarga offline)
+// 3. IndexedDB 'subidas_pendientes' (pendientes de subir)
+// 4. Cloudinary (si hay conexión)
+// Devuelve una Promise con el data:image/jpeg;base64 o null
+function buscarFotoData(codigo, tipo, unidad) {
+  if (!db) return Promise.resolve(null);
+
+  return obtenerDeDB('fotos', codigo).then(function(f) {
+    if (f && f.data) return f.data;
+    return obtenerDeDB('fotos_precargadas', codigo);
+  }).then(function(f) {
+    if (typeof f === 'string') return f; // ya resuelto como data
+    if (f && f.data) return f.data;
+    return obtenerDeDB('subidas_pendientes', codigo);
+  }).then(function(f) {
+    if (typeof f === 'string') return f;
+    if (f && f.data) return f.data;
+
+    // Último recurso: Cloudinary (si online y tenemos tipo/unidad)
+    if (!navigator.onLine || !tipo || !unidad) return null;
+    var cloudUrl = 'https://res.cloudinary.com/drnqs1jwl/image/upload/w_800,q_75/rapca/' + tipo + '/' + unidad + '/' + codigo + '.jpg';
+    return fetch(cloudUrl, {mode: 'cors'}).then(function(resp) {
+      if (!resp.ok) return null;
+      return resp.blob();
+    }).then(function(blob) {
+      if (!blob) return null;
+      return new Promise(function(resolve) {
+        var reader = new FileReader();
+        reader.onloadend = function() { resolve(reader.result); };
+        reader.readAsDataURL(blob);
+      });
+    }).catch(function() { return null; });
+  });
+}
+
 // --- Utilidades ---
 function showToast(msg, tipo) {
   var c = document.getElementById('toast-container');
