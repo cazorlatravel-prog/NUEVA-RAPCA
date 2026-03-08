@@ -3140,8 +3140,123 @@ async function exportarPDFRegistro(id) {
   win.print();
 }
 
-function exportarTodosPDF() {
+function registrosFiltradosPanel() {
   var regs = misRegistros();
+  var tipoFiltro = document.getElementById('panel-filtro-tipo').value;
+  var opFiltro = document.getElementById('panel-filtro-operador').value;
+  var unidadFiltro = document.getElementById('panel-filtro-unidad').value;
+  var desdeFiltro = document.getElementById('panel-filtro-desde').value;
+  var hastaFiltro = document.getElementById('panel-filtro-hasta').value;
+  if (tipoFiltro) regs = regs.filter(function(r) { return r.tipo === tipoFiltro; });
+  if (opFiltro) regs = regs.filter(function(r) { return r.operador_nombre === opFiltro; });
+  if (unidadFiltro) regs = regs.filter(function(r) { return r.unidad === unidadFiltro; });
+  if (desdeFiltro) regs = regs.filter(function(r) { return r.fecha >= desdeFiltro; });
+  if (hastaFiltro) regs = regs.filter(function(r) { return r.fecha <= hastaFiltro; });
+  return regs;
+}
+
+function exportarExcelRegistros() {
+  var regs = registrosFiltradosPanel();
+  if (regs.length === 0) { showToast('No hay registros para exportar', 'error'); return; }
+
+  var filas = regs.map(function(r) {
+    var fila = {
+      'Tipo': r.tipo,
+      'Fecha': r.fecha,
+      'Unidad': r.unidad,
+      'Zona': r.zona || '',
+      'Transecto': r.transecto || '',
+      'Operador': r.operador_nombre || '',
+      'Latitud': r.lat || '',
+      'Longitud': r.lon || '',
+      'Enviado': r.enviado ? 'Sí' : 'No'
+    };
+
+    if (r.datos) {
+      // Pastoreo
+      if (r.datos.pastoreo) {
+        if (Array.isArray(r.datos.pastoreo)) {
+          fila['Pastoreo'] = r.datos.pastoreo.join(', ');
+        } else {
+          fila['Pastoreo'] = String(r.datos.pastoreo);
+        }
+      }
+      // Observación pastoreo
+      if (r.datos.observacionPastoreo) {
+        var obs = r.datos.observacionPastoreo;
+        fila['Señal Paso'] = obs.senal || '';
+        fila['Veredas'] = obs.veredas || '';
+        fila['Cagarrutas'] = obs.cagarrutas || '';
+      }
+      // Fotos
+      fila['Fotos'] = r.datos.fotos || '';
+      // Fotos comparativas
+      if (r.datos.fotosComp && r.datos.fotosComp.length > 0) {
+        fila['Fotos Comparativas'] = r.datos.fotosComp.map(function(f) {
+          return f.numero + ' (' + f.waypoint + ')';
+        }).join(', ');
+      }
+      // Observaciones
+      fila['Observaciones'] = r.datos.observaciones || '';
+
+      // Datos EI específicos
+      if (r.tipo === 'EI') {
+        // Plantas
+        if (r.datos.plantas) {
+          r.datos.plantas.forEach(function(p, i) {
+            if (p.nombre) {
+              fila['Planta ' + (i + 1)] = p.nombre;
+              fila['Planta ' + (i + 1) + ' Media'] = p.media || '';
+              fila['Planta ' + (i + 1) + ' Notas'] = (p.notas || []).filter(function(n) { return n !== null; }).join(', ');
+            }
+          });
+        }
+        fila['Media Plantas'] = r.datos.plantasMedia || '';
+        // Palatables
+        if (r.datos.palatables) {
+          r.datos.palatables.forEach(function(p, i) {
+            if (p.nombre) {
+              fila['Palatable ' + (i + 1)] = p.nombre;
+              fila['Palatable ' + (i + 1) + ' Media'] = p.media || '';
+              fila['Palatable ' + (i + 1) + ' Notas'] = (p.notas || []).filter(function(n) { return n !== null; }).join(', ');
+            }
+          });
+        }
+        fila['Media Palatables'] = r.datos.palatablesMedia || '';
+        // Herbáceas
+        if (r.datos.herbaceas) {
+          fila['Herbáceas'] = r.datos.herbaceas.filter(function(n) { return n !== null; }).join(', ');
+        }
+        fila['Media Herbáceas'] = r.datos.herbaceasMedia || '';
+        // Matorral
+        if (r.datos.matorral) {
+          var mat = r.datos.matorral;
+          fila['Matorral P1 Cobertura'] = mat.punto1 ? mat.punto1.cobertura : '';
+          fila['Matorral P1 Altura'] = mat.punto1 ? mat.punto1.altura : '';
+          fila['Matorral P1 Especie'] = mat.punto1 ? mat.punto1.especie : '';
+          fila['Matorral P2 Cobertura'] = mat.punto2 ? mat.punto2.cobertura : '';
+          fila['Matorral P2 Altura'] = mat.punto2 ? mat.punto2.altura : '';
+          fila['Matorral P2 Especie'] = mat.punto2 ? mat.punto2.especie : '';
+          fila['Matorral Media Cob'] = mat.mediaCob || '';
+          fila['Matorral Media Alt'] = mat.mediaAlt || '';
+          fila['Matorral Volumen'] = mat.volumen || '';
+        }
+      }
+    }
+
+    return fila;
+  });
+
+  var ws = XLSX.utils.json_to_sheet(filas);
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Registros');
+  var fecha = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, 'registros_rapca_' + fecha + '.xlsx');
+  showToast('Excel exportado (' + regs.length + ' registros)', 'success');
+}
+
+function exportarTodosPDF() {
+  var regs = registrosFiltradosPanel();
   if (regs.length === 0) { showToast('No hay registros', 'error'); return; }
   regs.forEach(function(r, i) {
     setTimeout(function() { exportarPDFRegistro(r.id); }, i * 500);
