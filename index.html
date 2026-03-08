@@ -440,6 +440,7 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     <button class="menu-btn" onclick="irPagina('timeline')"><div class="icon" style="background:var(--c-tl)">🕐</div><span>Historial</span></button>
     <button class="menu-btn" onclick="irPagina('comparador')"><div class="icon" style="background:var(--c-comp)">🔀</div><span>Comparador</span></button>
     <button class="menu-btn" onclick="irPagina('galeria')"><div class="icon" style="background:var(--c-comp)">🖼️</div><span>Galería</span></button>
+    <button class="menu-btn" onclick="irPagina('precarga')"><div class="icon" style="background:#607d8b">📥</div><span>Precarga Offline</span></button>
   </div>
 
   <div class="menu-grid" id="menu-admin" style="display:none">
@@ -753,6 +754,58 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     <h1>Galería</h1>
   </div>
   <div style="padding:12px;overflow-y:auto;flex:1" id="galeria-content"></div>
+</div>
+
+<!-- ==================== PRECARGA OFFLINE ==================== -->
+<div class="page" id="precarga-page">
+  <div class="page-header" style="background:#607d8b">
+    <button class="btn-back" onclick="irPagina('menu')">←</button>
+    <h1>Precarga Offline</h1>
+  </div>
+  <div style="padding:12px;overflow-y:auto;flex:1">
+    <p style="color:#666;font-size:13px;margin:0 0 12px">Descarga las fotos de visitas anteriores para poder usarlas sin cobertura (ghosting y consulta).</p>
+
+    <div id="precarga-estado" style="background:#e3f2fd;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;display:none">
+      <strong>Fotos precargadas:</strong> <span id="precarga-count">0</span>
+      <button class="btn btn-sm" style="float:right;background:#e74c3c;color:#fff" onclick="limpiarPrecarga()">Borrar todo</button>
+    </div>
+
+    <div class="form-group">
+      <label>Seleccionar zona</label>
+      <select id="precarga-zona" onchange="precargaSeleccionarZona(this.value)" style="width:100%;padding:10px;border-radius:8px;border:1px solid #ddd;font-size:15px">
+        <option value="">-- Selecciona zona --</option>
+      </select>
+    </div>
+
+    <div id="precarga-unidades" style="display:none">
+      <div class="form-group">
+        <label>Unidades en esta zona</label>
+        <div id="precarga-unidades-lista" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+      </div>
+    </div>
+
+    <div id="precarga-fotos-info" style="display:none;margin-top:12px">
+      <div style="background:#fff3cd;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px">
+        <span id="precarga-fotos-resumen"></span>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn btn-primary" onclick="precargaDescargarTodo()" id="precarga-btn-descargar" style="flex:1">Descargar todas</button>
+        <button class="btn btn-secondary" onclick="precargaDescargarComp()" id="precarga-btn-comp" style="flex:1">Solo comparativas</button>
+      </div>
+    </div>
+
+    <div id="precarga-progreso" style="display:none;margin-top:12px">
+      <div style="background:#eee;border-radius:20px;height:24px;overflow:hidden;margin-bottom:8px">
+        <div id="precarga-barra" style="height:100%;background:linear-gradient(90deg,#4caf50,#8bc34a);border-radius:20px;transition:width 0.3s;width:0%"></div>
+      </div>
+      <div id="precarga-progreso-texto" style="text-align:center;font-size:13px;color:#666">Preparando...</div>
+    </div>
+
+    <div id="precarga-galeria" style="display:none;margin-top:16px">
+      <h3 style="margin:0 0 8px;font-size:15px">Fotos precargadas</h3>
+      <div id="precarga-galeria-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px"></div>
+    </div>
+  </div>
 </div>
 
 <!-- ==================== ADMIN ==================== -->
