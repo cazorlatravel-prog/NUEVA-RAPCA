@@ -340,8 +340,14 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 .admin-user-actions{display:flex;gap:4px}
 
 /* === INSTALAR BANNER === */
-.install-banner{background:var(--c-primary);color:#fff;padding:12px 16px;border-radius:var(--radius);display:flex;align-items:center;gap:10px;margin:8px 12px;display:none}
-.install-banner .btn{background:#fff;color:var(--c-primary);font-weight:700}
+.install-banner{background:linear-gradient(135deg,#1a3d2e,#2e7d32);color:#fff;padding:14px 16px;border-radius:var(--radius);display:none;align-items:center;gap:12px;margin:8px 12px;box-shadow:0 2px 12px rgba(0,0,0,.2);animation:installPulse 2s ease-in-out}
+.install-banner .install-icon{font-size:28px}
+.install-banner .install-text{flex:1}
+.install-banner .install-text strong{display:block;font-size:15px}
+.install-banner .install-text small{opacity:.85;font-size:12px}
+.install-banner .btn{background:#fff;color:var(--c-primary);font-weight:700;padding:8px 18px;font-size:14px;border-radius:20px;box-shadow:0 2px 6px rgba(0,0,0,.15)}
+.install-banner .btn-dismiss{background:transparent;color:rgba(255,255,255,.7);font-size:18px;padding:4px 8px;border:none;cursor:pointer}
+@keyframes installPulse{0%{transform:translateY(-10px);opacity:0}100%{transform:translateY(0);opacity:1}}
 
 /* === AUTOCOMPLETE === */
 .autocomplete-wrap{position:relative}
@@ -454,8 +460,13 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     <button class="btn btn-primary btn-block" id="btn-sync-manual" onclick="sincronizar()" style="display:none">🔄 Sincronizar registros pendientes</button>
     <button class="btn btn-secondary btn-block" id="btn-fotos-manual" onclick="subirFotosPendientes()" style="display:none">📤 Subir fotos pendientes (<span id="menu-pending-fotos">0</span>)</button>
     <div class="install-banner" id="install-banner">
-      <span style="flex:1">Instalar RAPCA Campo</span>
-      <button class="btn btn-sm" onclick="instalarApp()">Instalar</button>
+      <div class="install-icon">📲</div>
+      <div class="install-text">
+        <strong>Descargar RAPCA Campo</strong>
+        <small>Funciona sin internet · Acceso directo en tu móvil</small>
+      </div>
+      <button class="btn btn-sm" onclick="instalarApp()">Descargar</button>
+      <button class="btn-dismiss" onclick="cerrarInstallBanner()" title="Cerrar">&times;</button>
     </div>
   </div>
 </div>
