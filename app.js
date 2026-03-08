@@ -1191,7 +1191,7 @@ function iniciarOverlayCamara() {
         var mapDiv = document.getElementById('camera-minimap');
         if (miniMapaCamera) miniMapaCamera.remove();
         miniMapaCamera = L.map(mapDiv, {zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false}).setView([gpsPos.lat, gpsPos.lon], 12);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(miniMapaCamera);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {crossOrigin: 'anonymous'}).addTo(miniMapaCamera);
         L.marker([gpsPos.lat, gpsPos.lon], {
           icon: L.divIcon({className: '', html: '<div style="width:14px;height:14px;background:#e74c3c;border:3px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>', iconSize: [14,14], iconAnchor: [7,7]})
         }).addTo(miniMapaCamera);
@@ -1846,7 +1846,7 @@ function aceptarFoto() {
     uploadData = canvas.toDataURL('image/jpeg', 0.85);
     downloadData = canvas.toDataURL('image/jpeg', 0.95);
   } catch(e) {
-    showToast('Error al procesar foto. Memoria insuficiente.', 'error');
+    showToast('Error al procesar foto. Reintenta.', 'error');
     return;
   }
 
