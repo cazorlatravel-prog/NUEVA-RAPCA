@@ -718,9 +718,11 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
   </div>
   <div style="padding:12px;overflow-y:auto;flex:1">
     <div class="infra-search"><input type="text" id="infra-buscar" placeholder="Buscar infraestructura..." oninput="filtrarInfras(this.value)"></div>
-    <div style="display:flex;gap:6px;margin-bottom:10px">
-      <button class="btn btn-sm btn-outline" onclick="importarExcelInfra()">📥 Importar Excel</button>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+      <button class="btn btn-sm btn-outline" onclick="importarExcelInfra()">📥 Importar Excel/CSV</button>
       <button class="btn btn-sm btn-outline" onclick="exportarExcelInfra()">📤 Exportar Excel</button>
+      <button class="btn btn-sm btn-outline" onclick="gestionarCamposInfra()">⚙ Campos</button>
+      <button class="btn btn-sm btn-primary" onclick="abrirInformeInfra()">📋 Generar Informe</button>
     </div>
     <div id="infra-lista"></div>
   </div>

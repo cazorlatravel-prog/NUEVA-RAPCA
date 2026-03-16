@@ -4496,25 +4496,105 @@ function eliminarGanadero(idx) {
 // ============================================================
 var INFRA_CAMPOS_BASE = ['provincia','idZona','idUnidad','codInfoca','nombre','superficie','pagoMaximo','municipio','pn','contrato','vegetacion','pendiente','distancia'];
 
+// Campo de enlace con registros (por defecto idUnidad)
+function obtenerCampoEnlace() {
+  return localStorage.getItem('rapca_infra_campo_enlace') || 'idUnidad';
+}
+
+function obtenerTodosCamposInfra() {
+  return INFRA_CAMPOS_BASE.concat(JSON.parse(localStorage.getItem('rapca_campos_infra') || '[]'));
+}
+
+// Obtener registros vinculados a una infraestructura
+function registrosDeInfra(inf) {
+  var campoEnlace = obtenerCampoEnlace();
+  var valorEnlace = inf[campoEnlace];
+  if (!valorEnlace) return [];
+  return registros.filter(function(r) {
+    return r.unidad === valorEnlace || r.zona === valorEnlace;
+  });
+}
+
 function renderInfras() {
   var lista = document.getElementById('infra-lista');
   if (infraestructuras.length === 0) {
-    lista.innerHTML = '<div class="card" style="text-align:center;color:#888;padding:30px">No hay infraestructuras registradas</div>';
+    lista.innerHTML = '<div class="card" style="text-align:center;color:#888;padding:30px">No hay infraestructuras registradas.<br>Importa un Excel/CSV o crea una manualmente.</div>';
     return;
   }
-  var regs = misRegistros();
+  var campoEnlace = obtenerCampoEnlace();
   lista.innerHTML = infraestructuras.map(function(inf, i) {
-    var vpC = regs.filter(function(r) { return r.unidad === inf.idUnidad && r.tipo === 'VP'; }).length;
-    var elC = regs.filter(function(r) { return r.unidad === inf.idUnidad && r.tipo === 'EL'; }).length;
-    var eiC = regs.filter(function(r) { return r.unidad === inf.idUnidad && r.tipo === 'EI'; }).length;
-    return '<div class="card infra-card" onclick="editarInfra(' + i + ')">' +
+    var regsInf = registrosDeInfra(inf);
+    var vpC = regsInf.filter(function(r) { return r.tipo === 'VP'; }).length;
+    var elC = regsInf.filter(function(r) { return r.tipo === 'EL'; }).length;
+    var eiC = regsInf.filter(function(r) { return r.tipo === 'EI'; }).length;
+    var totalFotos = 0;
+    regsInf.forEach(function(r) {
+      if (r.datos.fotos) totalFotos += r.datos.fotos.split(',').filter(Boolean).length;
+      if (r.datos.fotosComp) totalFotos += r.datos.fotosComp.length;
+    });
+    return '<div class="card infra-card" onclick="verDetalleInfra(' + i + ')">' +
       '<div class="infra-icon">🏗️</div>' +
-      '<div class="infra-info"><h3>' + (inf.nombre || inf.idUnidad || 'Sin nombre') + '</h3>' +
-      '<small>' + (inf.provincia || '') + ' · ' + (inf.municipio || '') + '</small>' +
-      '<div class="infra-badges"><span class="badge badge-vp">VP:' + vpC + '</span><span class="badge badge-el">EL:' + elC + '</span><span class="badge badge-ei">EI:' + eiC + '</span></div></div>' +
-      '<button class="btn-icon" onclick="event.stopPropagation();eliminarInfra(' + i + ')" style="color:#e74c3c">🗑️</button>' +
-      '</div>';
+      '<div class="infra-info"><h3>' + escapeHtml(inf.nombre || inf[campoEnlace] || 'Sin nombre') + '</h3>' +
+      '<small>' + escapeHtml(inf.provincia || '') + (inf.municipio ? ' · ' + escapeHtml(inf.municipio) : '') + '</small>' +
+      '<div class="infra-badges">' +
+      '<span class="badge badge-vp">VP:' + vpC + '</span>' +
+      '<span class="badge badge-el">EL:' + elC + '</span>' +
+      '<span class="badge badge-ei">EI:' + eiC + '</span>' +
+      (totalFotos > 0 ? '<span class="badge" style="background:#795548">📷' + totalFotos + '</span>' : '') +
+      '</div></div>' +
+      '<div style="display:flex;flex-direction:column;gap:4px">' +
+      '<button class="btn-icon" onclick="event.stopPropagation();editarInfra(' + i + ')" title="Editar" style="color:#1a3d2e;font-size:14px">✏️</button>' +
+      '<button class="btn-icon" onclick="event.stopPropagation();generarInformeInfraUnica(' + i + ')" title="Informe" style="color:#2e7d32;font-size:14px">📋</button>' +
+      '<button class="btn-icon" onclick="event.stopPropagation();eliminarInfra(' + i + ')" title="Eliminar" style="color:#e74c3c;font-size:14px">🗑️</button>' +
+      '</div></div>';
   }).join('');
+}
+
+// --- Vista detalle de infraestructura ---
+function verDetalleInfra(idx) {
+  var inf = infraestructuras[idx];
+  var campos = obtenerTodosCamposInfra();
+  var regsInf = registrosDeInfra(inf);
+
+  var html = '<h2>' + escapeHtml(inf.nombre || inf.idUnidad || 'Infraestructura') + '</h2>';
+
+  // Datos de la infraestructura
+  html += '<table style="width:100%;border-collapse:collapse;margin-bottom:12px">';
+  campos.forEach(function(c) {
+    if (inf[c]) {
+      html += '<tr><th style="text-align:left;padding:4px 8px;border-bottom:1px solid #eee;color:#555;width:40%">' + escapeHtml(c) + '</th><td style="padding:4px 8px;border-bottom:1px solid #eee">' + escapeHtml(inf[c]) + '</td></tr>';
+    }
+  });
+  // Mostrar campos extra que no estén en la lista base
+  Object.keys(inf).forEach(function(k) {
+    if (campos.indexOf(k) < 0 && inf[k]) {
+      html += '<tr><th style="text-align:left;padding:4px 8px;border-bottom:1px solid #eee;color:#555;width:40%">' + escapeHtml(k) + '</th><td style="padding:4px 8px;border-bottom:1px solid #eee">' + escapeHtml(String(inf[k])) + '</td></tr>';
+    }
+  });
+  html += '</table>';
+
+  // Registros vinculados
+  html += '<h3 style="margin:12px 0 6px;color:#1a3d2e">Registros vinculados (' + regsInf.length + ')</h3>';
+  if (regsInf.length > 0) {
+    html += '<div style="max-height:200px;overflow-y:auto">';
+    regsInf.forEach(function(r) {
+      html += '<div style="padding:6px;border-bottom:1px solid #eee;font-size:13px">' +
+        '<span class="badge" style="background:' + (r.tipo === 'VP' ? '#2e7d32' : r.tipo === 'EL' ? '#1565c0' : '#e65100') + '">' + r.tipo + '</span> ' +
+        r.fecha + ' · ' + (r.operador_nombre || '') + ' · ' + r.unidad +
+        '</div>';
+    });
+    html += '</div>';
+  } else {
+    html += '<p style="color:#888;font-size:13px">No hay registros vinculados a esta infraestructura</p>';
+  }
+
+  // Botones de acción
+  html += '<div class="modal-actions" style="margin-top:12px">' +
+    '<button class="btn btn-primary" onclick="cerrarModal();generarInformeInfraUnica(' + idx + ')">📋 Generar informe</button>' +
+    '<button class="btn btn-outline" onclick="cerrarModal();editarInfra(' + idx + ')">✏️ Editar</button>' +
+    '<button class="btn btn-outline" onclick="cerrarModal()">Cerrar</button>' +
+    '</div>';
+  abrirModal(html);
 }
 
 function filtrarInfras(val) {
@@ -4524,13 +4604,86 @@ function filtrarInfras(val) {
   }
 }
 
+// --- Gestión de campos personalizados ---
+function gestionarCamposInfra() {
+  var extras = JSON.parse(localStorage.getItem('rapca_campos_infra') || '[]');
+  var campoEnlace = obtenerCampoEnlace();
+  var todosCampos = INFRA_CAMPOS_BASE.concat(extras);
+
+  var html = '<h2>Gestionar Campos</h2>';
+
+  // Campo de enlace
+  html += '<div class="form-group"><label style="font-weight:700;color:#1a3d2e">Campo de enlace con registros</label>';
+  html += '<select id="infra-campo-enlace" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ccc">';
+  todosCampos.forEach(function(c) {
+    html += '<option value="' + c + '"' + (c === campoEnlace ? ' selected' : '') + '>' + c + '</option>';
+  });
+  html += '</select>';
+  html += '<small style="color:#888">Este campo se usa para vincular infraestructuras con registros de campo y fotos</small></div>';
+
+  // Campos base (no editables)
+  html += '<div class="form-group"><label>Campos base</label>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+  INFRA_CAMPOS_BASE.forEach(function(c) {
+    html += '<span style="background:#e8f5e9;padding:3px 8px;border-radius:12px;font-size:12px">' + c + '</span>';
+  });
+  html += '</div></div>';
+
+  // Campos extra (editables)
+  html += '<div class="form-group"><label>Campos personalizados</label>';
+  if (extras.length > 0) {
+    extras.forEach(function(c, i) {
+      html += '<div style="display:flex;align-items:center;gap:6px;margin:4px 0">' +
+        '<span style="flex:1;padding:4px 8px;background:#f5f5f5;border-radius:6px;font-size:13px">' + escapeHtml(c) + '</span>' +
+        '<button class="btn btn-sm" onclick="eliminarCampoInfra(' + i + ')" style="color:#e74c3c;border:none;padding:4px">✕</button>' +
+        '</div>';
+    });
+  } else {
+    html += '<p style="color:#888;font-size:13px">No hay campos personalizados</p>';
+  }
+  html += '</div>';
+
+  // Añadir nuevo campo
+  html += '<div class="form-group"><label>Añadir campo</label>';
+  html += '<div style="display:flex;gap:6px"><input type="text" id="infra-nuevo-campo" placeholder="Nombre del campo" style="flex:1"><button class="btn btn-sm btn-outline" onclick="agregarCampoInfraDesdeGestion()">＋ Añadir</button></div></div>';
+
+  html += '<div class="modal-actions"><button class="btn btn-primary" onclick="guardarConfigCamposInfra()">Guardar configuración</button><button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button></div>';
+  abrirModal(html);
+}
+
+function agregarCampoInfraDesdeGestion() {
+  var campo = document.getElementById('infra-nuevo-campo').value.trim();
+  if (!campo) return;
+  var extras = JSON.parse(localStorage.getItem('rapca_campos_infra') || '[]');
+  if (extras.indexOf(campo) < 0 && INFRA_CAMPOS_BASE.indexOf(campo) < 0) {
+    extras.push(campo);
+    localStorage.setItem('rapca_campos_infra', JSON.stringify(extras));
+  }
+  gestionarCamposInfra();
+}
+
+function eliminarCampoInfra(idx) {
+  var extras = JSON.parse(localStorage.getItem('rapca_campos_infra') || '[]');
+  extras.splice(idx, 1);
+  localStorage.setItem('rapca_campos_infra', JSON.stringify(extras));
+  gestionarCamposInfra();
+}
+
+function guardarConfigCamposInfra() {
+  var enlace = document.getElementById('infra-campo-enlace').value;
+  localStorage.setItem('rapca_infra_campo_enlace', enlace);
+  cerrarModal();
+  renderInfras();
+  showToast('Configuración de campos guardada', 'success');
+}
+
 function nuevaInfra() {
-  var campos = INFRA_CAMPOS_BASE.concat(JSON.parse(localStorage.getItem('rapca_campos_infra') || '[]'));
+  var campos = obtenerTodosCamposInfra();
   var html = '<h2>Nueva Infraestructura</h2>';
   campos.forEach(function(c) {
-    html += '<div class="form-group"><label>' + c + '</label><input type="text" id="infra-f-' + c + '"></div>';
+    html += '<div class="form-group"><label>' + escapeHtml(c) + '</label><input type="text" id="infra-f-' + c + '"></div>';
   });
-  html += '<div class="form-group"><label>Nuevo campo</label><div style="display:flex;gap:6px"><input type="text" id="infra-nuevo-campo" placeholder="Nombre"><button class="btn btn-sm btn-outline" onclick="agregarCampoInfra()">＋</button></div></div>';
+  html += '<div class="form-group"><label>Nuevo campo rápido</label><div style="display:flex;gap:6px"><input type="text" id="infra-nuevo-campo" placeholder="Nombre"><button class="btn btn-sm btn-outline" onclick="agregarCampoInfra()">＋</button></div></div>';
   html += '<div class="modal-actions"><button class="btn btn-primary" onclick="guardarInfra()">Guardar</button><button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button></div>';
   abrirModal(html);
 }
@@ -4544,8 +4697,13 @@ function agregarCampoInfra() {
 }
 
 function guardarInfra(idx) {
-  var campos = INFRA_CAMPOS_BASE.concat(JSON.parse(localStorage.getItem('rapca_campos_infra') || '[]'));
+  var campos = obtenerTodosCamposInfra();
   var inf = {};
+  // Si estamos editando, preservar campos que no estén en el formulario
+  if (idx !== undefined && infraestructuras[idx]) {
+    var prev = infraestructuras[idx];
+    for (var k in prev) inf[k] = prev[k];
+  }
   campos.forEach(function(c) {
     var el = document.getElementById('infra-f-' + c);
     if (el) inf[c] = el.value;
@@ -4559,10 +4717,16 @@ function guardarInfra(idx) {
 
 function editarInfra(idx) {
   var inf = infraestructuras[idx];
-  var campos = INFRA_CAMPOS_BASE.concat(JSON.parse(localStorage.getItem('rapca_campos_infra') || '[]'));
+  var campos = obtenerTodosCamposInfra();
   var html = '<h2>Editar Infraestructura</h2>';
   campos.forEach(function(c) {
-    html += '<div class="form-group"><label>' + c + '</label><input type="text" id="infra-f-' + c + '" value="' + (inf[c] || '') + '"></div>';
+    html += '<div class="form-group"><label>' + escapeHtml(c) + '</label><input type="text" id="infra-f-' + c + '" value="' + escapeHtml(inf[c] || '') + '"></div>';
+  });
+  // Mostrar campos extra importados que no están en la lista
+  Object.keys(inf).forEach(function(k) {
+    if (campos.indexOf(k) < 0) {
+      html += '<div class="form-group"><label>' + escapeHtml(k) + ' <small style="color:#888">(importado)</small></label><input type="text" id="infra-f-' + k + '" value="' + escapeHtml(String(inf[k] || '')) + '"></div>';
+    }
   });
   html += '<div class="modal-actions"><button class="btn btn-primary" onclick="guardarInfra(' + idx + ')">Guardar</button><button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button></div>';
   abrirModal(html);
@@ -4576,25 +4740,146 @@ function eliminarInfra(idx) {
   showToast('Infraestructura eliminada', 'info');
 }
 
+// --- Importación mejorada con mapeo de campos ---
 function importarExcelInfra() {
   var input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.xlsx,.xls';
+  input.accept = '.xlsx,.xls,.csv';
   input.onchange = function(e) {
     var file = e.target.files[0];
     var reader = new FileReader();
     reader.onload = function(ev) {
-      var workbook = XLSX.read(ev.target.result, {type: 'array'});
-      var sheet = workbook.Sheets[workbook.SheetNames[0]];
-      var data = XLSX.utils.sheet_to_json(sheet);
-      data.forEach(function(row) { infraestructuras.push(row); });
-      guardarInfras();
-      renderInfras();
-      showToast(data.length + ' infraestructuras importadas', 'success');
+      var data;
+      if (file.name.endsWith('.csv')) {
+        var text = new TextDecoder('utf-8').decode(new Uint8Array(ev.target.result));
+        var workbook = XLSX.read(text, {type: 'string'});
+        var sheet = workbook.Sheets[workbook.SheetNames[0]];
+        data = XLSX.utils.sheet_to_json(sheet);
+      } else {
+        var workbook = XLSX.read(ev.target.result, {type: 'array'});
+        var sheet = workbook.Sheets[workbook.SheetNames[0]];
+        data = XLSX.utils.sheet_to_json(sheet);
+      }
+      if (!data || data.length === 0) { showToast('Archivo vacío', 'error'); return; }
+      // Mostrar modal de mapeo de campos
+      mostrarMapeoImportacion(data);
     };
     reader.readAsArrayBuffer(file);
   };
   input.click();
+}
+
+function mostrarMapeoImportacion(data) {
+  var columnasArchivo = Object.keys(data[0]);
+  var camposApp = obtenerTodosCamposInfra();
+
+  var html = '<h2>Mapear Campos de Importación</h2>';
+  html += '<p style="color:#666;font-size:13px">' + data.length + ' filas encontradas. Asocia las columnas del archivo con los campos de la app:</p>';
+
+  html += '<div style="max-height:50vh;overflow-y:auto">';
+  columnasArchivo.forEach(function(col) {
+    html += '<div class="form-group" style="margin:6px 0">' +
+      '<div style="display:flex;align-items:center;gap:8px">' +
+      '<span style="flex:1;font-size:13px;font-weight:600">' + escapeHtml(col) + '</span>' +
+      '<span style="color:#888">→</span>' +
+      '<select class="infra-mapeo-select" data-col="' + escapeHtml(col) + '" style="flex:1;padding:6px;border-radius:6px;border:1px solid #ccc">';
+    // Auto-match por nombre similar
+    var bestMatch = autoMatchCampo(col, camposApp);
+    html += '<option value="' + escapeHtml(col) + '"' + (!bestMatch ? ' selected' : '') + '>→ ' + escapeHtml(col) + ' (nuevo)</option>';
+    camposApp.forEach(function(c) {
+      html += '<option value="' + c + '"' + (bestMatch === c ? ' selected' : '') + '>' + c + '</option>';
+    });
+    html += '<option value="_ignorar_">— Ignorar —</option>';
+    html += '</select></div></div>';
+  });
+  html += '</div>';
+
+  html += '<div style="margin-top:8px"><label style="display:flex;align-items:center;gap:6px;font-size:13px">' +
+    '<input type="checkbox" id="infra-import-reemplazar"> Reemplazar infraestructuras existentes (mismo campo de enlace)</label></div>';
+
+  // Guardar datos en variable temporal
+  window._importData = data;
+  html += '<div class="modal-actions"><button class="btn btn-primary" onclick="ejecutarImportacion()">Importar ' + data.length + ' filas</button><button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button></div>';
+  abrirModal(html);
+}
+
+function autoMatchCampo(col, campos) {
+  var colLow = col.toLowerCase().replace(/[_\s-]/g, '');
+  for (var i = 0; i < campos.length; i++) {
+    var cLow = campos[i].toLowerCase().replace(/[_\s-]/g, '');
+    if (colLow === cLow || colLow.indexOf(cLow) >= 0 || cLow.indexOf(colLow) >= 0) return campos[i];
+  }
+  // Alias comunes
+  var alias = {
+    'id_unidad': 'idUnidad', 'idunidad': 'idUnidad', 'unidad': 'idUnidad',
+    'id_zona': 'idZona', 'zona': 'idZona',
+    'pago_maximo': 'pagoMaximo', 'pagomaximo': 'pagoMaximo',
+    'cod_infoca': 'codInfoca', 'codinfoca': 'codInfoca',
+    'parque_natural': 'pn', 'parquenatural': 'pn'
+  };
+  return alias[colLow] || null;
+}
+
+function ejecutarImportacion() {
+  var data = window._importData;
+  if (!data) return;
+
+  var selects = document.querySelectorAll('.infra-mapeo-select');
+  var mapeo = {};
+  selects.forEach(function(sel) {
+    var colOrig = sel.dataset.col;
+    var campoDestino = sel.value;
+    if (campoDestino !== '_ignorar_') {
+      mapeo[colOrig] = campoDestino;
+    }
+  });
+
+  var reemplazar = document.getElementById('infra-import-reemplazar').checked;
+  var campoEnlace = obtenerCampoEnlace();
+
+  var importadas = 0;
+  data.forEach(function(row) {
+    var inf = {};
+    for (var colOrig in mapeo) {
+      if (row[colOrig] !== undefined && row[colOrig] !== null) {
+        inf[mapeo[colOrig]] = String(row[colOrig]);
+      }
+    }
+    if (Object.keys(inf).length === 0) return;
+
+    if (reemplazar && inf[campoEnlace]) {
+      var existeIdx = -1;
+      for (var i = 0; i < infraestructuras.length; i++) {
+        if (infraestructuras[i][campoEnlace] === inf[campoEnlace]) { existeIdx = i; break; }
+      }
+      if (existeIdx >= 0) {
+        // Merge: preservar datos existentes, sobreescribir con nuevos
+        for (var k in inf) infraestructuras[existeIdx][k] = inf[k];
+      } else {
+        infraestructuras.push(inf);
+      }
+    } else {
+      infraestructuras.push(inf);
+    }
+    importadas++;
+  });
+
+  // Registrar campos nuevos que no estaban
+  var extras = JSON.parse(localStorage.getItem('rapca_campos_infra') || '[]');
+  var allCampos = INFRA_CAMPOS_BASE.concat(extras);
+  for (var colOrig in mapeo) {
+    var campo = mapeo[colOrig];
+    if (allCampos.indexOf(campo) < 0 && extras.indexOf(campo) < 0) {
+      extras.push(campo);
+    }
+  }
+  localStorage.setItem('rapca_campos_infra', JSON.stringify(extras));
+
+  guardarInfras();
+  cerrarModal();
+  renderInfras();
+  window._importData = null;
+  showToast(importadas + ' infraestructuras importadas', 'success');
 }
 
 function exportarExcelInfra() {
@@ -4604,6 +4889,241 @@ function exportarExcelInfra() {
   XLSX.utils.book_append_sheet(wb, ws, 'Infraestructuras');
   XLSX.writeFile(wb, 'infraestructuras_rapca.xlsx');
   showToast('Excel exportado', 'success');
+}
+
+// ============================================================
+// INFORMES DE INFRAESTRUCTURAS
+// ============================================================
+
+function abrirInformeInfra() {
+  if (infraestructuras.length === 0) { showToast('No hay infraestructuras', 'error'); return; }
+
+  var html = '<h2>Generar Informe de Infraestructuras</h2>';
+
+  // Selección de infraestructuras
+  html += '<div class="form-group"><label>Infraestructuras</label>';
+  html += '<select id="informe-infra-sel" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ccc">';
+  html += '<option value="_todas_">Todas las infraestructuras</option>';
+  var campoEnlace = obtenerCampoEnlace();
+  infraestructuras.forEach(function(inf, i) {
+    html += '<option value="' + i + '">' + escapeHtml(inf.nombre || inf[campoEnlace] || 'Infraestructura ' + (i+1)) + '</option>';
+  });
+  html += '</select></div>';
+
+  // Opciones de fotos
+  html += '<div class="form-group"><label>Fotos en el informe</label>';
+  html += '<select id="informe-fotos-tipo" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ccc">';
+  html += '<option value="ninguna">Sin fotos</option>';
+  html += '<option value="comparativas">Solo fotos comparativas (W1/W2)</option>';
+  html += '<option value="todas" selected>Todas las fotos</option>';
+  html += '</select></div>';
+
+  // Tipos de registro
+  html += '<div class="form-group"><label>Tipos de registro a incluir</label>';
+  html += '<div style="display:flex;gap:12px">';
+  html += '<label style="display:flex;align-items:center;gap:4px;font-size:13px"><input type="checkbox" id="informe-tipo-vp" checked> VP</label>';
+  html += '<label style="display:flex;align-items:center;gap:4px;font-size:13px"><input type="checkbox" id="informe-tipo-el" checked> EL</label>';
+  html += '<label style="display:flex;align-items:center;gap:4px;font-size:13px"><input type="checkbox" id="informe-tipo-ei" checked> EI</label>';
+  html += '</div></div>';
+
+  html += '<div class="modal-actions"><button class="btn btn-primary" onclick="ejecutarInformeInfra()">Generar informe</button><button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button></div>';
+  abrirModal(html);
+}
+
+function generarInformeInfraUnica(idx) {
+  // Abrir modal de opciones con infraestructura preseleccionada
+  abrirInformeInfra();
+  setTimeout(function() {
+    var sel = document.getElementById('informe-infra-sel');
+    if (sel) sel.value = idx;
+  }, 100);
+}
+
+async function ejecutarInformeInfra() {
+  var selVal = document.getElementById('informe-infra-sel').value;
+  var fotosTipo = document.getElementById('informe-fotos-tipo').value;
+  var incluirVP = document.getElementById('informe-tipo-vp').checked;
+  var incluirEL = document.getElementById('informe-tipo-el').checked;
+  var incluirEI = document.getElementById('informe-tipo-ei').checked;
+
+  var infrasInforme;
+  if (selVal === '_todas_') {
+    infrasInforme = infraestructuras.slice();
+  } else {
+    infrasInforme = [infraestructuras[parseInt(selVal)]];
+  }
+
+  cerrarModal();
+  showToast('Generando informe, cargando fotos...', 'info');
+
+  var campoEnlace = obtenerCampoEnlace();
+  var campos = obtenerTodosCamposInfra();
+
+  // Construir HTML del informe
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Informe RAPCA Infraestructuras</title>';
+  html += '<style>';
+  html += 'body{font-family:sans-serif;padding:20px;max-width:900px;margin:0 auto;color:#333}';
+  html += 'h1{color:#1a3d2e;border-bottom:3px solid #1a3d2e;padding-bottom:8px}';
+  html += 'h2{color:#1a3d2e;margin-top:30px;border-bottom:2px solid #2e7d32;padding-bottom:4px}';
+  html += 'h3{color:#2e7d32;margin-top:20px}';
+  html += 'table{width:100%;border-collapse:collapse;margin:10px 0}';
+  html += 'th,td{border:1px solid #ddd;padding:8px;text-align:left;font-size:13px}';
+  html += 'th{background:#f5f5f0;font-weight:700}';
+  html += '.badge{padding:2px 8px;border-radius:12px;color:#fff;font-weight:700;font-size:11px}';
+  html += '.fotos-comp{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0}';
+  html += '.fotos-comp img{width:100%;border-radius:8px;border:2px solid #2e7d32;box-shadow:0 2px 8px rgba(0,0,0,0.15)}';
+  html += '.fotos-gen{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:10px 0}';
+  html += '.fotos-gen img{width:100%;border-radius:6px;border:1px solid #ddd}';
+  html += '.foto-label{font-size:10px;color:#888;text-align:center;margin-top:2px}';
+  html += '.page-break{page-break-before:always}';
+  html += '@media print{.page-break{page-break-before:always}img{break-inside:avoid}}';
+  html += '</style></head><body>';
+
+  html += '<h1>Informe RAPCA EMA — Infraestructuras</h1>';
+  html += '<p style="color:#666">Generado el ' + new Date().toLocaleDateString('es-ES') + ' a las ' + new Date().toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'}) + '</p>';
+
+  for (var ii = 0; ii < infrasInforme.length; ii++) {
+    var inf = infrasInforme[ii];
+    if (ii > 0) html += '<div class="page-break"></div>';
+
+    html += '<h2>' + escapeHtml(inf.nombre || inf[campoEnlace] || 'Infraestructura ' + (ii+1)) + '</h2>';
+
+    // Tabla de datos de infraestructura
+    html += '<table>';
+    var allKeys = campos.slice();
+    Object.keys(inf).forEach(function(k) { if (allKeys.indexOf(k) < 0) allKeys.push(k); });
+    for (var ci = 0; ci < allKeys.length; ci += 2) {
+      html += '<tr>';
+      html += '<th style="width:20%">' + escapeHtml(allKeys[ci]) + '</th><td style="width:30%">' + escapeHtml(inf[allKeys[ci]] || '—') + '</td>';
+      if (allKeys[ci+1]) {
+        html += '<th style="width:20%">' + escapeHtml(allKeys[ci+1]) + '</th><td style="width:30%">' + escapeHtml(inf[allKeys[ci+1]] || '—') + '</td>';
+      } else {
+        html += '<th></th><td></td>';
+      }
+      html += '</tr>';
+    }
+    html += '</table>';
+
+    // Registros vinculados
+    var regsInf = registrosDeInfra(inf);
+    var regsFiltrados = regsInf.filter(function(r) {
+      if (r.tipo === 'VP' && !incluirVP) return false;
+      if (r.tipo === 'EL' && !incluirEL) return false;
+      if (r.tipo === 'EI' && !incluirEI) return false;
+      return true;
+    });
+
+    if (regsFiltrados.length === 0) {
+      html += '<p style="color:#888;font-style:italic">No hay registros vinculados</p>';
+      continue;
+    }
+
+    // Resumen de registros
+    html += '<h3>Registros de campo (' + regsFiltrados.length + ')</h3>';
+
+    for (var ri = 0; ri < regsFiltrados.length; ri++) {
+      var r = regsFiltrados[ri];
+      html += '<div style="margin-top:16px;border-left:4px solid ' + (r.tipo === 'VP' ? '#2e7d32' : r.tipo === 'EL' ? '#1565c0' : '#e65100') + ';padding-left:12px">';
+      html += '<h4 style="margin:0 0 8px;color:#1a3d2e"><span class="badge" style="background:' + (r.tipo === 'VP' ? '#2e7d32' : r.tipo === 'EL' ? '#1565c0' : '#e65100') + '">' + r.tipo + '</span> ' + r.fecha + ' — ' + r.unidad + (r.transecto ? ' (T' + r.transecto + ')' : '') + '</h4>';
+
+      // Datos del registro (pastoreo, observaciones, etc.)
+      if (r.datos.pastoreo) {
+        html += '<table><tr><th colspan="' + r.datos.pastoreo.length + '">Grados de Pastoreo</th></tr><tr>';
+        r.datos.pastoreo.forEach(function(p, pi) { html += '<td style="text-align:center"><strong>P' + (pi+1) + ':</strong> ' + (p || '—') + '</td>'; });
+        html += '</tr></table>';
+      }
+
+      if (r.datos.observaciones) {
+        html += '<p><strong>Observaciones:</strong> ' + escapeHtml(r.datos.observaciones) + '</p>';
+      }
+
+      if (r.datos.plantas) {
+        html += '<table><tr><th>Especie</th><th>Media</th></tr>';
+        r.datos.plantas.forEach(function(p) { html += '<tr><td style="font-style:italic">' + escapeHtml(p.nombre || '—') + '</td><td>' + (p.media || '—') + '</td></tr>'; });
+        html += '</table>';
+      }
+
+      if (r.datos.herbaceas) {
+        html += '<p><strong>Herbáceas media:</strong> ' + (r.datos.herbaceasMedia || '—') + ' cm</p>';
+      }
+      if (r.datos.matorral) {
+        html += '<p><strong>Matorralización:</strong> Vol. ' + (r.datos.matorral.volumen || '—') + ' m³/ha</p>';
+      }
+
+      // ---- FOTOS ----
+      if (fotosTipo !== 'ninguna') {
+        // Fotos comparativas (2 por fila, ancho completo)
+        if (r.datos.fotosComp && r.datos.fotosComp.length > 0 && (fotosTipo === 'comparativas' || fotosTipo === 'todas')) {
+          html += '<h4 style="color:#2e7d32;margin:12px 0 4px">Fotos Comparativas</h4>';
+          var porWP = {};
+          r.datos.fotosComp.forEach(function(fc) {
+            var wp = fc.waypoint || 'W';
+            if (!porWP[wp]) porWP[wp] = [];
+            porWP[wp].push(fc);
+          });
+          var wps = Object.keys(porWP).sort();
+          for (var wi = 0; wi < wps.length; wi++) {
+            html += '<p style="margin:8px 0 4px;font-weight:600;color:#555">' + (wps[wi] === 'W1' ? 'Waypoint 1' : 'Waypoint 2') + '</p>';
+            html += '<div class="fotos-comp">';
+            for (var fi = 0; fi < porWP[wps[wi]].length; fi++) {
+              var fc = porWP[wps[wi]][fi];
+              try {
+                var fotoData = await buscarFotoData(fc.numero || '', r.tipo, r.unidad);
+                if (fotoData) {
+                  html += '<div><img src="' + fotoData + '"><div class="foto-label">' + escapeHtml(fc.numero || '') + '</div></div>';
+                } else {
+                  html += '<div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;color:#888;border:2px dashed #ccc">' + escapeHtml(fc.numero || '') + '<br><small>Foto no disponible</small></div>';
+                }
+              } catch(e) {
+                html += '<div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;color:#888">' + escapeHtml(fc.numero || '') + '</div>';
+              }
+            }
+            html += '</div>';
+          }
+        }
+
+        // Fotos generales (3 por fila)
+        if (fotosTipo === 'todas' && r.datos.fotos) {
+          var codigos = r.datos.fotos.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+          if (codigos.length > 0) {
+            html += '<h4 style="color:#555;margin:12px 0 4px">Fotos Generales</h4>';
+            html += '<div class="fotos-gen">';
+            for (var gi = 0; gi < codigos.length; gi++) {
+              try {
+                var fotoData = await buscarFotoData(codigos[gi], r.tipo, r.unidad);
+                if (fotoData) {
+                  html += '<div><img src="' + fotoData + '"><div class="foto-label">' + escapeHtml(codigos[gi]) + '</div></div>';
+                }
+              } catch(e) {}
+            }
+            html += '</div>';
+          }
+        }
+      }
+
+      html += '</div>'; // fin registro
+    }
+  }
+
+  html += '<div style="margin-top:40px;border-top:2px solid #ddd;padding-top:10px;color:#888;font-size:11px;text-align:center">RAPCA EMA — Informe generado automáticamente</div>';
+  html += '</body></html>';
+
+  // Abrir en nueva ventana
+  var win = window.open('', '_blank');
+  if (win) {
+    win.document.write(html);
+    win.document.close();
+  } else {
+    // Fallback: descargar como HTML
+    var blob = new Blob([html], {type: 'text/html'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'informe_infraestructuras_rapca.html';
+    a.click();
+    setTimeout(function() { URL.revokeObjectURL(url); }, 5000);
+  }
+  showToast('Informe generado', 'success');
 }
 
 // ============================================================
