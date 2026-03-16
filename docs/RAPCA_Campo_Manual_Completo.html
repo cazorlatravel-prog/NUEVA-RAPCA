@@ -1,0 +1,2075 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAPCA Campo — Manual Técnico Completo</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; line-height: 1.6; max-width: 210mm; margin: 0 auto; padding: 18px; background: #fff; font-size: 13.5px; }
+  h1 { color: #1a3d2e; font-size: 26px; border-bottom: 3px solid #1a3d2e; padding-bottom: 8px; }
+  h2 { color: #1a3d2e; font-size: 21px; margin-top: 30px; border-left: 4px solid #2e7d32; padding-left: 12px; page-break-after: avoid; }
+  h3 { color: #2e7d32; font-size: 16px; margin-top: 18px; page-break-after: avoid; }
+  h4 { color: #444; font-size: 14px; margin-top: 14px; page-break-after: avoid; }
+  .cover { text-align: center; padding: 40px 0 30px; page-break-after: always; }
+  .cover h1 { font-size: 36px; border: none; margin-bottom: 4px; }
+  .cover .subtitle { font-size: 17px; color: #555; margin: 6px 0 20px; }
+  .cover .audience { display: inline-block; padding: 6px 16px; border: 2px solid #2e7d32; border-radius: 20px; color: #2e7d32; font-weight: 600; margin: 4px; font-size: 13px; }
+  .icon-img { width: 90px; height: 90px; border-radius: 18px; box-shadow: 0 2px 12px rgba(0,0,0,.18); }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 16px; font-size: 12.5px; }
+  th { background: #1a3d2e; color: #fff; padding: 6px 8px; text-align: left; font-size: 12px; }
+  td { padding: 5px 8px; border-bottom: 1px solid #ddd; }
+  tr:nth-child(even) td { background: #f8f8f5; }
+  .tip { background: #e8f5e9; border-left: 4px solid #2e7d32; padding: 10px 14px; margin: 12px 0; border-radius: 3px; font-size: 12.5px; }
+  .tip::before { content: "CONSEJO: "; font-weight: bold; color: #2e7d32; }
+  .warning { background: #fff3e0; border-left: 4px solid #e65100; padding: 10px 14px; margin: 12px 0; border-radius: 3px; font-size: 12.5px; }
+  .warning::before { content: "IMPORTANTE: "; font-weight: bold; color: #e65100; }
+  .highlight-box { background: #e8f5e9; border-left: 4px solid #2e7d32; padding: 12px 16px; margin: 14px 0; border-radius: 4px; }
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps li { counter-increment: step; padding: 6px 0 6px 38px; position: relative; border-left: 2px solid #ddd; margin-left: 12px; font-size: 13px; }
+  .steps li::before { content: counter(step); position: absolute; left: -13px; top: 4px; width: 24px; height: 24px; background: #2e7d32; color: #fff; border-radius: 50%; text-align: center; line-height: 24px; font-size: 12px; font-weight: bold; }
+  .steps li:last-child { border-left: none; }
+  code { background: #f0f0f0; padding: 1px 5px; border-radius: 3px; font-size: 12px; font-family: 'Consolas', monospace; }
+  pre { background: #1e1e2e; color: #cdd6f4; padding: 14px; border-radius: 8px; font-size: 11.5px; line-height: 1.5; overflow-x: auto; margin: 10px 0 14px; font-family: 'Consolas', 'Fira Code', monospace; }
+  pre .kw { color: #cba6f7; }
+  pre .fn { color: #89b4fa; }
+  pre .str { color: #a6e3a1; }
+  pre .num { color: #fab387; }
+  pre .cm { color: #6c7086; font-style: italic; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; color: #fff; }
+  .badge-vp { background: #88d8b0; color: #333; }
+  .badge-el { background: #2ecc71; }
+  .badge-ei { background: #e65100; }
+  .badge-admin { background: #7b1fa2; }
+  .tech-stack { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+  .tech-tag { background: #e3f2fd; color: #1565c0; padding: 3px 10px; border-radius: 14px; font-size: 12px; font-weight: 500; }
+  .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0; }
+  .metric-card { background: #f5f5f0; border-radius: 8px; padding: 14px; text-align: center; }
+  .metric-card .num { font-size: 26px; font-weight: bold; color: #1a3d2e; }
+  .metric-card .label { font-size: 11px; color: #666; margin-top: 3px; }
+  .arch-diagram { background: #fafafa; border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin: 14px 0; font-family: monospace; font-size: 11.5px; line-height: 1.7; white-space: pre; overflow-x: auto; }
+  .page-break { page-break-before: always; }
+  .toc { font-size: 13px; }
+  .toc a { text-decoration: none; color: #1a3d2e; }
+  .toc li { margin-bottom: 3px; }
+  .toc-part { font-weight: bold; color: #1a3d2e; margin-top: 10px; font-size: 14px; }
+  ul, ol { padding-left: 20px; }
+  li { margin-bottom: 4px; }
+  .field-table td:first-child { font-weight: 600; white-space: nowrap; min-width: 140px; }
+  .footer { text-align: center; color: #999; font-size: 11px; margin-top: 30px; border-top: 1px solid #ddd; padding-top: 10px; }
+  .fig { text-align: center; margin: 16px 0; }
+  .fig svg { max-width: 100%; }
+  .fig-caption { font-size: 11px; color: #666; margin-top: 6px; font-style: italic; }
+  .col2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .flow-box { background: #f8f8f5; border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 8px 0; }
+  .flow-arrow { text-align: center; font-size: 20px; color: #2e7d32; margin: 4px 0; }
+  .screen-mock { background: #fff; border: 2px solid #1a3d2e; border-radius: 16px; padding: 0; overflow: hidden; margin: 12px auto; max-width: 280px; box-shadow: 0 4px 16px rgba(0,0,0,.12); }
+  .screen-mock .mock-header { background: #1a3d2e; color: #fff; padding: 8px 12px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .screen-mock .mock-body { padding: 12px; font-size: 12px; }
+  .screen-mock .mock-nav { background: #1a3d2e; display: flex; padding: 6px 0; }
+  .screen-mock .mock-nav span { flex: 1; text-align: center; color: #aaa; font-size: 10px; padding: 4px; }
+  .screen-mock .mock-nav span.active { color: #fff; border-bottom: 2px solid #fff; }
+  .mock-field { background: #f5f5f0; border: 1px solid #ddd; border-radius: 6px; padding: 6px 8px; margin: 4px 0; font-size: 11px; color: #888; }
+  .mock-btn { background: #1a3d2e; color: #fff; border: none; border-radius: 6px; padding: 8px; text-align: center; font-size: 12px; font-weight: 600; margin: 6px 0; width: 100%; }
+  .mock-badge { display: inline-block; padding: 2px 6px; border-radius: 8px; font-size: 10px; font-weight: bold; color: #fff; }
+  .color-swatch { display: inline-block; width: 16px; height: 16px; border-radius: 3px; vertical-align: middle; margin-right: 4px; border: 1px solid rgba(0,0,0,.1); }
+</style>
+</head>
+<body>
+
+<!-- ========================================================== -->
+<!-- PORTADA -->
+<!-- ========================================================== -->
+<div class="cover">
+  <img src="../icons/icon-192.png" alt="RAPCA Campo" class="icon-img" onerror="this.style.display='none'">
+  <h1>RAPCA Campo</h1>
+  <div class="subtitle">Plataforma Digital para la Evaluación de Pastoreo<br>en Áreas Pasto-Cortafuegos</div>
+  <p style="font-size:15px;color:#1a3d2e;font-weight:600;margin:6px 0">Manual Técnico Completo</p>
+  <p style="color:#666;font-size:13px">Documento Técnico &middot; Innovación &middot; Manual de Operador &middot; Manual de Administrador</p>
+  <div style="margin:20px 0">
+    <span class="audience">Operadores de Campo</span>
+    <span class="audience">Administradores</span>
+    <span class="audience">Equipo Técnico</span>
+  </div>
+  <p style="color:#999;font-size:12px;margin-top:30px">
+    Versión 6.0 &middot; Marzo 2026<br>
+    Red de Áreas Pasto-Cortafuegos de Andalucía &mdash; EMA<br>
+    Junta de Andalucía
+  </p>
+</div>
+
+<!-- ========================================================== -->
+<!-- ÍNDICE -->
+<!-- ========================================================== -->
+<h2>Índice de Contenidos</h2>
+
+<p class="toc-part">PARTE I &mdash; DOCUMENTO TÉCNICO Y DE INNOVACIÓN</p>
+<ol class="toc" start="1">
+  <li><a href="#c1">Resumen Ejecutivo</a></li>
+  <li><a href="#c2">Contexto: La RAPCA y la Necesidad Digital</a></li>
+  <li><a href="#c3">Arquitectura del Sistema</a></li>
+  <li><a href="#c4">Stack Tecnológico Detallado</a></li>
+  <li><a href="#c5">Modelo de Datos y Persistencia</a></li>
+  <li><a href="#c6">Motor Offline-First: Service Worker e IndexedDB</a></li>
+  <li><a href="#c7">Sistema Fotográfico y Renderizado de Watermark</a></li>
+  <li><a href="#c8">Motor de Sincronización con Triple Redundancia</a></li>
+  <li><a href="#c9">Motor GIS: Cartografía, KML, Shapefiles</a></li>
+  <li><a href="#c10">Seguridad: Autenticación JWT y RBAC</a></li>
+  <li><a href="#c11">Sistema de Diseño UI/UX</a></li>
+  <li><a href="#c12">Innovación Tecnológica</a></li>
+  <li><a href="#c13">Casos de Uso RAPCA</a></li>
+  <li><a href="#c14">Valor Añadido y Eficiencia</a></li>
+  <li><a href="#c15">Escalabilidad y Evolución</a></li>
+</ol>
+
+<p class="toc-part">PARTE II &mdash; MANUAL DE OPERADOR DE CAMPO</p>
+<ol class="toc" start="16">
+  <li><a href="#c16">Instalación y Primer Acceso</a></li>
+  <li><a href="#c17">Navegación y Estructura de la App</a></li>
+  <li><a href="#c18">Dashboard: Panel de Control</a></li>
+  <li><a href="#c19">Formulario VP &mdash; Visita Previa</a></li>
+  <li><a href="#c20">Formulario EL &mdash; Evaluación Ligera</a></li>
+  <li><a href="#c21">Formulario EI &mdash; Evaluación Intensiva</a></li>
+  <li><a href="#c22">Cámara: Captura Fotográfica</a></li>
+  <li><a href="#c23">Mapa Interactivo</a></li>
+  <li><a href="#c24">Panel de Registros y Exportación</a></li>
+  <li><a href="#c25">Historial (Timeline)</a></li>
+  <li><a href="#c26">Comparador Temporal de Fotografías</a></li>
+  <li><a href="#c27">Galería Multimedia</a></li>
+  <li><a href="#c28">Precarga Offline</a></li>
+  <li><a href="#c29">Gabinete: Informes y Estadísticas</a></li>
+  <li><a href="#c30">Infraestructuras</a></li>
+  <li><a href="#c31">Ganaderos</a></li>
+  <li><a href="#c32">Sincronización de Datos</a></li>
+  <li><a href="#c33">Uso Offline Completo</a></li>
+</ol>
+
+<p class="toc-part">PARTE III &mdash; MANUAL DE ADMINISTRADOR</p>
+<ol class="toc" start="34">
+  <li><a href="#c34">Gestión de Usuarios</a></li>
+  <li><a href="#c35">Configuración de Marca de Agua (Watermark)</a></li>
+  <li><a href="#c36">Campos Personalizados</a></li>
+  <li><a href="#c37">Herramientas de Datos</a></li>
+  <li><a href="#c38">Despliegue y Build de Producción</a></li>
+  <li><a href="#c39">API Backend: Endpoints PHP</a></li>
+  <li><a href="#c40">Resolución de Problemas</a></li>
+</ol>
+
+<!-- ========================================================== -->
+<!-- PARTE I — DOCUMENTO TÉCNICO -->
+<!-- ========================================================== -->
+
+<!-- CAP 1 -->
+<h2 id="c1" class="page-break">1. Resumen Ejecutivo</h2>
+<p><strong>RAPCA Campo</strong> es una Progressive Web App (PWA) desarrollada específicamente para la <strong>Red de Áreas Pasto-Cortafuegos de Andalucía</strong> (RAPCA). Digitaliza la recogida, gestión, sincronización y análisis de datos de evaluaciones de pastoreo en áreas pasto-cortafuegos, operando en entornos rurales con conectividad limitada o inexistente.</p>
+
+<div class="highlight-box">
+  <strong>Cifras clave del proyecto:</strong>
+  <div class="metric-grid">
+    <div class="metric-card"><div class="num">+10.200</div><div class="label">Líneas de código fuente</div></div>
+    <div class="metric-card"><div class="num">19</div><div class="label">Archivos del proyecto</div></div>
+    <div class="metric-card"><div class="num">14</div><div class="label">Módulos JavaScript</div></div>
+    <div class="metric-card"><div class="num">3</div><div class="label">Tipos de evaluación (VP/EL/EI)</div></div>
+    <div class="metric-card"><div class="num">8</div><div class="label">Formatos de exportación</div></div>
+    <div class="metric-card"><div class="num">~350 KB</div><div class="label">Tamaño total minificado</div></div>
+  </div>
+</div>
+
+<p>La aplicación sustituye los métodos tradicionales en papel por un sistema digital robusto con capacidad offline total, sincronización automática con triple redundancia, cartografía GIS integrada, sistema fotográfico con marcas de agua inteligentes y exportación en 8 formatos (PDF, Excel, CSV, ZIP, Shapefile, KML, HTML, informes).</p>
+
+<!-- CAP 2 -->
+<h2 id="c2">2. Contexto: La RAPCA y la Necesidad Digital</h2>
+
+<h3>2.1 La Red de Áreas Pasto-Cortafuegos</h3>
+<p>La RAPCA es un programa de la Junta de Andalucía que utiliza el <strong>pastoreo extensivo controlado</strong> como herramienta de prevención de incendios forestales. Las áreas cortafuegos se mantienen con ganado que reduce la biomasa combustible, creando franjas de protección natural en el monte mediterráneo andaluz.</p>
+
+<p>El programa requiere evaluaciones periódicas de campo para verificar que el pastoreo cumple su función de reducción de biomasa. Estas evaluaciones se realizan a tres niveles de intensidad creciente:</p>
+
+<table>
+  <tr><th>Nivel</th><th>Denominación</th><th>Protocolo</th><th>Frecuencia</th></tr>
+  <tr><td><span class="badge badge-vp">VP</span></td><td>Visita Previa</td><td>Inspección visual + fotos panorámicas</td><td>1ª visita a cada parcela</td></tr>
+  <tr><td><span class="badge badge-el">EL</span></td><td>Evaluación Ligera</td><td>Indicadores pastorales cuantitativos + fotos comparativas</td><td>Cada campaña</td></tr>
+  <tr><td><span class="badge badge-ei">EI</span></td><td>Evaluación Intensiva</td><td>3 transectos de 25m con análisis florístico completo</td><td>Periódica</td></tr>
+</table>
+
+<h3>2.2 Desafío Operativo</h3>
+<p>Los equipos trabajan en zonas montañosas remotas de Andalucía donde:</p>
+<ul>
+  <li><strong>Sin cobertura móvil</strong> en la mayoría de las parcelas (sierras de Cazorla, Segura, Aracena, Grazalema, Ronda, etc.)</li>
+  <li>Se necesitan <strong>coordenadas UTM/geográficas precisas</strong> en cada punto de evaluación y fotografía</li>
+  <li>Se requieren <strong>fotografías georreferenciadas con metadatos</strong> incrustados (fecha, GPS, orientación, municipio)</li>
+  <li>La <strong>comparación temporal</strong> de fotos entre campañas (mismo punto, mismo encuadre) es crítica para evaluar la eficacia del pastoreo</li>
+  <li>Los formularios en papel se deterioran, pierden, y requieren horas de digitalización posterior</li>
+  <li>Los datos deben ser <strong>interoperables con sistemas GIS</strong> (QGIS, ArcGIS, SIGPAC, REDIAM)</li>
+</ul>
+
+<div class="fig">
+<svg width="600" height="180" viewBox="0 0 600 180">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#2e7d32"/></marker>
+  </defs>
+  <rect x="10" y="30" width="120" height="50" rx="8" fill="#fff3e0" stroke="#e65100" stroke-width="2"/>
+  <text x="70" y="52" text-anchor="middle" font-size="11" font-weight="bold" fill="#e65100">PROBLEMA</text>
+  <text x="70" y="68" text-anchor="middle" font-size="9" fill="#333">Papel + GPS externo</text>
+  <line x1="130" y1="55" x2="185" y2="55" stroke="#2e7d32" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="190" y="20" width="140" height="70" rx="8" fill="#e8f5e9" stroke="#2e7d32" stroke-width="2"/>
+  <text x="260" y="42" text-anchor="middle" font-size="11" font-weight="bold" fill="#2e7d32">RAPCA Campo</text>
+  <text x="260" y="58" text-anchor="middle" font-size="9" fill="#333">PWA Offline-First</text>
+  <text x="260" y="72" text-anchor="middle" font-size="9" fill="#333">GPS+Cámara+Datos+GIS</text>
+  <line x1="330" y1="55" x2="385" y2="55" stroke="#2e7d32" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="390" y="30" width="120" height="50" rx="8" fill="#e3f2fd" stroke="#1565c0" stroke-width="2"/>
+  <text x="450" y="52" text-anchor="middle" font-size="11" font-weight="bold" fill="#1565c0">RESULTADO</text>
+  <text x="450" y="68" text-anchor="middle" font-size="9" fill="#333">Digital + Exportable</text>
+  <text x="70" y="110" text-anchor="middle" font-size="9" fill="#888">Sin conexión</text>
+  <text x="70" y="122" text-anchor="middle" font-size="9" fill="#888">Errores transcripción</text>
+  <text x="70" y="134" text-anchor="middle" font-size="9" fill="#888">Datos no enlazados</text>
+  <text x="450" y="110" text-anchor="middle" font-size="9" fill="#888">PDF, Excel, Shapefile</text>
+  <text x="450" y="122" text-anchor="middle" font-size="9" fill="#888">KML, CSV, ZIP</text>
+  <text x="450" y="134" text-anchor="middle" font-size="9" fill="#888">0 errores transcripción</text>
+</svg>
+<div class="fig-caption">Fig. 1 — Flujo de transformación digital: del papel al dato exportable</div>
+</div>
+
+<!-- CAP 3 -->
+<h2 id="c3" class="page-break">3. Arquitectura del Sistema</h2>
+
+<h3>3.1 Diagrama de Arquitectura General</h3>
+<div class="arch-diagram">
+┌─────────────────────────────────────────────────────────────┐
+│                    CLIENTE PWA (Navegador)                    │
+│                                                              │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌──────────┐  │
+│  │ index.html │ │  app.js    │ │  forms.js  │ │camera.js │  │
+│  │ (SPA shell)│ │ (core 654L)│ │ (datos 771)│ │(foto1084)│  │
+│  └────────────┘ └────────────┘ └────────────┘ └──────────┘  │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌──────────┐  │
+│  │  map.js    │ │  panel.js  │ │  sync.js   │ │ auth.js  │  │
+│  │ (GIS 1248) │ │(export1573)│ │ (sync 547) │ │(JWT 197) │  │
+│  └────────────┘ └────────────┘ └────────────┘ └──────────┘  │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌──────────┐  │
+│  │dashboard.js│ │timeline.js │ │comparador  │ │galeria.js│  │
+│  │ (chart 169)│ │ (hist 129) │ │  .js (293) │ │(foto 283)│  │
+│  └────────────┘ └────────────┘ └────────────┘ └──────────┘  │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐               │
+│  │  admin.js  │ │gabinete.js │ │ precarga.js│  ┌──────────┐ │
+│  │ (cfg  423) │ │ (stat 552) │ │(offline377)│  │  sw.js   │ │
+│  └────────────┘ └────────────┘ └────────────┘  │(cache101)│ │
+│                                                 └──────────┘ │
+│  ┌─────────────────────┐  ┌──────────────────────────────┐   │
+│  │   localStorage      │  │      IndexedDB v5             │   │
+│  │ rapca_registros     │  │ fotos          (keyPath:codigo│   │
+│  │ rapca_sesion        │  │ subidas_pendientes      "     │   │
+│  │ rapca_borrador_*    │  │ fotos_precargadas       "     │   │
+│  │ rapca_contadores_*  │  │ capas_kml     (keyPath:nombre)│   │
+│  │ rapca_watermark_cfg │  │ waypoints_comp  (keyPath:id)  │   │
+│  │ rapca_campos_infra  │  │ kml_infraestructuras    "     │   │
+│  │ rapca_infraestructur│  └──────────────────────────────┘   │
+│  │ rapca_ganaderos     │                                     │
+│  └─────────────────────┘                                     │
+└──────────────────────────────────────────────────────────────┘
+          │ HTTPS              │ HTTPS            │ HTTPS
+          ▼                    ▼                  ▼
+  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+  │ Servidor PHP │   │ Google Forms │   │  Cloudinary  │
+  │ auth.php     │   │ (fallback    │   │  CDN         │
+  │ datos.php    │   │  datos)      │   │ (fallback    │
+  │ fotos.php    │   └──────────────┘   │  fotos)      │
+  │ upload.php   │                      └──────────────┘
+  │ MySQL/PgSQL  │
+  └──────────────┘</div>
+<div class="fig-caption">Fig. 2 — Arquitectura del sistema con líneas de código por módulo</div>
+
+<h3>3.2 Patrones de Diseño Implementados</h3>
+<table>
+  <tr><th>Patrón</th><th>Implementación Técnica</th><th>Beneficio</th></tr>
+  <tr><td><strong>Offline-First</strong></td><td>Service Worker (sw.js) + IndexedDB v5 + localStorage</td><td>100% funcionalidad sin red</td></tr>
+  <tr><td><strong>Stale-While-Revalidate</strong></td><td>SW intercepta fetch, sirve caché, actualiza en background</td><td>Carga &lt;100ms + datos frescos</td></tr>
+  <tr><td><strong>Progressive Enhancement</strong></td><td>Funciona como web, instalable como app nativa vía manifest.json</td><td>Sin App Store, un solo codebase</td></tr>
+  <tr><td><strong>Fallback Chain</strong></td><td>Servidor PHP → Google Forms → Cloudinary direct upload</td><td>Triple redundancia, 0% pérdida de datos</td></tr>
+  <tr><td><strong>Event-Driven Sync</strong></td><td>Background Sync API + online event + polling 30s</td><td>Sincronización automática transparente</td></tr>
+  <tr><td><strong>RBAC</strong></td><td>JWT con roles admin/operador, verificación client+server</td><td>Control de acceso granular</td></tr>
+  <tr><td><strong>SPA (Single Page App)</strong></td><td>index.html con 13 pages, irPagina() maneja navegación</td><td>Transiciones rápidas, estado persistente</td></tr>
+  <tr><td><strong>Modular Monolith</strong></td><td>14 JS con responsabilidad única, scope global compartido</td><td>Simplicidad + separación lógica</td></tr>
+</table>
+
+<h3>3.3 Flujo de Datos End-to-End</h3>
+<div class="fig">
+<svg width="580" height="300" viewBox="0 0 580 300">
+  <defs>
+    <marker id="arr2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#1a3d2e"/></marker>
+  </defs>
+  <!-- Captura -->
+  <rect x="10" y="10" width="130" height="60" rx="8" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5"/>
+  <text x="75" y="32" text-anchor="middle" font-size="10" font-weight="bold" fill="#1a3d2e">1. CAPTURA</text>
+  <text x="75" y="46" text-anchor="middle" font-size="8" fill="#555">forms.js + camera.js</text>
+  <text x="75" y="58" text-anchor="middle" font-size="8" fill="#555">GPS + Canvas watermark</text>
+  <!-- Almacén local -->
+  <rect x="10" y="100" width="130" height="60" rx="8" fill="#fff3e0" stroke="#e65100" stroke-width="1.5"/>
+  <text x="75" y="122" text-anchor="middle" font-size="10" font-weight="bold" fill="#e65100">2. ALMACÉN LOCAL</text>
+  <text x="75" y="136" text-anchor="middle" font-size="8" fill="#555">localStorage (registros)</text>
+  <text x="75" y="148" text-anchor="middle" font-size="8" fill="#555">IndexedDB (fotos binarias)</text>
+  <line x1="75" y1="70" x2="75" y2="97" stroke="#1a3d2e" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <!-- Sync -->
+  <rect x="220" y="100" width="130" height="60" rx="8" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="285" y="122" text-anchor="middle" font-size="10" font-weight="bold" fill="#1565c0">3. SINCRONIZACIÓN</text>
+  <text x="285" y="136" text-anchor="middle" font-size="8" fill="#555">sync.js → servidor PHP</text>
+  <text x="285" y="148" text-anchor="middle" font-size="8" fill="#555">Fallback: Forms + Cloudinary</text>
+  <line x1="140" y1="130" x2="217" y2="130" stroke="#1a3d2e" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <!-- Servidor -->
+  <rect x="430" y="100" width="130" height="60" rx="8" fill="#f3e5f5" stroke="#7b1fa2" stroke-width="1.5"/>
+  <text x="495" y="122" text-anchor="middle" font-size="10" font-weight="bold" fill="#7b1fa2">4. SERVIDOR</text>
+  <text x="495" y="136" text-anchor="middle" font-size="8" fill="#555">MySQL/PostgreSQL</text>
+  <text x="495" y="148" text-anchor="middle" font-size="8" fill="#555">Cloudinary CDN (fotos)</text>
+  <line x1="350" y1="130" x2="427" y2="130" stroke="#1a3d2e" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <!-- Análisis -->
+  <rect x="220" y="200" width="130" height="60" rx="8" fill="#fce4ec" stroke="#c62828" stroke-width="1.5"/>
+  <text x="285" y="222" text-anchor="middle" font-size="10" font-weight="bold" fill="#c62828">5. ANÁLISIS</text>
+  <text x="285" y="236" text-anchor="middle" font-size="8" fill="#555">dashboard.js + gabinete.js</text>
+  <text x="285" y="248" text-anchor="middle" font-size="8" fill="#555">Gráficos, estadísticas</text>
+  <line x1="75" y1="160" x2="75" y2="225" stroke="#1a3d2e" stroke-width="1" stroke-dasharray="4"/>
+  <line x1="75" y1="225" x2="217" y2="225" stroke="#1a3d2e" stroke-width="1.5" marker-end="url(#arr2)"/>
+  <!-- Exportación -->
+  <rect x="430" y="200" width="130" height="60" rx="8" fill="#fff8e1" stroke="#f57f17" stroke-width="1.5"/>
+  <text x="495" y="222" text-anchor="middle" font-size="10" font-weight="bold" fill="#f57f17">6. EXPORTACIÓN</text>
+  <text x="495" y="236" text-anchor="middle" font-size="8" fill="#555">panel.js: PDF, XLSX, CSV</text>
+  <text x="495" y="248" text-anchor="middle" font-size="8" fill="#555">SHP, KML, ZIP, HTML</text>
+  <line x1="350" y1="230" x2="427" y2="230" stroke="#1a3d2e" stroke-width="1.5" marker-end="url(#arr2)"/>
+</svg>
+<div class="fig-caption">Fig. 3 — Flujo completo de datos: captura → almacenamiento → sincronización → análisis → exportación</div>
+</div>
+
+<!-- CAP 4 -->
+<h2 id="c4" class="page-break">4. Stack Tecnológico Detallado</h2>
+
+<h3>4.1 Frontend — Web APIs Nativas</h3>
+<div class="tech-stack">
+  <span class="tech-tag">HTML5 Semantic</span>
+  <span class="tech-tag">CSS3 Custom Properties</span>
+  <span class="tech-tag">JavaScript ES5/ES6+</span>
+  <span class="tech-tag">Service Worker API</span>
+  <span class="tech-tag">IndexedDB API</span>
+  <span class="tech-tag">Web App Manifest</span>
+  <span class="tech-tag">MediaDevices.getUserMedia()</span>
+  <span class="tech-tag">Geolocation API</span>
+  <span class="tech-tag">Canvas 2D API</span>
+  <span class="tech-tag">Background Sync API</span>
+  <span class="tech-tag">DeviceOrientation API</span>
+  <span class="tech-tag">Fetch API</span>
+  <span class="tech-tag">Blob/ArrayBuffer</span>
+</div>
+
+<h3>4.2 Librerías de Terceros (CDN)</h3>
+<table>
+  <tr><th>Librería</th><th>Versión</th><th>Tamaño</th><th>Función</th></tr>
+  <tr><td>Leaflet.js</td><td>1.9.4</td><td>~40 KB gz</td><td>Motor de mapas interactivos</td></tr>
+  <tr><td>Leaflet.MarkerCluster</td><td>1.5.3</td><td>~10 KB gz</td><td>Agrupación de marcadores por proximidad</td></tr>
+  <tr><td>Chart.js</td><td>4.4.0</td><td>~70 KB gz</td><td>Gráficos del dashboard (barras, doughnut)</td></tr>
+  <tr><td>SheetJS (XLSX)</td><td>0.18.5</td><td>~90 KB gz</td><td>Lectura/escritura de archivos Excel</td></tr>
+  <tr><td>JSZip</td><td>3.10.1</td><td>~30 KB gz</td><td>Generación de archivos ZIP (fotos, shapefile)</td></tr>
+  <tr><td>html2canvas</td><td>1.4.1</td><td>~40 KB gz</td><td>Renderizado de mini-mapa para watermark</td></tr>
+</table>
+
+<h3>4.3 Backend</h3>
+<div class="tech-stack">
+  <span class="tech-tag">PHP 8.x</span>
+  <span class="tech-tag">MySQL / PostgreSQL</span>
+  <span class="tech-tag">JWT Bearer Tokens</span>
+  <span class="tech-tag">bcrypt (password_hash)</span>
+  <span class="tech-tag">Cloudinary API v1.1</span>
+</div>
+
+<h3>4.4 Servicios Cartográficos</h3>
+<table>
+  <tr><th>Servicio</th><th>Protocolo</th><th>URL Base</th></tr>
+  <tr><td>IGN Topográfico</td><td>WMTS</td><td><code>ign.es/wmts/mapa-raster</code></td></tr>
+  <tr><td>PNOA Ortofoto</td><td>WMTS</td><td><code>ign.es/wmts/pnoa-ma</code></td></tr>
+  <tr><td>OpenStreetMap</td><td>TMS</td><td><code>tile.openstreetmap.org</code></td></tr>
+  <tr><td>OpenTopoMap</td><td>TMS</td><td><code>tile.opentopomap.org</code></td></tr>
+  <tr><td>Nominatim</td><td>REST JSON</td><td><code>nominatim.openstreetmap.org/reverse</code></td></tr>
+</table>
+
+<h3>4.5 ¿Por Qué una PWA?</h3>
+<table>
+  <tr><th>Requisito RAPCA</th><th>App Nativa</th><th>Web Clásica</th><th>PWA ✓</th></tr>
+  <tr><td>Opera sin cobertura</td><td>✓</td><td>✗</td><td>✓</td></tr>
+  <tr><td>Acceso cámara/GPS</td><td>✓</td><td>Limitado</td><td>✓</td></tr>
+  <tr><td>Sin App Store</td><td>✗</td><td>✓</td><td>✓</td></tr>
+  <tr><td>Actualización instantánea</td><td>✗</td><td>✓</td><td>✓ (SW update)</td></tr>
+  <tr><td>Multiplataforma</td><td>✗ (2 desarrollos)</td><td>✓</td><td>✓</td></tr>
+  <tr><td>Instalable pantalla inicio</td><td>✓</td><td>✗</td><td>✓ (manifest.json)</td></tr>
+  <tr><td>Tamaño</td><td>50-200 MB</td><td>N/A</td><td>~350 KB</td></tr>
+</table>
+
+<!-- CAP 5 -->
+<h2 id="c5" class="page-break">5. Modelo de Datos y Persistencia</h2>
+
+<h3>5.1 Esquema IndexedDB</h3>
+<pre><span class="cm">// app.js — IndexedDB v5 con 6 Object Stores</span>
+<span class="kw">function</span> <span class="fn">abrirDB</span>() {
+  <span class="kw">return new</span> Promise(<span class="kw">function</span>(resolve, reject) {
+    <span class="kw">var</span> req = indexedDB.open(<span class="str">'RAPCA_Fotos'</span>, <span class="num">5</span>);
+    req.onupgradeneeded = <span class="kw">function</span>(e) {
+      <span class="kw">var</span> d = e.target.result;
+      <span class="kw">if</span> (!d.objectStoreNames.contains(<span class="str">'fotos'</span>))
+        d.createObjectStore(<span class="str">'fotos'</span>, {keyPath:<span class="str">'codigo'</span>});
+      <span class="kw">if</span> (!d.objectStoreNames.contains(<span class="str">'subidas_pendientes'</span>))
+        d.createObjectStore(<span class="str">'subidas_pendientes'</span>, {keyPath:<span class="str">'codigo'</span>});
+      <span class="kw">if</span> (!d.objectStoreNames.contains(<span class="str">'fotos_precargadas'</span>))
+        d.createObjectStore(<span class="str">'fotos_precargadas'</span>, {keyPath:<span class="str">'codigo'</span>});
+      <span class="kw">if</span> (!d.objectStoreNames.contains(<span class="str">'capas_kml'</span>))
+        d.createObjectStore(<span class="str">'capas_kml'</span>, {keyPath:<span class="str">'nombre'</span>});
+      <span class="kw">if</span> (!d.objectStoreNames.contains(<span class="str">'waypoints_comp'</span>))
+        d.createObjectStore(<span class="str">'waypoints_comp'</span>, {keyPath:<span class="str">'id'</span>});
+      <span class="kw">if</span> (!d.objectStoreNames.contains(<span class="str">'kml_infraestructuras'</span>))
+        d.createObjectStore(<span class="str">'kml_infraestructuras'</span>, {keyPath:<span class="str">'nombre'</span>});
+    };
+  });
+}</pre>
+
+<h3>5.2 Esquema de un Registro de Campo</h3>
+<pre><span class="cm">// Estructura de objeto registro en localStorage (rapca_registros)</span>
+{
+  <span class="str">"id"</span>: <span class="num">1710583200000</span>,          <span class="cm">// timestamp como ID único</span>
+  <span class="str">"tipo"</span>: <span class="str">"EI"</span>,                   <span class="cm">// VP | EL | EI</span>
+  <span class="str">"fecha"</span>: <span class="str">"2026-03-16"</span>,
+  <span class="str">"zona"</span>: <span class="str">"23AJE"</span>,
+  <span class="str">"unidad"</span>: <span class="str">"23AJE01"</span>,
+  <span class="str">"transecto"</span>: <span class="str">"T1"</span>,             <span class="cm">// solo EI: T1|T2|T3</span>
+  <span class="str">"lat"</span>: <span class="num">37.7801</span>, <span class="str">"lon"</span>: <span class="num">-3.7892</span>,
+  <span class="str">"operador_email"</span>: <span class="str">"tecnico@rapca.app"</span>,
+  <span class="str">"operador_nombre"</span>: <span class="str">"Juan López"</span>,
+  <span class="str">"enviado"</span>: <span class="kw">false</span>,
+  <span class="str">"syncEstado"</span>: <span class="str">"pendiente"</span>,      <span class="cm">// sincronizado|sincronizando|error|pendiente</span>
+  <span class="str">"datos"</span>: {
+    <span class="str">"pastoreo"</span>: [<span class="str">"PM"</span>, <span class="str">"PI"</span>, <span class="str">"PM"</span>],
+    <span class="str">"observacionPastoreo"</span>: {<span class="str">"senal"</span>:<span class="str">"A"</span>, <span class="str">"veredas"</span>:<span class="str">"B"</span>, <span class="str">"cagarrutas"</span>:<span class="str">"A"</span>},
+    <span class="str">"plantas"</span>: [{<span class="str">"nombre"</span>:<span class="str">"Quercus ilex"</span>, <span class="str">"notas"</span>:[3,4,2...], <span class="str">"media"</span>:<span class="num">3.2</span>}...],
+    <span class="str">"matorral"</span>: {
+      <span class="str">"punto1"</span>: {<span class="str">"cobertura"</span>:<span class="num">40</span>, <span class="str">"altura"</span>:<span class="num">120</span>, <span class="str">"especie"</span>:<span class="str">"Cistus sp."</span>},
+      <span class="str">"punto2"</span>: {<span class="str">"cobertura"</span>:<span class="num">35</span>, <span class="str">"altura"</span>:<span class="num">95</span>, <span class="str">"especie"</span>:<span class="str">"Cistus sp."</span>},
+      <span class="str">"mediaCob"</span>:<span class="num">37.5</span>, <span class="str">"mediaAlt"</span>:<span class="num">107.5</span>,
+      <span class="str">"volumen"</span>:<span class="str">"403.13"</span>       <span class="cm">// m³/ha = (cob/100)*(alt/100)*10000</span>
+    },
+    <span class="str">"fotos"</span>: <span class="str">"23AJE01_EV_G_001, 23AJE01_EV_G_002"</span>,
+    <span class="str">"fotosComp"</span>: [{<span class="str">"numero"</span>:<span class="str">"23AJE01_EV_W1_001"</span>, <span class="str">"waypoint"</span>:<span class="str">"W1"</span>, <span class="str">"lat"</span>:<span class="num">37.78</span>, <span class="str">"lon"</span>:<span class="num">-3.79</span>}],
+    <span class="str">"observaciones"</span>: <span class="str">"Pastoreo regular en zona norte..."</span>
+  }
+}</pre>
+
+<h3>5.3 Cadena de Búsqueda de Fotos (Fallback Chain)</h3>
+<div class="fig">
+<svg width="560" height="120" viewBox="0 0 560 120">
+  <defs><marker id="arr3" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#1565c0"/></marker></defs>
+  <rect x="5" y="25" width="90" height="45" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5"/>
+  <text x="50" y="44" text-anchor="middle" font-size="9" font-weight="bold">IndexedDB</text>
+  <text x="50" y="56" text-anchor="middle" font-size="8" fill="#555">fotos</text>
+  <line x1="95" y1="48" x2="115" y2="48" stroke="#1565c0" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <rect x="118" y="25" width="90" height="45" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5"/>
+  <text x="163" y="44" text-anchor="middle" font-size="9" font-weight="bold">IndexedDB</text>
+  <text x="163" y="56" text-anchor="middle" font-size="8" fill="#555">precargadas</text>
+  <line x1="208" y1="48" x2="228" y2="48" stroke="#1565c0" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <rect x="231" y="25" width="90" height="45" rx="6" fill="#fff3e0" stroke="#e65100" stroke-width="1.5"/>
+  <text x="276" y="44" text-anchor="middle" font-size="9" font-weight="bold">IndexedDB</text>
+  <text x="276" y="56" text-anchor="middle" font-size="8" fill="#555">pendientes</text>
+  <line x1="321" y1="48" x2="341" y2="48" stroke="#1565c0" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <rect x="344" y="25" width="90" height="45" rx="6" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="389" y="44" text-anchor="middle" font-size="9" font-weight="bold">Servidor</text>
+  <text x="389" y="56" text-anchor="middle" font-size="8" fill="#555">rapca.app</text>
+  <line x1="434" y1="48" x2="454" y2="48" stroke="#1565c0" stroke-width="1.5" marker-end="url(#arr3)"/>
+  <rect x="457" y="25" width="90" height="45" rx="6" fill="#f3e5f5" stroke="#7b1fa2" stroke-width="1.5"/>
+  <text x="502" y="44" text-anchor="middle" font-size="9" font-weight="bold">Cloudinary</text>
+  <text x="502" y="56" text-anchor="middle" font-size="8" fill="#555">CDN</text>
+  <text x="280" y="95" text-anchor="middle" font-size="9" fill="#888">buscarFotoData(codigo, tipo, unidad) — encadena promesas con fallback automático</text>
+</svg>
+<div class="fig-caption">Fig. 4 — Cadena de fallback para búsqueda de fotografías (5 fuentes)</div>
+</div>
+
+<!-- CAP 6 -->
+<h2 id="c6" class="page-break">6. Motor Offline-First: Service Worker e IndexedDB</h2>
+
+<h3>6.1 Estrategias de Caché del Service Worker</h3>
+<p>El Service Worker (<code>sw.js</code>, 101 líneas) implementa tres estrategias de caché diferenciadas según el tipo de recurso:</p>
+
+<pre><span class="cm">// sw.js — Estrategia por tipo de recurso</span>
+self.addEventListener(<span class="str">'fetch'</span>, (e) => {
+  <span class="kw">const</span> url = <span class="kw">new</span> URL(e.request.url);
+
+  <span class="cm">// 1. PHP endpoints → Network-Only + fallback offline JSON</span>
+  <span class="kw">if</span> (url.pathname.endsWith(<span class="str">'.php'</span>)) {
+    e.respondWith(fetch(e.request).catch(() =>
+      <span class="kw">new</span> Response(JSON.stringify({error:<span class="str">'offline'</span>}),
+        {headers:{<span class="str">'Content-Type'</span>:<span class="str">'application/json'</span>}})));
+    <span class="kw">return</span>;
+  }
+  <span class="cm">// 2. CDN externo → Cache-First</span>
+  <span class="kw">if</span> (url.origin !== location.origin) {
+    e.respondWith(caches.match(e.request).then((c) =>
+      c || fetch(e.request).then((r) => {
+        caches.open(<span class="str">'rapca-cdn-v1'</span>).then((cache) => cache.put(e.request, r.clone()));
+        <span class="kw">return</span> r;
+      })));
+    <span class="kw">return</span>;
+  }
+  <span class="cm">// 3. Archivos propios → Stale-While-Revalidate</span>
+  e.respondWith(caches.match(e.request).then((cached) => {
+    <span class="kw">const</span> fetchP = fetch(e.request).then((r) => {
+      caches.open(<span class="str">'rapca-v6'</span>).then((c) => c.put(e.request, r.clone()));
+      <span class="kw">return</span> r;
+    }).catch(() => cached);
+    <span class="kw">return</span> cached || fetchP;
+  }));
+});</pre>
+
+<h3>6.2 Archivos Pre-cacheados</h3>
+<table>
+  <tr><th>Tipo</th><th>Cache</th><th>Archivos</th><th>Estrategia Install</th></tr>
+  <tr><td>App files</td><td><code>rapca-v6</code></td><td>14 JS + index.html + manifest.json</td><td>cache.addAll() en install</td></tr>
+  <tr><td>CDN libs</td><td><code>rapca-cdn-v1</code></td><td>9 archivos (Leaflet, Chart.js, XLSX, JSZip, html2canvas)</td><td>cache.addAll() en install</td></tr>
+</table>
+
+<h3>6.3 Ciclo de Vida del Service Worker</h3>
+<div class="fig">
+<svg width="500" height="160" viewBox="0 0 500 160">
+  <defs><marker id="arr4" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#1a3d2e"/></marker></defs>
+  <rect x="10" y="40" width="90" height="45" rx="6" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="55" y="58" text-anchor="middle" font-size="9" font-weight="bold">INSTALL</text>
+  <text x="55" y="72" text-anchor="middle" font-size="7" fill="#555">addAll(23 files)</text>
+  <line x1="100" y1="62" x2="130" y2="62" stroke="#1a3d2e" stroke-width="1.5" marker-end="url(#arr4)"/>
+  <rect x="135" y="40" width="90" height="45" rx="6" fill="#fff3e0" stroke="#e65100" stroke-width="1.5"/>
+  <text x="180" y="58" text-anchor="middle" font-size="9" font-weight="bold">WAITING</text>
+  <text x="180" y="72" text-anchor="middle" font-size="7" fill="#555">skipWaiting()</text>
+  <line x1="225" y1="62" x2="255" y2="62" stroke="#1a3d2e" stroke-width="1.5" marker-end="url(#arr4)"/>
+  <rect x="260" y="40" width="90" height="45" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5"/>
+  <text x="305" y="58" text-anchor="middle" font-size="9" font-weight="bold">ACTIVATE</text>
+  <text x="305" y="72" text-anchor="middle" font-size="7" fill="#555">cleanup old caches</text>
+  <line x1="350" y1="62" x2="380" y2="62" stroke="#1a3d2e" stroke-width="1.5" marker-end="url(#arr4)"/>
+  <rect x="385" y="40" width="90" height="45" rx="6" fill="#f3e5f5" stroke="#7b1fa2" stroke-width="1.5"/>
+  <text x="430" y="58" text-anchor="middle" font-size="9" font-weight="bold">FETCH</text>
+  <text x="430" y="72" text-anchor="middle" font-size="7" fill="#555">intercept requests</text>
+  <text x="305" y="115" text-anchor="middle" font-size="8" fill="#888">clients.claim() → toma control inmediatamente</text>
+</svg>
+<div class="fig-caption">Fig. 5 — Ciclo de vida del Service Worker</div>
+</div>
+
+<!-- CAP 7 -->
+<h2 id="c7" class="page-break">7. Sistema Fotográfico y Renderizado de Watermark</h2>
+
+<h3>7.1 Pipeline de Captura Fotográfica</h3>
+<p>El módulo <code>camera.js</code> (1.084 líneas) implementa un pipeline completo de captura, procesamiento y almacenamiento de fotografías:</p>
+
+<div class="fig">
+<svg width="560" height="200" viewBox="0 0 560 200">
+  <defs><marker id="arr5" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#1a3d2e"/></marker></defs>
+  <!-- Row 1 -->
+  <rect x="5" y="10" width="105" height="50" rx="6" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="57" y="30" text-anchor="middle" font-size="8" font-weight="bold">getUserMedia()</text>
+  <text x="57" y="42" text-anchor="middle" font-size="7" fill="#555">Stream cámara</text>
+  <line x1="110" y1="35" x2="130" y2="35" stroke="#1a3d2e" stroke-width="1" marker-end="url(#arr5)"/>
+
+  <rect x="133" y="10" width="105" height="50" rx="6" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="185" y="30" text-anchor="middle" font-size="8" font-weight="bold">Overlay HUD</text>
+  <text x="185" y="42" text-anchor="middle" font-size="7" fill="#555">GPS+Brújula+MiniMapa</text>
+  <line x1="238" y1="35" x2="258" y2="35" stroke="#1a3d2e" stroke-width="1" marker-end="url(#arr5)"/>
+
+  <rect x="261" y="10" width="105" height="50" rx="6" fill="#fff3e0" stroke="#e65100" stroke-width="1.5"/>
+  <text x="313" y="30" text-anchor="middle" font-size="8" font-weight="bold">Captura frame</text>
+  <text x="313" y="42" text-anchor="middle" font-size="7" fill="#555">drawImage(video)</text>
+  <line x1="366" y1="35" x2="386" y2="35" stroke="#1a3d2e" stroke-width="1" marker-end="url(#arr5)"/>
+
+  <rect x="389" y="10" width="105" height="50" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5"/>
+  <text x="441" y="30" text-anchor="middle" font-size="8" font-weight="bold">Canvas 3060x4080</text>
+  <text x="441" y="42" text-anchor="middle" font-size="7" fill="#555">Renderizar watermark</text>
+
+  <!-- Row 2 -->
+  <line x1="441" y1="60" x2="441" y2="85" stroke="#1a3d2e" stroke-width="1" marker-end="url(#arr5)"/>
+  <rect x="389" y="88" width="105" height="50" rx="6" fill="#f3e5f5" stroke="#7b1fa2" stroke-width="1.5"/>
+  <text x="441" y="108" text-anchor="middle" font-size="8" font-weight="bold">toDataURL()</text>
+  <text x="441" y="120" text-anchor="middle" font-size="7" fill="#555">JPEG base64</text>
+  <line x1="389" y1="113" x2="369" y2="113" stroke="#1a3d2e" stroke-width="1" marker-end="url(#arr5)"/>
+
+  <rect x="261" y="88" width="105" height="50" rx="6" fill="#fce4ec" stroke="#c62828" stroke-width="1.5"/>
+  <text x="313" y="108" text-anchor="middle" font-size="8" font-weight="bold">IndexedDB</text>
+  <text x="313" y="120" text-anchor="middle" font-size="7" fill="#555">fotos + pendientes</text>
+  <line x1="261" y1="113" x2="241" y2="113" stroke="#1a3d2e" stroke-width="1" marker-end="url(#arr5)"/>
+
+  <rect x="133" y="88" width="105" height="50" rx="6" fill="#fff8e1" stroke="#f57f17" stroke-width="1.5"/>
+  <text x="185" y="108" text-anchor="middle" font-size="8" font-weight="bold">Waypoint save</text>
+  <text x="185" y="120" text-anchor="middle" font-size="7" fill="#555">waypoints_comp</text>
+
+  <text x="280" y="170" text-anchor="middle" font-size="8" fill="#888">Si subtipo=W1/W2 → guarda coordenadas en store waypoints_comp para persistencia</text>
+</svg>
+<div class="fig-caption">Fig. 6 — Pipeline completo de captura fotográfica</div>
+</div>
+
+<h3>7.2 Composición del Watermark en Canvas</h3>
+<p>Cada foto se renderiza en un Canvas de <strong>3060 × 4080 píxeles</strong> con los siguientes elementos superpuestos:</p>
+
+<div class="fig">
+<svg width="306" height="408" viewBox="0 0 306 408" style="border:1px solid #ddd; border-radius:8px;">
+  <!-- Background -->
+  <rect width="306" height="408" fill="#e8e8e0"/>
+  <text x="153" y="200" text-anchor="middle" font-size="14" fill="#aaa">FOTO DE CAMPO</text>
+  <!-- Compass rose (top-left) -->
+  <circle cx="30" cy="30" r="22" fill="rgba(0,0,0,0.3)" stroke="#fff" stroke-width="1"/>
+  <text x="30" y="20" text-anchor="middle" font-size="8" fill="#ff0000" font-weight="bold">N</text>
+  <text x="30" y="44" text-anchor="middle" font-size="7" fill="#fff">S</text>
+  <text x="13" y="34" text-anchor="middle" font-size="7" fill="#fff">O</text>
+  <text x="47" y="34" text-anchor="middle" font-size="7" fill="#fff">E</text>
+  <text x="30" y="65" text-anchor="middle" font-size="6" fill="#888">Rosa de los vientos</text>
+  <!-- Mini-map (bottom-left) -->
+  <rect x="5" y="295" width="80" height="80" rx="4" fill="#b5d99c" stroke="rgba(255,255,255,0.6)" stroke-width="2"/>
+  <rect x="20" y="310" width="50" height="40" rx="2" fill="#8bc34a" opacity="0.5"/>
+  <circle cx="45" cy="335" r="3" fill="red"/>
+  <text x="45" y="390" text-anchor="middle" font-size="6" fill="#888">Mini-mapa (IGN/PNOA)</text>
+  <!-- Text panel (bottom-right) -->
+  <rect x="130" y="290" width="170" height="110" rx="4" fill="rgba(0,0,0,0.4)"/>
+  <text x="290" y="312" text-anchor="end" font-size="10" fill="#ffd700" font-weight="bold">RAPCA EMA</text>
+  <text x="290" y="328" text-anchor="end" font-size="8" fill="#ffd700">23AJE01_EV_W1_003</text>
+  <text x="290" y="344" text-anchor="end" font-size="7" fill="#fff">16/03/2026 14:32 (Madrid)</text>
+  <text x="290" y="358" text-anchor="end" font-size="7" fill="#fff">UTM 30N: 453200 E, 4181500 N</text>
+  <text x="290" y="372" text-anchor="end" font-size="7" fill="#fff">Orientación: NE (45°)</text>
+  <text x="290" y="386" text-anchor="end" font-size="7" fill="#fff">Jaén, Cazorla (23470)</text>
+</svg>
+<div class="fig-caption">Fig. 7 — Composición del watermark sobre fotografía (escala 1:10). Elementos: rosa de los vientos (sup-izq), mini-mapa cartográfico (inf-izq), panel informativo (inf-der)</div>
+</div>
+
+<h3>7.3 Conversión UTM (WGS84 → UTM Huso 30 ETRS89)</h3>
+<pre><span class="cm">// app.js — Proyección Transversa de Mercator</span>
+<span class="kw">function</span> <span class="fn">latLonToUTM</span>(lat, lon) {
+  <span class="kw">var</span> a = <span class="num">6378137</span>;           <span class="cm">// semieje mayor WGS84 (metros)</span>
+  <span class="kw">var</span> e = <span class="num">0.081819191</span>;       <span class="cm">// excentricidad WGS84</span>
+  <span class="kw">var</span> k0 = <span class="num">0.9996</span>;           <span class="cm">// factor de escala UTM</span>
+  <span class="kw">var</span> zone = Math.floor((lon + <span class="num">180</span>) / <span class="num">6</span>) + <span class="num">1</span>;
+  <span class="kw">var</span> latRad = lat * Math.PI / <span class="num">180</span>;
+  <span class="kw">var</span> N = a / Math.sqrt(<span class="num">1</span> - e*e * Math.sin(latRad) * Math.sin(latRad));
+  <span class="cm">// ... serie de Redfearn para M, T, C, A</span>
+  <span class="kw">var</span> easting = k0 * N * (A + ...) + <span class="num">500000</span>;  <span class="cm">// falso este</span>
+  <span class="kw">var</span> northing = k0 * (M + N * Math.tan(latRad) * (...));
+  <span class="kw">return</span> {zone: zone, easting: Math.round(easting), northing: Math.round(northing)};
+}</pre>
+
+<h3>7.4 Ghost Image (Imagen Fantasma)</h3>
+<p>Para fotos comparativas (W1/W2), la cámara busca la última foto del mismo waypoint/unidad en IndexedDB y la superpone como imagen semi-transparente (<code>ghostOpacity: 0-100%</code>), permitiendo al operador replicar exactamente el encuadre de campañas anteriores.</p>
+
+<h3>7.5 Geocodificación Inversa</h3>
+<pre><span class="cm">// camera.js — Obtener municipio/provincia/CP desde coordenadas</span>
+<span class="kw">async function</span> <span class="fn">geocodificarInverso</span>(lat, lon) {
+  <span class="kw">var</span> url = <span class="str">'https://nominatim.openstreetmap.org/reverse?format=json&lat='</span>
+    + lat + <span class="str">'&lon='</span> + lon + <span class="str">'&zoom=18&addressdetails=1'</span>;
+  <span class="kw">var</span> resp = <span class="kw">await</span> fetch(url);
+  <span class="kw">var</span> data = <span class="kw">await</span> resp.json();
+  <span class="kw">return</span> {
+    municipio: data.address.city || data.address.town || data.address.village,
+    provincia: data.address.state || data.address.province,
+    cp: data.address.postcode
+  };
+}</pre>
+
+<!-- CAP 8 -->
+<h2 id="c8" class="page-break">8. Motor de Sincronización con Triple Redundancia</h2>
+
+<h3>8.1 Arquitectura de Sincronización</h3>
+<div class="fig">
+<svg width="500" height="220" viewBox="0 0 500 220">
+  <defs><marker id="arr6" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#1a3d2e"/></marker></defs>
+  <rect x="180" y="5" width="140" height="40" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5"/>
+  <text x="250" y="22" text-anchor="middle" font-size="9" font-weight="bold">Registro pendiente</text>
+  <text x="250" y="35" text-anchor="middle" font-size="7">localStorage + IndexedDB</text>
+  <!-- Primary -->
+  <line x1="250" y1="45" x2="100" y2="75" stroke="#2e7d32" stroke-width="1.5" marker-end="url(#arr6)"/>
+  <rect x="30" y="75" width="140" height="40" rx="6" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="100" y="92" text-anchor="middle" font-size="9" font-weight="bold" fill="#1565c0">1. Servidor PHP</text>
+  <text x="100" y="105" text-anchor="middle" font-size="7">JWT + JSON → MySQL</text>
+  <!-- Fallback 1 -->
+  <line x1="250" y1="45" x2="250" y2="75" stroke="#e65100" stroke-width="1.5" marker-end="url(#arr6)"/>
+  <rect x="180" y="75" width="140" height="40" rx="6" fill="#fff3e0" stroke="#e65100" stroke-width="1.5"/>
+  <text x="250" y="92" text-anchor="middle" font-size="9" font-weight="bold" fill="#e65100">2. Google Forms</text>
+  <text x="250" y="105" text-anchor="middle" font-size="7">FormData POST no-cors</text>
+  <!-- Fallback 2 -->
+  <line x1="250" y1="45" x2="400" y2="75" stroke="#7b1fa2" stroke-width="1.5" marker-end="url(#arr6)"/>
+  <rect x="330" y="75" width="140" height="40" rx="6" fill="#f3e5f5" stroke="#7b1fa2" stroke-width="1.5"/>
+  <text x="400" y="92" text-anchor="middle" font-size="9" font-weight="bold" fill="#7b1fa2">3. Cloudinary CDN</text>
+  <text x="400" y="105" text-anchor="middle" font-size="7">Upload sin firmar (fotos)</text>
+  <!-- Retry -->
+  <rect x="120" y="140" width="260" height="35" rx="6" fill="#fce4ec" stroke="#c62828" stroke-width="1"/>
+  <text x="250" y="158" text-anchor="middle" font-size="8" fill="#c62828">Retry con backoff exponencial: 2s → 4s → 8s → 16s (max 4 intentos)</text>
+  <!-- Result -->
+  <rect x="150" y="190" width="200" height="25" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1"/>
+  <text x="250" y="207" text-anchor="middle" font-size="9" fill="#2e7d32" font-weight="bold">syncEstado = 'sincronizado' ✓</text>
+</svg>
+<div class="fig-caption">Fig. 8 — Triple redundancia de sincronización con fallback automático</div>
+</div>
+
+<h3>8.2 Código de Retry con Backoff Exponencial</h3>
+<pre><span class="cm">// sync.js — Sistema de reintentos</span>
+<span class="kw">function</span> <span class="fn">programarReintento</span>(registro, intento) {
+  <span class="kw">if</span> (intento >= <span class="num">4</span>) <span class="kw">return</span>;  <span class="cm">// máximo 4 reintentos</span>
+  <span class="kw">var</span> delay = Math.pow(<span class="num">2</span>, intento) * <span class="num">1000</span>;  <span class="cm">// 2s, 4s, 8s, 16s</span>
+  syncRetryCola.push({registro: registro, intento: intento});
+  <span class="kw">if</span> (!syncRetryTimer) {
+    syncRetryTimer = setTimeout(<span class="kw">function</span>() {
+      syncRetryTimer = <span class="kw">null</span>;
+      procesarReintentos();
+    }, delay);
+  }
+}</pre>
+
+<h3>8.3 Upload Directo a Cloudinary</h3>
+<pre><span class="cm">// sync.js — Subida directa sin servidor</span>
+<span class="kw">async function</span> <span class="fn">subirDirectoCloudinary</span>(foto) {
+  <span class="kw">var</span> blob = base64ToBlob(foto.data);
+  <span class="kw">var</span> folder = <span class="str">'rapca/'</span> + foto.tipo + <span class="str">'/'</span> + foto.unidad;
+  <span class="kw">var</span> fd = <span class="kw">new</span> FormData();
+  fd.append(<span class="str">'file'</span>, blob, foto.codigo + <span class="str">'.jpg'</span>);
+  fd.append(<span class="str">'upload_preset'</span>, <span class="str">'rapca_unsigned'</span>);
+  fd.append(<span class="str">'folder'</span>, folder);
+  fd.append(<span class="str">'public_id'</span>, foto.codigo);
+  <span class="kw">var</span> resp = <span class="kw">await</span> fetch(
+    <span class="str">'https://api.cloudinary.com/v1_1/drnqs1jwl/image/upload'</span>,
+    {method:<span class="str">'POST'</span>, body: fd});
+  <span class="kw">return</span> resp.ok;
+}</pre>
+
+<!-- CAP 9 -->
+<h2 id="c9" class="page-break">9. Motor GIS: Cartografía, KML, Shapefiles</h2>
+
+<h3>9.1 Capas Base</h3>
+<pre><span class="cm">// map.js — Inicialización de capas base</span>
+<span class="kw">var</span> osm = L.tileLayer(<span class="str">'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'</span>);
+<span class="kw">var</span> pnoa = L.tileLayer(
+  <span class="str">'https://www.ign.es/wmts/pnoa-ma?service=WMTS&request=GetTile'</span>
+  + <span class="str">'&version=1.0.0&Format=image/jpeg&layer=OI.OrthoimageCoverage'</span>
+  + <span class="str">'&style=default&tilematrixset=GoogleMapsCompatible'</span>
+  + <span class="str">'&TileMatrix={z}&TileRow={y}&TileCol={x}'</span>);
+<span class="kw">var</span> topo = L.tileLayer(<span class="str">'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'</span>);</pre>
+
+<h3>9.2 Generación de Shapefiles Binarios en el Navegador</h3>
+<p>La app genera archivos Shapefile completos (SHP + SHX + DBF) directamente en el navegador usando operaciones binarias sobre <code>ArrayBuffer</code> y <code>DataView</code>, sin necesidad de servidor:</p>
+
+<pre><span class="cm">// panel.js — Generación binaria SHP (puntos)</span>
+<span class="kw">function</span> <span class="fn">generarSHPPoint</span>(puntos) {
+  <span class="kw">var</span> fileLength = (<span class="num">100</span> + puntos.length * <span class="num">28</span>) / <span class="num">2</span>;
+  <span class="kw">var</span> buf = <span class="kw">new</span> ArrayBuffer(<span class="num">100</span> + puntos.length * <span class="num">28</span>);
+  <span class="kw">var</span> view = <span class="kw">new</span> DataView(buf);
+  view.setInt32(<span class="num">0</span>, <span class="num">9994</span>);          <span class="cm">// File code (Big-Endian)</span>
+  view.setInt32(<span class="num">24</span>, fileLength);     <span class="cm">// File length en 16-bit words</span>
+  view.setInt32(<span class="num">28</span>, <span class="num">1000</span>, <span class="kw">true</span>);    <span class="cm">// Version (Little-Endian)</span>
+  view.setInt32(<span class="num">32</span>, <span class="num">1</span>, <span class="kw">true</span>);       <span class="cm">// Shape type: 1 = Point</span>
+  view.setFloat64(<span class="num">36</span>, xmin, <span class="kw">true</span>); <span class="cm">// Bounding box</span>
+  <span class="cm">// Puntos: record_number + content_length + shape_type + X + Y</span>
+  puntos.forEach(<span class="kw">function</span>(p, i) {
+    view.setFloat64(offset + <span class="num">12</span>, p.lon, <span class="kw">true</span>); <span class="cm">// X (longitud)</span>
+    view.setFloat64(offset + <span class="num">20</span>, p.lat, <span class="kw">true</span>); <span class="cm">// Y (latitud)</span>
+  });
+  <span class="kw">return</span> buf;
+}</pre>
+
+<p>El archivo DBF se genera con cabecera dBASE III (versión 3), incluyendo descriptores de campo de 32 bytes cada uno, con soporte para campos Character de longitud variable.</p>
+
+<h3>9.3 Infraestructuras KML con Selector de Campo</h3>
+<p>Al importar un KML de infraestructuras, la app parsea los <code>ExtendedData</code> de cada <code>Placemark</code>, extrae los nombres de campo, y presenta un modal para que el usuario elija qué campo usar como nombre visible del marcador. Los marcadores usan iconos de árbol (🌳) con <code>L.divIcon</code>.</p>
+
+<h3>9.4 Tabla de Atributos</h3>
+<p>Las capas KML importadas generan una tabla de atributos interactiva, ordenable y filtrable, permitiendo buscar elementos y navegar a su ubicación en el mapa con un clic.</p>
+
+<!-- CAP 10 -->
+<h2 id="c10" class="page-break">10. Seguridad: Autenticación JWT y RBAC</h2>
+
+<h3>10.1 Flujo de Autenticación</h3>
+<div class="fig">
+<svg width="500" height="200" viewBox="0 0 500 200">
+  <defs><marker id="arr7" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#1a3d2e"/></marker></defs>
+  <rect x="10" y="10" width="110" height="40" rx="6" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.5"/>
+  <text x="65" y="28" text-anchor="middle" font-size="9" font-weight="bold">Login form</text>
+  <text x="65" y="40" text-anchor="middle" font-size="7">email + password</text>
+  <line x1="120" y1="30" x2="155" y2="30" stroke="#1a3d2e" stroke-width="1.5" marker-end="url(#arr7)"/>
+
+  <rect x="158" y="5" width="140" height="50" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5"/>
+  <text x="228" y="22" text-anchor="middle" font-size="8" font-weight="bold" fill="#2e7d32">Rate limit check</text>
+  <text x="228" y="34" text-anchor="middle" font-size="7">10 intentos / 15 min / email</text>
+  <text x="228" y="46" text-anchor="middle" font-size="7">Array con timestamps</text>
+  <line x1="298" y1="30" x2="330" y2="30" stroke="#1a3d2e" stroke-width="1.5" marker-end="url(#arr7)"/>
+
+  <rect x="333" y="5" width="140" height="50" rx="6" fill="#f3e5f5" stroke="#7b1fa2" stroke-width="1.5"/>
+  <text x="403" y="22" text-anchor="middle" font-size="8" font-weight="bold" fill="#7b1fa2">POST auth.php</text>
+  <text x="403" y="34" text-anchor="middle" font-size="7">bcrypt verify</text>
+  <text x="403" y="46" text-anchor="middle" font-size="7">→ JWT token + rol</text>
+
+  <!-- Fallback -->
+  <line x1="403" y1="55" x2="403" y2="80" stroke="#e65100" stroke-width="1" stroke-dasharray="4"/>
+  <rect x="333" y="82" width="140" height="40" rx="6" fill="#fff3e0" stroke="#e65100" stroke-width="1.5"/>
+  <text x="403" y="98" text-anchor="middle" font-size="8" font-weight="bold" fill="#e65100">Fallback local</text>
+  <text x="403" y="112" text-anchor="middle" font-size="7">simpleHash() vs stored hash</text>
+
+  <!-- Session -->
+  <line x1="403" y1="122" x2="403" y2="147" stroke="#1a3d2e" stroke-width="1.5" marker-end="url(#arr7)"/>
+  <rect x="280" y="150" width="240" height="35" rx="6" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5"/>
+  <text x="400" y="168" text-anchor="middle" font-size="8" font-weight="bold">sesion = {token, email, nombre, rol, id}</text>
+  <text x="400" y="180" text-anchor="middle" font-size="7">→ localStorage('rapca_sesion') + guardarUsuarioLocal()</text>
+</svg>
+<div class="fig-caption">Fig. 9 — Flujo de autenticación con fallback offline</div>
+</div>
+
+<h3>10.2 Matriz de Permisos RBAC</h3>
+<table>
+  <tr><th>Funcionalidad</th><th>Operador</th><th>Admin</th><th>Verificación</th></tr>
+  <tr><td>Formularios VP/EL/EI</td><td>✓</td><td>✓</td><td>sesion.token exists</td></tr>
+  <tr><td>Cámara, GPS, fotos</td><td>✓</td><td>✓</td><td>sesion.token exists</td></tr>
+  <tr><td>Mapa, KML, GPX, WMS</td><td>✓</td><td>✓</td><td>sesion.token exists</td></tr>
+  <tr><td>Galería, Comparador</td><td>✓</td><td>✓</td><td>sesion.token exists</td></tr>
+  <tr><td>Exportación (PDF, Excel, SHP...)</td><td>✓</td><td>✓</td><td>sesion.token exists</td></tr>
+  <tr><td>Editar registros propios</td><td>✓</td><td>✓</td><td>r.operador_email === sesion.email</td></tr>
+  <tr><td>Ver todos los registros</td><td>✗ (solo propios)</td><td>✓</td><td>sesion.rol === 'admin'</td></tr>
+  <tr><td>Gestión de usuarios</td><td>✗</td><td>✓</td><td>sesion.rol === 'admin'</td></tr>
+  <tr><td>Config watermark</td><td>✗</td><td>✓</td><td>sesion.rol === 'admin'</td></tr>
+  <tr><td>Crear campos personalizados</td><td>✗</td><td>✓</td><td>sesion.rol === 'admin'</td></tr>
+  <tr><td>Borrar datos globales</td><td>✗</td><td>✓</td><td>confirmación "BORRAR"</td></tr>
+</table>
+
+<h3>10.3 Renovación Automática de Token</h3>
+<p>Cuando una petición al servidor devuelve HTTP 401 (Unauthorized), el sistema muestra un diálogo de re-autenticación, obtiene un nuevo token y reintenta la operación. Esto sucede de forma transparente para el usuario.</p>
+
+<!-- CAP 11 -->
+<h2 id="c11" class="page-break">11. Sistema de Diseño UI/UX</h2>
+
+<h3>11.1 Design Tokens (CSS Custom Properties)</h3>
+<pre><span class="cm">/* index.html — Variables de diseño globales */</span>
+:root {
+  --c-primary: <span class="str">#1a3d2e</span>;       <span class="cm">/* Verde oscuro institucional */</span>
+  --c-primary-light: <span class="str">#2d5a3d</span>; <span class="cm">/* Verde hover/active */</span>
+  --c-secondary: <span class="str">#5b8c5a</span>;     <span class="cm">/* Verde medio */</span>
+  --c-vp: <span class="str">#88d8b0</span>;             <span class="cm">/* VP: verde claro */</span>
+  --c-el: <span class="str">#2ecc71</span>;             <span class="cm">/* EL: verde brillante */</span>
+  --c-ei: <span class="str">#fd9853</span>;             <span class="cm">/* EI: naranja */</span>
+  --c-map: <span class="str">#3498db</span>;            <span class="cm">/* Mapa: azul */</span>
+  --c-infra: <span class="str">#8e44ad</span>;          <span class="cm">/* Infraestructuras: púrpura */</span>
+  --c-bg: <span class="str">#f5f5f0</span>;             <span class="cm">/* Fondo general */</span>
+  --c-card: <span class="str">#fff</span>;             <span class="cm">/* Tarjetas */</span>
+  --radius: <span class="num">12px</span>;             <span class="cm">/* Radio de esquinas */</span>
+  --shadow: <span class="num">0 2px 8px</span> rgba(<span class="num">0,0,0,.12</span>);
+  --touch-min: <span class="num">44px</span>;          <span class="cm">/* Mínimo táctil WCAG */</span>
+}</pre>
+
+<h3>11.2 Paleta de Colores</h3>
+<table>
+  <tr><th>Variable</th><th>Color</th><th>Uso</th></tr>
+  <tr><td><code>--c-primary</code></td><td><span class="color-swatch" style="background:#1a3d2e"></span> #1a3d2e</td><td>Cabeceras, botones principales, barra de estado</td></tr>
+  <tr><td><code>--c-vp</code></td><td><span class="color-swatch" style="background:#88d8b0"></span> #88d8b0</td><td>Badges y marcadores de Visita Previa</td></tr>
+  <tr><td><code>--c-el</code></td><td><span class="color-swatch" style="background:#2ecc71"></span> #2ecc71</td><td>Badges y marcadores de Evaluación Ligera</td></tr>
+  <tr><td><code>--c-ei</code></td><td><span class="color-swatch" style="background:#fd9853"></span> #fd9853</td><td>Badges y marcadores de Evaluación Intensiva</td></tr>
+  <tr><td><code>--c-map</code></td><td><span class="color-swatch" style="background:#3498db"></span> #3498db</td><td>Iconos y elementos de mapa</td></tr>
+  <tr><td><code>--c-infra</code></td><td><span class="color-swatch" style="background:#8e44ad"></span> #8e44ad</td><td>Infraestructuras ganaderas</td></tr>
+</table>
+
+<h3>11.3 Componentes UI</h3>
+<p>La app sigue principios de diseño <strong>Mobile-First</strong> con:</p>
+<ul>
+  <li>Botones con <strong>mínimo 44px de altura</strong> (WCAG touch target)</li>
+  <li>Formularios con <strong>focus states</strong> visibles (borde verde + sombra)</li>
+  <li>Toast notifications flotantes (success verde, error rojo, info azul)</li>
+  <li>Modo alto contraste activable para accesibilidad</li>
+  <li>SPA con 13 páginas y transiciones por <code>display:none/flex</code></li>
+</ul>
+
+<!-- CAP 12 -->
+<h2 id="c12" class="page-break">12. Innovación Tecnológica</h2>
+
+<h3>12.1 Resumen de Innovaciones</h3>
+<table>
+  <tr><th>#</th><th>Innovación</th><th>Tecnología</th><th>Impacto</th></tr>
+  <tr><td>1</td><td>Watermark inteligente configurable</td><td>Canvas 2D + Nominatim + DeviceOrientation + html2canvas</td><td>Fotos con contexto geográfico completo sin post-proceso</td></tr>
+  <tr><td>2</td><td>Triple redundancia de sincronización</td><td>fetch + Google Forms + Cloudinary unsigned upload</td><td>0% pérdida de datos en cualquier condición</td></tr>
+  <tr><td>3</td><td>Generación de Shapefiles en navegador</td><td>ArrayBuffer + DataView (operaciones binarias)</td><td>Exportación GIS sin servidor ni software desktop</td></tr>
+  <tr><td>4</td><td>Ghost image para repetibilidad</td><td>Canvas overlay + IndexedDB search</td><td>Comparabilidad temporal garantizada entre campañas</td></tr>
+  <tr><td>5</td><td>Waypoints persistentes cross-session</td><td>IndexedDB dedicated store + migration</td><td>Puntos de referencia que sobreviven a limpieza de caché</td></tr>
+  <tr><td>6</td><td>Import Excel con auto-matching</td><td>XLSX.js + fuzzy string matching</td><td>Importación de infraestructuras sin configuración manual</td></tr>
+  <tr><td>7</td><td>Campos dinámicos sin código</td><td>localStorage schema + dynamic form generation</td><td>Admin configura campos sin desarrollador</td></tr>
+  <tr><td>8</td><td>Geocodificación inversa en tiempo real</td><td>Nominatim reverse geocoding API</td><td>Municipio/provincia/CP automáticos en cada foto</td></tr>
+</table>
+
+<!-- CAP 13 -->
+<h2 id="c13" class="page-break">13. Casos de Uso RAPCA</h2>
+
+<h3>13.1 Visita Previa a Nueva Área Pasto-Cortafuegos</h3>
+<div class="highlight-box">
+  <strong>Escenario</strong>: Técnico visita por primera vez una parcela asignada a un ganadero para evaluar su idoneidad como área pasto-cortafuegos.
+  <ol class="steps">
+    <li>Abre RAPCA Campo en la sierra (funciona offline completamente)</li>
+    <li>Selecciona formulario VP → GPS se captura automáticamente</li>
+    <li>Registra observaciones y toma fotos panorámicas con watermark (GPS, fecha, municipio)</li>
+    <li>Fotos codificadas automáticamente: <code>23AJE01_VP_G_001</code></li>
+    <li>Al volver a zona con cobertura → sincronización automática al servidor</li>
+  </ol>
+</div>
+
+<h3>13.2 Evaluación Ligera del Aprovechamiento Pastoral</h3>
+<div class="highlight-box">
+  <strong>Escenario</strong>: Evaluación periódica del nivel de pastoreo en una parcela activa de la red.
+  <ol class="steps">
+    <li>Formulario EL → selecciona unidad → evalúa 3 puntos de pastoreo (NP/PL/PM/PI/PMI)</li>
+    <li>Registra indicadores de presencia ganadera: señal de paso, veredas, cagarrutas (A/B/M/N)</li>
+    <li>Captura fotos comparativas en W1 y W2 con ghost image para replicar encuadre</li>
+    <li>Waypoints W1/W2 se guardan permanentemente en IndexedDB</li>
+    <li>Más tarde, usa el Comparador (slider) para evaluar evolución visual del pastoreo entre campañas</li>
+  </ol>
+</div>
+
+<h3>13.3 Evaluación Intensiva con Transectos</h3>
+<div class="highlight-box">
+  <strong>Escenario</strong>: Análisis detallado de la composición vegetal en 3 transectos de 25 metros.
+  <ol class="steps">
+    <li>Formulario EI → pestaña T1 → 10 especies vegetales (0-10 puntos), 3 palatables (0-15), 7 herbáceas (0-5)</li>
+    <li>Datos de matorral en 2 puntos: cobertura (%), altura (cm), especie dominante</li>
+    <li>La app calcula: <code>Volumen = (mediaCob/100) × (mediaAlt/100) × 10000 m³/ha</code></li>
+    <li>Autoguardado cada 30s → cambio a T2 y T3 → medias automáticas entre transectos</li>
+    <li>Exportación como Shapefile para análisis en QGIS o Excel para estadística</li>
+  </ol>
+</div>
+
+<h3>13.4 Gestión de Infraestructuras de la Red</h3>
+<div class="highlight-box">
+  <strong>Escenario</strong>: Administrador gestiona inventario de infraestructuras ganaderas (parcelas, vallados, abrevaderos).
+  <ol class="steps">
+    <li>Importa Excel con infraestructuras → auto-matching de columnas a campos del sistema</li>
+    <li>Carga KML de infraestructuras → selector de campo para nombre visible → marcadores 🌳 en mapa</li>
+    <li>Registros de campo se vinculan automáticamente por campo de enlace configurado</li>
+    <li>Genera informes por infraestructura: fotos comparativas (2/fila) + generales (3/fila)</li>
+    <li>Buscador interactivo localiza cualquier infraestructura en el mapa</li>
+  </ol>
+</div>
+
+<h3>13.5 Coordinación del Equipo de Campo</h3>
+<div class="highlight-box">
+  <strong>Escenario</strong>: Coordinador gestiona 5 operadores distribuidos por las sierras de Andalucía.
+  <ol class="steps">
+    <li>Crea cuentas de operador desde el panel de administración</li>
+    <li>Configura watermark corporativo (UTM huso 30, mini-mapa topográfico, municipio)</li>
+    <li>Crea campos personalizados para infraestructuras según necesidades del proyecto</li>
+    <li>Dashboard muestra en tiempo real: registros/operador, zonas sin evaluar, pendientes sync</li>
+    <li>Informes de zona agregan datos de todos los operadores para análisis global</li>
+  </ol>
+</div>
+
+<!-- CAP 14 -->
+<h2 id="c14" class="page-break">14. Valor Añadido y Eficiencia</h2>
+
+<h3>14.1 Comparativa: Método Tradicional vs. RAPCA Campo</h3>
+<table>
+  <tr><th>Aspecto</th><th>Papel + GPS externo</th><th>RAPCA Campo</th><th>Mejora</th></tr>
+  <tr><td>Recogida de datos</td><td>Formulario papel + cámara</td><td>Todo integrado en el móvil</td><td>-50% tiempo campo</td></tr>
+  <tr><td>Georreferenciación</td><td>GPS separado + anotación</td><td>Automática en foto</td><td>0 errores posición</td></tr>
+  <tr><td>Digitalización</td><td>Transcripción manual</td><td>Digital desde origen</td><td>-100% transcripción</td></tr>
+  <tr><td>Sincronización</td><td>Email / USB / papel</td><td>Automática 3x redundancia</td><td>0 pérdida de datos</td></tr>
+  <tr><td>Exportación</td><td>Horas de oficina</td><td>1 clic: 8 formatos</td><td>-80% tiempo oficina</td></tr>
+  <tr><td>Comparación temporal</td><td>Buscar fotos manualmente</td><td>Comparador con slider</td><td>Inmediato</td></tr>
+  <tr><td>Análisis GIS</td><td>Digitalizar en QGIS</td><td>Shapefile directo</td><td>-90% tiempo SIG</td></tr>
+  <tr><td>Coste hardware</td><td>GPS Garmin + cámara</td><td>Smartphone existente</td><td>0€ adicional</td></tr>
+</table>
+
+<h3>14.2 Interoperabilidad</h3>
+<ul>
+  <li><strong>Shapefile (.shp/.shx/.dbf)</strong>: integración directa con ArcGIS, QGIS, gvSIG, REDIAM</li>
+  <li><strong>KML</strong>: Google Earth, portales IECA, visores OGC</li>
+  <li><strong>Excel/CSV</strong>: R, SPSS, Python, LibreOffice, Google Sheets</li>
+  <li><strong>WMS</strong>: conexión a servicios SIGPAC, DERA, catastro, Natura 2000</li>
+  <li><strong>GPX</strong>: Garmin, Wikiloc, OruxMaps</li>
+</ul>
+
+<!-- CAP 15 -->
+<h2 id="c15">15. Escalabilidad y Evolución</h2>
+<ul>
+  <li><strong>Build optimizado</strong>: <code>build.sh</code> concatena 14 JS y minifica con terser → 34% reducción (~336 KB → ~223 KB)</li>
+  <li><strong>Campos dinámicos</strong>: nuevos campos sin tocar código</li>
+  <li><strong>API REST estándar</strong>: backend acepta integración con terceros</li>
+  <li><strong>Posibles evoluciones</strong>: IoT (estaciones meteo), ML (clasificación cobertura vegetal), notificaciones push, dashboard tiempo real (WebSockets)</li>
+</ul>
+
+<!-- ========================================================== -->
+<!-- PARTE II — MANUAL DE OPERADOR DE CAMPO -->
+<!-- ========================================================== -->
+
+<!-- CAP 16 -->
+<h2 id="c16" class="page-break">16. Instalación y Primer Acceso</h2>
+
+<h3>16.1 Requisitos del Sistema</h3>
+<table>
+  <tr><th>Requisito</th><th>Mínimo</th><th>Recomendado</th></tr>
+  <tr><td>Sistema Operativo</td><td>Android 7+ / iOS 14+</td><td>Android 12+ / iOS 16+</td></tr>
+  <tr><td>Navegador</td><td>Chrome 80+ / Safari 14+</td><td>Chrome 110+ / Safari 17+</td></tr>
+  <tr><td>RAM</td><td>2 GB</td><td>4 GB+</td></tr>
+  <tr><td>Almacenamiento libre</td><td>100 MB</td><td>500 MB+ (para fotos offline)</td></tr>
+  <tr><td>GPS</td><td>Sí (integrado)</td><td>GPS + GLONASS/Galileo</td></tr>
+  <tr><td>Cámara</td><td>5 MP</td><td>12 MP+</td></tr>
+  <tr><td>Brújula</td><td>Opcional</td><td>Magnetómetro integrado</td></tr>
+</table>
+
+<h3>16.2 Instalación como PWA (Progressive Web App)</h3>
+
+<h4>En Android (Chrome)</h4>
+<ol class="steps">
+  <li>Abre el navegador Chrome y ve a la URL proporcionada: <code>https://rapca.app</code></li>
+  <li>Aparecerá un banner inferior <strong>"Añadir RAPCA Campo a pantalla de inicio"</strong>. Pulsa <strong>Instalar</strong></li>
+  <li>Si no aparece el banner, pulsa el menú (⋮) → <strong>"Instalar aplicación"</strong> o <strong>"Añadir a pantalla de inicio"</strong></li>
+  <li>El icono de RAPCA Campo aparece en tu pantalla de inicio como una app más</li>
+  <li>La app se descarga completamente (~350 KB) y funciona sin conexión desde este momento</li>
+</ol>
+
+<div class="fig">
+<svg width="520" height="130" viewBox="0 0 520 130">
+  <!-- Phone 1 -->
+  <rect x="10" y="5" width="70" height="120" rx="10" fill="#333" stroke="#555" stroke-width="1"/>
+  <rect x="14" y="18" width="62" height="95" rx="2" fill="#fff"/>
+  <text x="45" y="55" text-anchor="middle" font-size="6" fill="#333">Chrome</text>
+  <text x="45" y="67" text-anchor="middle" font-size="5" fill="#1565c0">rapca.app</text>
+  <rect x="18" y="95" width="54" height="14" rx="3" fill="#2e7d32"/>
+  <text x="45" y="104" text-anchor="middle" font-size="5" fill="#fff" font-weight="bold">Instalar</text>
+  <text x="45" y="12" text-anchor="middle" font-size="4" fill="#999">●</text>
+  <!-- Arrow -->
+  <text x="105" y="65" font-size="16" fill="#2e7d32">→</text>
+  <!-- Phone 2 -->
+  <rect x="130" y="5" width="70" height="120" rx="10" fill="#333" stroke="#555" stroke-width="1"/>
+  <rect x="134" y="18" width="62" height="95" rx="2" fill="#fff"/>
+  <text x="165" y="50" text-anchor="middle" font-size="6" fill="#333">¿Instalar</text>
+  <text x="165" y="60" text-anchor="middle" font-size="6" fill="#333">RAPCA Campo?</text>
+  <rect x="140" y="75" width="22" height="10" rx="3" fill="#ddd"/>
+  <text x="151" y="82" text-anchor="middle" font-size="5" fill="#666">No</text>
+  <rect x="166" y="75" width="22" height="10" rx="3" fill="#2e7d32"/>
+  <text x="177" y="82" text-anchor="middle" font-size="5" fill="#fff">Sí</text>
+  <!-- Arrow -->
+  <text x="225" y="65" font-size="16" fill="#2e7d32">→</text>
+  <!-- Phone 3: Home screen -->
+  <rect x="250" y="5" width="70" height="120" rx="10" fill="#333" stroke="#555" stroke-width="1"/>
+  <rect x="254" y="18" width="62" height="95" rx="2" fill="#f5f5f0"/>
+  <rect x="262" y="28" width="16" height="16" rx="4" fill="#1a3d2e"/>
+  <text x="270" y="39" text-anchor="middle" font-size="5" fill="#fff">R</text>
+  <text x="270" y="52" text-anchor="middle" font-size="4" fill="#333">RAPCA</text>
+  <rect x="284" y="28" width="16" height="16" rx="4" fill="#ddd"/>
+  <rect x="262" y="58" width="16" height="16" rx="4" fill="#ddd"/>
+  <rect x="284" y="58" width="16" height="16" rx="4" fill="#ddd"/>
+  <!-- Arrow -->
+  <text x="345" y="65" font-size="16" fill="#2e7d32">→</text>
+  <!-- Phone 4: App running -->
+  <rect x="370" y="5" width="70" height="120" rx="10" fill="#333" stroke="#555" stroke-width="1"/>
+  <rect x="374" y="12" width="62" height="10" rx="0" fill="#1a3d2e"/>
+  <text x="405" y="20" text-anchor="middle" font-size="5" fill="#fff" font-weight="bold">RAPCA Campo</text>
+  <rect x="374" y="22" width="62" height="91" rx="0" fill="#f5f5f0"/>
+  <text x="405" y="45" text-anchor="middle" font-size="6" fill="#1a3d2e" font-weight="bold">Login</text>
+  <rect x="380" y="50" width="50" height="8" rx="2" fill="#fff" stroke="#ddd"/>
+  <rect x="380" y="62" width="50" height="8" rx="2" fill="#fff" stroke="#ddd"/>
+  <rect x="380" y="76" width="50" height="10" rx="3" fill="#1a3d2e"/>
+  <text x="405" y="83" text-anchor="middle" font-size="5" fill="#fff">Entrar</text>
+</svg>
+<div class="fig-caption">Fig. 10 — Proceso de instalación PWA en Android: Chrome → Confirmar → Pantalla inicio → App abierta</div>
+</div>
+
+<h4>En iOS (Safari)</h4>
+<ol class="steps">
+  <li>Abre Safari (obligatorio, otros navegadores no soportan PWA en iOS)</li>
+  <li>Ve a <code>https://rapca.app</code></li>
+  <li>Pulsa el botón de <strong>Compartir</strong> (cuadrado con flecha ↑)</li>
+  <li>Selecciona <strong>"Añadir a pantalla de inicio"</strong></li>
+  <li>Confirma el nombre "RAPCA Campo" y pulsa <strong>Añadir</strong></li>
+</ol>
+
+<div class="warning">En iOS, la app SOLO se puede instalar desde Safari. Chrome, Firefox y otros navegadores en iOS no soportan la instalación de PWAs.</div>
+
+<h3>16.3 Primer Inicio de Sesión</h3>
+<ol class="steps">
+  <li>Abre la app instalada desde la pantalla de inicio</li>
+  <li>Introduce el <strong>email</strong> y <strong>contraseña</strong> proporcionados por el administrador</li>
+  <li>Pulsa <strong>"Entrar"</strong></li>
+  <li>Acepta los permisos de <strong>ubicación GPS</strong> y <strong>cámara</strong> cuando se soliciten</li>
+  <li>Accedes al Dashboard principal con tu nombre y rol visible</li>
+</ol>
+
+<div class="tip">Tras el primer login con conexión, tus credenciales quedan guardadas localmente para que puedas acceder offline en futuras sesiones.</div>
+
+<!-- CAP 17 -->
+<h2 id="c17" class="page-break">17. Navegación y Estructura de la App</h2>
+
+<h3>17.1 Barra de Navegación Inferior</h3>
+<p>La app utiliza una barra de navegación inferior fija con iconos para acceder a las secciones principales:</p>
+
+<div class="fig">
+<svg width="520" height="60" viewBox="0 0 520 60">
+  <rect x="10" y="5" width="500" height="50" rx="8" fill="#1a3d2e"/>
+  <!-- Icons -->
+  <g transform="translate(45,30)">
+    <text text-anchor="middle" font-size="14" y="-6" fill="#fff">📊</text>
+    <text text-anchor="middle" font-size="7" y="10" fill="#aaa">Dashboard</text>
+  </g>
+  <g transform="translate(105,30)">
+    <text text-anchor="middle" font-size="14" y="-6" fill="#88d8b0">📋</text>
+    <text text-anchor="middle" font-size="7" y="10" fill="#88d8b0">VP</text>
+  </g>
+  <g transform="translate(155,30)">
+    <text text-anchor="middle" font-size="14" y="-6" fill="#2ecc71">📋</text>
+    <text text-anchor="middle" font-size="7" y="10" fill="#2ecc71">EL</text>
+  </g>
+  <g transform="translate(205,30)">
+    <text text-anchor="middle" font-size="14" y="-6" fill="#fd9853">📋</text>
+    <text text-anchor="middle" font-size="7" y="10" fill="#fd9853">EI</text>
+  </g>
+  <g transform="translate(255,30)">
+    <text text-anchor="middle" font-size="14" y="-6" fill="#fff">📷</text>
+    <text text-anchor="middle" font-size="7" y="10" fill="#aaa">Cámara</text>
+  </g>
+  <g transform="translate(310,30)">
+    <text text-anchor="middle" font-size="14" y="-6" fill="#3498db">🗺️</text>
+    <text text-anchor="middle" font-size="7" y="10" fill="#aaa">Mapa</text>
+  </g>
+  <g transform="translate(365,30)">
+    <text text-anchor="middle" font-size="14" y="-6" fill="#fff">📁</text>
+    <text text-anchor="middle" font-size="7" y="10" fill="#aaa">Panel</text>
+  </g>
+  <g transform="translate(420,30)">
+    <text text-anchor="middle" font-size="14" y="-6" fill="#fff">🖼️</text>
+    <text text-anchor="middle" font-size="7" y="10" fill="#aaa">Galería</text>
+  </g>
+  <g transform="translate(475,30)">
+    <text text-anchor="middle" font-size="14" y="-6" fill="#fff">⚙️</text>
+    <text text-anchor="middle" font-size="7" y="10" fill="#aaa">Admin</text>
+  </g>
+</svg>
+<div class="fig-caption">Fig. 11 — Barra de navegación inferior con iconos codificados por color según tipo de evaluación</div>
+</div>
+
+<h3>17.2 Mapa de Páginas de la Aplicación</h3>
+<table>
+  <tr><th>Página</th><th>ID HTML</th><th>Función</th><th>Acceso</th></tr>
+  <tr><td>Login</td><td><code>page-login</code></td><td>Autenticación de usuario</td><td>Sin sesión</td></tr>
+  <tr><td>Dashboard</td><td><code>page-dashboard</code></td><td>Panel de control con métricas y gráficos</td><td>Todos</td></tr>
+  <tr><td>Visita Previa</td><td><code>page-vp</code></td><td>Formulario de primera inspección</td><td>Todos</td></tr>
+  <tr><td>Evaluación Ligera</td><td><code>page-el</code></td><td>Formulario de indicadores pastorales</td><td>Todos</td></tr>
+  <tr><td>Evaluación Intensiva</td><td><code>page-ei</code></td><td>Formulario con transectos vegetales</td><td>Todos</td></tr>
+  <tr><td>Cámara</td><td><code>page-camara</code></td><td>Captura fotográfica con watermark</td><td>Todos</td></tr>
+  <tr><td>Mapa</td><td><code>page-mapa</code></td><td>GIS: capas, KML, medición</td><td>Todos</td></tr>
+  <tr><td>Panel</td><td><code>page-panel</code></td><td>Gestión de registros y exportación</td><td>Todos</td></tr>
+  <tr><td>Timeline</td><td><code>page-timeline</code></td><td>Historial cronológico</td><td>Todos</td></tr>
+  <tr><td>Comparador</td><td><code>page-comparador</code></td><td>Comparación temporal de fotos</td><td>Todos</td></tr>
+  <tr><td>Galería</td><td><code>page-galeria</code></td><td>Galería multimedia</td><td>Todos</td></tr>
+  <tr><td>Gabinete</td><td><code>page-gabinete</code></td><td>Informes y estadísticas</td><td>Todos</td></tr>
+  <tr><td>Admin</td><td><code>page-admin</code></td><td>Configuración y gestión</td><td><span class="badge badge-admin">Admin</span></td></tr>
+</table>
+
+<h3>17.3 Indicadores de Estado</h3>
+<p>La cabecera de la app muestra información crítica en tiempo real:</p>
+<ul>
+  <li><strong>Indicador de conexión</strong>: verde (online) / rojo (offline)</li>
+  <li><strong>GPS activo</strong>: icono de localización cuando hay fix GPS</li>
+  <li><strong>Pendientes de sincronización</strong>: contador numérico de registros no enviados</li>
+  <li><strong>Nombre del operador</strong> y rol activo</li>
+</ul>
+
+<!-- CAP 18 -->
+<h2 id="c18" class="page-break">18. Dashboard: Panel de Control</h2>
+
+<h3>18.1 Métricas Resumidas</h3>
+<p>El dashboard muestra al acceder a la app un resumen visual del estado del trabajo:</p>
+
+<div class="fig">
+<svg width="400" height="200" viewBox="0 0 400 200">
+  <!-- Cards row -->
+  <rect x="10" y="10" width="85" height="60" rx="6" fill="#fff" stroke="#ddd" stroke-width="1"/>
+  <text x="52" y="35" text-anchor="middle" font-size="20" font-weight="bold" fill="#1a3d2e">47</text>
+  <text x="52" y="55" text-anchor="middle" font-size="7" fill="#888">Total registros</text>
+
+  <rect x="105" y="10" width="85" height="60" rx="6" fill="#fff" stroke="#ddd" stroke-width="1"/>
+  <text x="147" y="35" text-anchor="middle" font-size="20" font-weight="bold" fill="#2e7d32">12</text>
+  <text x="147" y="55" text-anchor="middle" font-size="7" fill="#888">Unidades visitadas</text>
+
+  <rect x="200" y="10" width="85" height="60" rx="6" fill="#fff" stroke="#ddd" stroke-width="1"/>
+  <text x="242" y="35" text-anchor="middle" font-size="20" font-weight="bold" fill="#e65100">3</text>
+  <text x="242" y="55" text-anchor="middle" font-size="7" fill="#888">Pendientes sync</text>
+
+  <rect x="295" y="10" width="85" height="60" rx="6" fill="#fff" stroke="#ddd" stroke-width="1"/>
+  <text x="337" y="35" text-anchor="middle" font-size="20" font-weight="bold" fill="#1565c0">156</text>
+  <text x="337" y="55" text-anchor="middle" font-size="7" fill="#888">Fotografías</text>
+
+  <!-- Chart area -->
+  <rect x="10" y="80" width="180" height="110" rx="6" fill="#fff" stroke="#ddd" stroke-width="1"/>
+  <text x="100" y="98" text-anchor="middle" font-size="8" font-weight="bold" fill="#333">Actividad (30 días)</text>
+  <!-- Bars -->
+  <rect x="25" y="130" width="10" height="50" rx="2" fill="#88d8b0"/>
+  <rect x="40" y="140" width="10" height="40" rx="2" fill="#2ecc71"/>
+  <rect x="55" y="145" width="10" height="35" rx="2" fill="#fd9853"/>
+  <rect x="70" y="120" width="10" height="60" rx="2" fill="#88d8b0"/>
+  <rect x="85" y="150" width="10" height="30" rx="2" fill="#2ecc71"/>
+  <rect x="100" y="135" width="10" height="45" rx="2" fill="#88d8b0"/>
+  <rect x="115" y="155" width="10" height="25" rx="2" fill="#fd9853"/>
+  <rect x="130" y="125" width="10" height="55" rx="2" fill="#2ecc71"/>
+  <rect x="145" y="110" width="10" height="70" rx="2" fill="#88d8b0"/>
+  <rect x="160" y="140" width="10" height="40" rx="2" fill="#2ecc71"/>
+
+  <rect x="200" y="80" width="180" height="110" rx="6" fill="#fff" stroke="#ddd" stroke-width="1"/>
+  <text x="290" y="98" text-anchor="middle" font-size="8" font-weight="bold" fill="#333">Distribución por tipo</text>
+  <!-- Doughnut -->
+  <circle cx="290" cy="147" r="35" fill="none" stroke="#88d8b0" stroke-width="12" stroke-dasharray="77 143"/>
+  <circle cx="290" cy="147" r="35" fill="none" stroke="#2ecc71" stroke-width="12" stroke-dasharray="55 165" stroke-dashoffset="-77"/>
+  <circle cx="290" cy="147" r="35" fill="none" stroke="#fd9853" stroke-width="12" stroke-dasharray="88 132" stroke-dashoffset="-132"/>
+  <text x="290" y="150" text-anchor="middle" font-size="11" font-weight="bold" fill="#333">47</text>
+</svg>
+<div class="fig-caption">Fig. 12 — Dashboard con métricas resumen, gráfico de actividad (barras apiladas por tipo) y distribución doughnut</div>
+</div>
+
+<h3>18.2 Filtros del Dashboard</h3>
+<p>El dashboard ofrece filtros dinámicos para segmentar los datos visualizados:</p>
+<ul>
+  <li><strong>Zona</strong>: código de zona RAPCA (ej: 23AJE, 14COR, 41SEV)</li>
+  <li><strong>Provincia</strong>: Jaén, Córdoba, Sevilla, Huelva, Cádiz, Málaga, Granada, Almería</li>
+  <li><strong>Municipio</strong>: poblado dinámicamente según registros existentes</li>
+  <li><strong>Espacio protegido</strong>: Parque Natural, ZEPA, LIC, etc.</li>
+  <li><strong>Operador</strong>: solo visible para administradores</li>
+</ul>
+
+<h3>18.3 Alertas</h3>
+<p>El dashboard genera alertas automáticas:</p>
+<ul>
+  <li>Unidades visitadas sin evaluación intensiva (solo VP/EL)</li>
+  <li>Registros con más de 7 días sin sincronizar</li>
+  <li>Fotos pendientes de subida</li>
+</ul>
+
+<!-- CAP 19 -->
+<h2 id="c19" class="page-break">19. Formulario VP — Visita Previa</h2>
+
+<h3>19.1 Propósito</h3>
+<p>La Visita Previa es el nivel más básico de evaluación. Se utiliza en la primera visita a una parcela o cuando se necesita una inspección visual rápida. Recoge observaciones generales y fotografías panorámicas.</p>
+
+<h3>19.2 Campos del Formulario</h3>
+<table class="field-table">
+  <tr><th>Campo</th><th>Tipo</th><th>Descripción</th><th>Requerido</th></tr>
+  <tr><td>Fecha</td><td>date</td><td>Auto-rellenado con fecha actual</td><td>Sí</td></tr>
+  <tr><td>Zona</td><td>text</td><td>Código de zona RAPCA (ej: 23AJE)</td><td>Sí</td></tr>
+  <tr><td>Unidad</td><td>text</td><td>Código de unidad (ej: 23AJE01)</td><td>Sí</td></tr>
+  <tr><td>Coordenadas</td><td>GPS auto</td><td>Lat/Lon capturadas automáticamente</td><td>Automático</td></tr>
+  <tr><td>Observaciones</td><td>textarea</td><td>Texto libre: estado de la parcela, accesos, presencia ganado</td><td>No</td></tr>
+  <tr><td>Fotografías generales</td><td>botón cámara</td><td>Fotos panorámicas con watermark → código: <code>UNIDAD_VP_G_NNN</code></td><td>No</td></tr>
+  <tr><td>Fotos comparativas W1</td><td>botón cámara</td><td>Foto en waypoint 1 → código: <code>UNIDAD_VP_W1_NNN</code></td><td>No</td></tr>
+  <tr><td>Fotos comparativas W2</td><td>botón cámara</td><td>Foto en waypoint 2 → código: <code>UNIDAD_VP_W2_NNN</code></td><td>No</td></tr>
+</table>
+
+<h3>19.3 Flujo de Trabajo</h3>
+<ol class="steps">
+  <li>Selecciona <strong>VP</strong> en la barra de navegación → el formulario se abre con fecha actual y GPS</li>
+  <li>Rellena Zona y Unidad (puedes escribir o seleccionar si ya existe)</li>
+  <li>Escribe observaciones sobre el estado general de la parcela</li>
+  <li>Pulsa <strong>"Foto General"</strong> → se abre la cámara con watermark configurado</li>
+  <li>Captura las fotos necesarias → se codifican automáticamente</li>
+  <li>Si es un punto de referencia, pulsa <strong>"Foto W1"</strong> o <strong>"Foto W2"</strong> → las coordenadas del waypoint se guardan permanentemente</li>
+  <li>Pulsa <strong>"Guardar"</strong> → el registro se almacena y se encola para sincronización</li>
+</ol>
+
+<div class="tip">Los borradores se guardan automáticamente cada 30 segundos. Si cierras la app accidentalmente, al volver encontrarás tus datos guardados.</div>
+
+<!-- CAP 20 -->
+<h2 id="c20" class="page-break">20. Formulario EL — Evaluación Ligera</h2>
+
+<h3>20.1 Propósito</h3>
+<p>La Evaluación Ligera mide el nivel de aprovechamiento pastoral de una parcela activa de la red. Se centra en indicadores cuantitativos rápidos que permiten evaluar si el pastoreo está cumpliendo su función de reducción de biomasa.</p>
+
+<h3>20.2 Indicadores de Pastoreo</h3>
+<p>Se evalúan <strong>3 puntos representativos</strong> de la parcela con los siguientes niveles:</p>
+<table>
+  <tr><th>Código</th><th>Nivel</th><th>Descripción</th></tr>
+  <tr><td><code>NP</code></td><td>No Pastoreado</td><td>Sin evidencia de pastoreo. Vegetación intacta, sin señales de ganado</td></tr>
+  <tr><td><code>PL</code></td><td>Pastoreo Ligero</td><td>Señales leves de pastoreo. Vegetación parcialmente consumida (&lt;30%)</td></tr>
+  <tr><td><code>PM</code></td><td>Pastoreo Medio</td><td>Pastoreo equilibrado. Vegetación consumida al 30-60%</td></tr>
+  <tr><td><code>PI</code></td><td>Pastoreo Intenso</td><td>Alto aprovechamiento. Vegetación consumida &gt;60%</td></tr>
+  <tr><td><code>PMI</code></td><td>Pastoreo Muy Intenso</td><td>Sobrepastoreo. Suelo expuesto, erosión visible</td></tr>
+</table>
+
+<h3>20.3 Observaciones de Presencia Ganadera</h3>
+<table>
+  <tr><th>Indicador</th><th>Clave</th><th>Niveles</th></tr>
+  <tr><td>Señal de paso</td><td><code>senal</code></td><td><strong>A</strong> (Alta), <strong>B</strong> (Baja), <strong>M</strong> (Media), <strong>N</strong> (Nula)</td></tr>
+  <tr><td>Veredas</td><td><code>veredas</code></td><td><strong>A</strong> (Abundantes), <strong>B</strong> (Bastantes), <strong>M</strong> (Moderadas), <strong>N</strong> (Ninguna)</td></tr>
+  <tr><td>Cagarrutas</td><td><code>cagarrutas</code></td><td><strong>A</strong> (Abundantes), <strong>B</strong> (Bastantes), <strong>M</strong> (Moderadas), <strong>N</strong> (Ninguna)</td></tr>
+</table>
+
+<h3>20.4 Fotos Comparativas con Ghost Image</h3>
+<p>Al capturar fotos en W1 o W2, la app busca automáticamente la última foto de ese waypoint/unidad y la superpone como imagen fantasma semi-transparente para replicar el encuadre exacto:</p>
+
+<div class="fig">
+<svg width="460" height="160" viewBox="0 0 460 160">
+  <!-- Frame 1: Ghost ON -->
+  <rect x="10" y="5" width="130" height="100" rx="4" fill="#333"/>
+  <rect x="15" y="10" width="120" height="80" rx="2" fill="#4a6741"/>
+  <text x="75" y="45" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.4)">Foto anterior</text>
+  <text x="75" y="57" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.4)">(ghost 40%)</text>
+  <rect x="50" y="65" width="50" height="15" rx="3" fill="rgba(0,229,255,0.3)" stroke="#00e5ff" stroke-width="0.5"/>
+  <text x="75" y="75" text-anchor="middle" font-size="6" fill="#00e5ff">Ghost ON</text>
+  <text x="75" y="120" text-anchor="middle" font-size="7" fill="#888">Vista en cámara con ghost</text>
+
+  <!-- Arrow -->
+  <text x="160" y="55" font-size="14" fill="#2e7d32">→</text>
+
+  <!-- Frame 2: Capture -->
+  <rect x="180" y="5" width="130" height="100" rx="4" fill="#333"/>
+  <rect x="185" y="10" width="120" height="80" rx="2" fill="#5a8751"/>
+  <text x="245" y="50" text-anchor="middle" font-size="8" fill="#fff">Foto nueva</text>
+  <text x="245" y="62" text-anchor="middle" font-size="8" fill="#fff">mismo encuadre</text>
+  <text x="245" y="120" text-anchor="middle" font-size="7" fill="#888">Captura alineada</text>
+
+  <!-- Arrow -->
+  <text x="330" y="55" font-size="14" fill="#2e7d32">→</text>
+
+  <!-- Frame 3: Result with watermark -->
+  <rect x="350" y="5" width="100" height="100" rx="4" fill="#5a8751"/>
+  <circle cx="368" cy="18" r="8" fill="rgba(0,0,0,0.3)" stroke="#fff" stroke-width="0.5"/>
+  <text x="368" y="16" text-anchor="middle" font-size="4" fill="#f00">N</text>
+  <rect x="355" y="75" width="30" height="25" rx="2" fill="#8bc34a" opacity="0.7"/>
+  <text x="428" y="95" text-anchor="end" font-size="5" fill="#ffd700" font-weight="bold">RAPCA EMA</text>
+  <text x="428" y="85" text-anchor="end" font-size="4" fill="#fff">23AJE01_EV_W1_003</text>
+  <text x="395" y="120" text-anchor="middle" font-size="7" fill="#888">Resultado con watermark</text>
+</svg>
+<div class="fig-caption">Fig. 13 — Flujo de captura con Ghost Image: ghost overlay → alinear encuadre → foto con watermark</div>
+</div>
+
+<div class="tip">Puedes ajustar la opacidad del ghost (0-100%) usando el control deslizante. También puedes activar/desactivar el ghost con el botón "Ghost ON/OFF".</div>
+
+<!-- CAP 21 -->
+<h2 id="c21" class="page-break">21. Formulario EI — Evaluación Intensiva</h2>
+
+<h3>21.1 Propósito</h3>
+<p>La Evaluación Intensiva es el nivel más detallado del protocolo RAPCA. Se realizan <strong>3 transectos de 25 metros</strong> (T1, T2, T3) en cada parcela, evaluando la composición vegetal, el nivel de pastoreo por especie, y la matorralización.</p>
+
+<h3>21.2 Estructura por Transecto</h3>
+
+<h4>a) Indicadores de Pastoreo (3 puntos)</h4>
+<p>Igual que en EL: 3 puntos con niveles NP/PL/PM/PI/PMI + observaciones de presencia ganadera.</p>
+
+<h4>b) Especies Vegetales (10 especies × 0-10 puntos)</h4>
+<p>Se identifican hasta 10 especies a lo largo del transecto de 25m. Cada especie se puntúa de 0 a 10 según presencia/cobertura. La app ofrece <strong>autocompletado</strong> con las 32 especies del catálogo RAPCA:</p>
+<pre><span class="cm">// app.js — Catálogo RAPCA de especies vegetales</span>
+<span class="kw">var</span> ESPECIES = [
+  <span class="str">'Arbutus unedo'</span>, <span class="str">'Asparagus acutifolius'</span>, <span class="str">'Chamaerops humilis'</span>,
+  <span class="str">'Cistus sp.'</span>, <span class="str">'Crataegus monogyna'</span>, <span class="str">'Cytisus sp.'</span>,
+  <span class="str">'Daphne gnidium'</span>, <span class="str">'Dittrichia viscosa'</span>, <span class="str">'Foeniculum vulgare'</span>,
+  <span class="str">'Genista sp.'</span>, <span class="str">'Halimium sp.'</span>, <span class="str">'Helichrysum stoechas'</span>,
+  <span class="str">'Juncus spp.'</span>, <span class="str">'Juniperus sp.'</span>, <span class="str">'Lavandula latifolia'</span>,
+  <span class="str">'Myrtus communis'</span>, <span class="str">'Olea europaea var. sylvestris'</span>,
+  <span class="str">'Phillyrea angustifolia'</span>, <span class="str">'Phlomis purpurea'</span>,
+  <span class="str">'Pistacia lentiscus'</span>, <span class="str">'Quercus coccifera'</span>, <span class="str">'Quercus ilex'</span>,
+  <span class="str">'Quercus sp.'</span>, <span class="str">'Retama sphaerocarpa'</span>, <span class="str">'Rhamnus sp.'</span>,
+  <span class="str">'Rosa sp.'</span>, <span class="str">'Rosmarinus officinalis'</span>, <span class="str">'Rubus ulmifolius'</span>,
+  <span class="str">'Salvia rosmarinus'</span>, <span class="str">'Spartium junceum'</span>, <span class="str">'Thymus sp.'</span>,
+  <span class="str">'Ulex sp.'</span>
+];</pre>
+
+<h4>c) Especies Palatables (3 × 0-15 puntos)</h4>
+<p>Se evalúan 3 especies palatables (preferidas por el ganado) con puntuación 0-15 para medir la intensidad del ramoneo selectivo.</p>
+
+<h4>d) Herbáceas (7 × 0-5 puntos)</h4>
+<p>Se evalúan 7 especies herbáceas (gramíneas, leguminosas, compuestas) con puntuación 0-5.</p>
+
+<h4>e) Matorral (2 puntos)</h4>
+<table>
+  <tr><th>Campo</th><th>Unidad</th><th>Rango</th><th>Descripción</th></tr>
+  <tr><td>Cobertura</td><td>%</td><td>0-100</td><td>Porcentaje de suelo cubierto por matorral</td></tr>
+  <tr><td>Altura</td><td>cm</td><td>0-500</td><td>Altura media del matorral</td></tr>
+  <tr><td>Especie dominante</td><td>texto</td><td>—</td><td>Con autocompletado del catálogo RAPCA</td></tr>
+</table>
+
+<h3>21.3 Fórmula de Volumen de Matorral</h3>
+<div class="highlight-box">
+  <strong>Cálculo automático del volumen de matorral (m³/ha):</strong>
+  <p style="font-size:16px;text-align:center;margin:12px 0">
+    <strong>V = (C̄ / 100) × (H̄ / 100) × 10.000</strong>
+  </p>
+  <p>Donde:</p>
+  <ul>
+    <li><strong>C̄</strong> = Media de cobertura entre punto 1 y punto 2 (%)</li>
+    <li><strong>H̄</strong> = Media de altura entre punto 1 y punto 2 (cm → m al dividir por 100)</li>
+    <li><strong>10.000</strong> = factor de conversión a m³ por hectárea</li>
+  </ul>
+  <pre><span class="cm">// forms.js — Cálculo del volumen</span>
+matorral.mediaCob = (punto1.cobertura + punto2.cobertura) / <span class="num">2</span>;
+matorral.mediaAlt = (punto1.altura + punto2.altura) / <span class="num">2</span>;
+matorral.volumen = ((mediaCob / <span class="num">100</span>) * (mediaAlt / <span class="num">100</span>) * <span class="num">10000</span>).toFixed(<span class="num">2</span>);</pre>
+  <p><strong>Ejemplo</strong>: Cob. P1=40%, P2=35%, Alt. P1=120cm, P2=95cm →<br>
+  V = (37.5/100) × (107.5/100) × 10000 = <strong>4031.25 m³/ha</strong></p>
+</div>
+
+<h3>21.4 Gestión de Transectos</h3>
+<p>Los transectos (T1, T2, T3) se manejan con pestañas en la interfaz:</p>
+<ol class="steps">
+  <li>Empieza en <strong>T1</strong>: rellena todos los datos del transecto</li>
+  <li>Pulsa <strong>"Guardar T1 e ir a T2"</strong> → datos T1 se guardan en memoria + borrador</li>
+  <li>Completa T2, luego T3 siguiendo el mismo proceso</li>
+  <li>Al guardar T3, la app <strong>calcula automáticamente las medias</strong> entre los 3 transectos</li>
+  <li>Se genera un registro EI completo con datos de T1+T2+T3 + medias</li>
+</ol>
+
+<div class="warning">No cierres la app mientras cambias entre transectos. Si necesitas interrumpir, el autoguardado cada 30 segundos habrá preservado tu trabajo en el borrador.</div>
+
+<!-- CAP 22 -->
+<h2 id="c22" class="page-break">22. Cámara: Captura Fotográfica</h2>
+
+<h3>22.1 Apertura de la Cámara</h3>
+<p>La cámara se abre de dos maneras:</p>
+<ul>
+  <li><strong>Desde un formulario</strong>: al pulsar "Foto General", "Foto W1" o "Foto W2" — se abren con el contexto del formulario (tipo, unidad, subtipo)</li>
+  <li><strong>Desde la barra de navegación</strong>: pulsar el icono de cámara 📷 — se abre en modo libre</li>
+</ul>
+
+<h3>22.2 Interfaz de la Cámara</h3>
+<div class="fig">
+<svg width="250" height="380" viewBox="0 0 250 380">
+  <!-- Phone frame -->
+  <rect x="5" y="5" width="240" height="370" rx="20" fill="#111" stroke="#333" stroke-width="2"/>
+  <!-- Screen -->
+  <rect x="12" y="30" width="226" height="320" fill="#3a5a30"/>
+  <!-- Viewfinder grid (rule of thirds) -->
+  <line x1="87" y1="30" x2="87" y2="350" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+  <line x1="163" y1="30" x2="163" y2="350" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+  <line x1="12" y1="137" x2="238" y2="137" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+  <line x1="12" y1="243" x2="238" y2="243" stroke="rgba(255,255,255,0.15)" stroke-width="0.5"/>
+  <!-- Top HUD -->
+  <rect x="12" y="30" width="226" height="30" fill="rgba(0,0,0,0.5)"/>
+  <text x="25" y="50" font-size="8" fill="#0f0">● GPS OK</text>
+  <text x="90" y="50" font-size="8" fill="#fff">37.7801, -3.7892</text>
+  <text x="200" y="50" font-size="8" fill="#00e5ff">NE 45°</text>
+  <!-- Compass rose mock -->
+  <circle cx="35" cy="85" r="18" fill="rgba(0,0,0,0.4)" stroke="rgba(255,255,255,0.4)" stroke-width="0.5"/>
+  <text x="35" y="79" text-anchor="middle" font-size="7" fill="#ff0000" font-weight="bold">N</text>
+  <text x="35" y="95" text-anchor="middle" font-size="6" fill="#fff">S</text>
+  <!-- Ghost overlay hint -->
+  <rect x="40" y="120" width="160" height="120" rx="4" fill="rgba(0,229,255,0.08)" stroke="rgba(0,229,255,0.3)" stroke-dasharray="4"/>
+  <text x="120" y="180" text-anchor="middle" font-size="9" fill="rgba(0,229,255,0.5)">Ghost image (40%)</text>
+  <!-- Bottom controls -->
+  <rect x="12" y="300" width="226" height="50" fill="rgba(0,0,0,0.6)"/>
+  <!-- Capture button -->
+  <circle cx="125" cy="325" r="20" fill="none" stroke="#fff" stroke-width="3"/>
+  <circle cx="125" cy="325" r="15" fill="#fff"/>
+  <!-- Ghost button -->
+  <rect x="30" y="310" width="40" height="16" rx="4" fill="rgba(0,229,255,0.3)" stroke="#00e5ff" stroke-width="0.5"/>
+  <text x="50" y="321" text-anchor="middle" font-size="5" fill="#00e5ff">Ghost</text>
+  <!-- Switch camera -->
+  <text x="200" y="328" text-anchor="middle" font-size="16" fill="#fff">🔄</text>
+  <!-- Photo code -->
+  <text x="125" y="360" text-anchor="middle" font-size="8" fill="#ffd700" font-weight="bold">23AJE01_EV_W1_003</text>
+</svg>
+<div class="fig-caption">Fig. 14 — Interfaz de cámara: HUD superior (GPS/brújula), rosa de vientos, zona ghost, botón captura, código de foto</div>
+</div>
+
+<h3>22.3 Sistema de Códigos Fotográficos</h3>
+<p>Cada foto recibe un código único automático con el formato:</p>
+<pre><span class="str">[UNIDAD]_[TIPO]_[SUBTIPO]_[NNN]</span>
+
+Ejemplos:
+  <span class="str">23AJE01_VP_G_001</span>    → Visita Previa, foto General nº 1
+  <span class="str">23AJE01_EV_W1_003</span>   → Evaluación (EL/EI), Waypoint 1, foto nº 3
+  <span class="str">23AJE01_EV_W2_001</span>   → Evaluación, Waypoint 2, foto nº 1
+  <span class="str">23AJE01_EV_G_005</span>    → Evaluación, General, foto nº 5</pre>
+<p>El sistema consulta tanto los contadores locales como los del servidor para evitar colisiones de numeración.</p>
+
+<h3>22.4 Anotaciones sobre Foto</h3>
+<p>Después de capturar una foto, puedes añadir <strong>marcadores numerados</strong>:</p>
+<ul>
+  <li>Pulsa <strong>"+ Anotación"</strong> → aparece un marcador circular numerado</li>
+  <li>Arrastra el marcador a la posición deseada sobre la foto</li>
+  <li>Escribe el texto descriptivo (ej: "Erosión por escorrentía", "Majadal")</li>
+  <li>Puedes redimensionar el marcador pellizcando</li>
+  <li>Las anotaciones se renderizan permanentemente en la imagen final</li>
+</ul>
+
+<!-- CAP 23 -->
+<h2 id="c23" class="page-break">23. Mapa Interactivo</h2>
+
+<h3>23.1 Capas Base Disponibles</h3>
+<table>
+  <tr><th>Capa</th><th>Fuente</th><th>Uso</th></tr>
+  <tr><td>OpenStreetMap</td><td>OSM</td><td>Cartografía general (por defecto)</td></tr>
+  <tr><td>PNOA Ortofoto</td><td>IGN España</td><td>Imagen aérea de alta resolución</td></tr>
+  <tr><td>Topográfico</td><td>OpenTopoMap</td><td>Mapa con curvas de nivel</td></tr>
+</table>
+
+<h3>23.2 Capas de Datos</h3>
+<ul>
+  <li><strong>Registros geolocalizados</strong>: marcadores con clustering por proximidad. Color: <span class="badge badge-vp">VP</span> <span class="badge badge-el">EL</span> <span class="badge badge-ei">EI</span></li>
+  <li><strong>Waypoints persistentes</strong>: puntos W1/W2 con historial de capturas, visibles permanentemente</li>
+  <li><strong>Infraestructuras KML</strong>: marcadores 🌳 importados desde KML/KMZ</li>
+  <li><strong>Capas KML/KMZ personalizadas</strong>: cualquier archivo KML importable</li>
+  <li><strong>Tracks GPX</strong>: rutas GPS importadas</li>
+  <li><strong>Capas WMS</strong>: servicios web de mapas configurables por URL (SIGPAC, DERA, catastro)</li>
+</ul>
+
+<h3>23.3 Herramientas del Mapa</h3>
+
+<h4>Medición de Distancias</h4>
+<ol class="steps">
+  <li>Activa el modo medición pulsando el icono de regla 📏</li>
+  <li>Pulsa en el mapa para el punto de inicio → aparece un marcador</li>
+  <li>Pulsa en el punto final → se dibuja una línea con la distancia en metros</li>
+  <li>Puedes añadir puntos intermedios para medir rutas</li>
+  <li>Pulsa "Limpiar" para borrar la medición</li>
+</ol>
+
+<h4>Búsqueda Unificada</h4>
+<p>El buscador del mapa busca simultáneamente en:</p>
+<ul>
+  <li>Registros de campo (por unidad, zona, fecha)</li>
+  <li>Infraestructuras KML (por nombre, atributos)</li>
+  <li>Waypoints persistentes (por código)</li>
+</ul>
+
+<h4>Importar Capas</h4>
+<ol class="steps">
+  <li>Pulsa <strong>"Importar KML/KMZ"</strong> → selecciona archivo</li>
+  <li>La capa se renderiza sobre el mapa y se guarda en IndexedDB para uso offline</li>
+  <li>Para WMS: pulsa <strong>"Añadir WMS"</strong> → introduce URL del servicio → selecciona capa</li>
+</ol>
+
+<h4>Exportar Mapa a PDF</h4>
+<p>Pulsa <strong>"Exportar PDF"</strong> → se genera un documento PDF con las capas visibles, leyenda y escala.</p>
+
+<!-- CAP 24 -->
+<h2 id="c24" class="page-break">24. Panel de Registros y Exportación</h2>
+
+<h3>24.1 Vista de Registros</h3>
+<p>El panel muestra todos los registros de campo en formato de tabla con:</p>
+<ul>
+  <li>Fecha, tipo (VP/EL/EI), zona, unidad, transecto</li>
+  <li>Estado de sincronización: ✓ sincronizado, ↻ pendiente, ✗ error</li>
+  <li>Acciones: ver detalle, editar, duplicar, eliminar, exportar individual</li>
+  <li>Filtros por tipo, zona, fecha, estado de sincronización</li>
+  <li>Ordenación por cualquier columna</li>
+</ul>
+
+<h3>24.2 Formatos de Exportación (8 formatos)</h3>
+<table>
+  <tr><th>Formato</th><th>Extensión</th><th>Contenido</th><th>Software Destino</th></tr>
+  <tr><td><strong>PDF</strong></td><td>.pdf</td><td>Registro completo con fotos incrustadas, datos pastoreo, matorral</td><td>Adobe Reader, impresión</td></tr>
+  <tr><td><strong>Excel</strong></td><td>.xlsx</td><td>Datos estructurados en columnas (SheetJS)</td><td>Excel, LibreOffice, Google Sheets</td></tr>
+  <tr><td><strong>CSV</strong></td><td>.csv</td><td>Texto plano separado por comas</td><td>R, Python, SPSS, cualquier software</td></tr>
+  <tr><td><strong>ZIP Fotos</strong></td><td>.zip</td><td>Paquete con todas las fotos en JPEG</td><td>Archivo, compartición</td></tr>
+  <tr><td><strong>Shapefile</strong></td><td>.zip (.shp+.shx+.dbf)</td><td>Puntos georreferenciados + atributos</td><td>QGIS, ArcGIS, gvSIG</td></tr>
+  <tr><td><strong>KML</strong></td><td>.kml</td><td>Puntos con descripción para Google Earth</td><td>Google Earth, visores OGC</td></tr>
+  <tr><td><strong>Informe HTML</strong></td><td>.html</td><td>Informe de zona con estadísticas agregadas</td><td>Navegador web, impresión</td></tr>
+  <tr><td><strong>Informe Infraestructura</strong></td><td>.html</td><td>Informe por infraestructura con fotos</td><td>Navegador web, impresión</td></tr>
+</table>
+
+<h3>24.3 Exportar Registros</h3>
+<ol class="steps">
+  <li>Filtra los registros que quieres exportar (tipo, zona, fecha)</li>
+  <li>Selecciona registros individuales con checkbox, o usa "Seleccionar todos"</li>
+  <li>Pulsa el botón del formato deseado → la exportación se genera inmediatamente en el navegador</li>
+  <li>El archivo se descarga automáticamente al dispositivo</li>
+</ol>
+
+<div class="tip">Para generar Shapefiles, la app realiza todas las operaciones binarias (SHP + SHX + DBF) directamente en el navegador. No necesitas conexión a Internet ni software GIS instalado.</div>
+
+<!-- CAP 25 -->
+<h2 id="c25">25. Historial (Timeline)</h2>
+<p>La página Timeline muestra un historial cronológico de todos los registros, con tarjetas visuales que incluyen:</p>
+<ul>
+  <li>Badge de tipo (VP/EL/EI) codificado por color</li>
+  <li>Fecha, zona, unidad, operador</li>
+  <li>Miniatura de la primera foto (si existe)</li>
+  <li>Estado de sincronización</li>
+  <li>Acceso rápido a ver detalle, editar o localizar en el mapa</li>
+</ul>
+
+<!-- CAP 26 -->
+<h2 id="c26" class="page-break">26. Comparador Temporal de Fotografías</h2>
+
+<h3>26.1 Propósito</h3>
+<p>Evaluar visualmente la evolución del pastoreo comparando fotos del <strong>mismo waypoint</strong> tomadas en <strong>fechas diferentes</strong>.</p>
+
+<h3>26.2 Flujo de Uso</h3>
+<ol class="steps">
+  <li>Selecciona <strong>Unidad</strong> → se cargan los waypoints disponibles (W1/W2)</li>
+  <li>Selecciona <strong>Waypoint</strong> → se muestran las fechas con fotos disponibles</li>
+  <li>Selecciona <strong>Fecha A</strong> (antes) y <strong>Fecha B</strong> (después)</li>
+  <li>Las dos fotos se muestran con el modo de comparación elegido</li>
+</ol>
+
+<h3>26.3 Modos de Comparación</h3>
+<div class="fig">
+<svg width="480" height="130" viewBox="0 0 480 130">
+  <!-- Slider mode -->
+  <rect x="10" y="10" width="200" height="100" rx="6" fill="#f5f5f0" stroke="#ddd"/>
+  <rect x="15" y="15" width="95" height="90" fill="#6a9f5a"/>
+  <text x="62" y="55" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.8)">Marzo 2025</text>
+  <rect x="110" y="15" width="95" height="90" fill="#8fbc7a"/>
+  <text x="157" y="55" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.8)">Marzo 2026</text>
+  <rect x="107" y="15" width="6" height="90" fill="#fff" stroke="#1a3d2e"/>
+  <circle cx="110" cy="60" r="8" fill="#1a3d2e"/>
+  <text x="110" y="63" text-anchor="middle" font-size="7" fill="#fff">⇔</text>
+  <text x="110" y="125" text-anchor="middle" font-size="8" fill="#888">Modo Slider (deslizador)</text>
+
+  <!-- Side by side mode -->
+  <rect x="250" y="10" width="200" height="100" rx="6" fill="#f5f5f0" stroke="#ddd"/>
+  <rect x="255" y="15" width="93" height="90" fill="#6a9f5a"/>
+  <text x="301" y="35" text-anchor="middle" font-size="7" fill="#fff" font-weight="bold">ANTES</text>
+  <text x="301" y="55" text-anchor="middle" font-size="7" fill="rgba(255,255,255,0.8)">Marzo 2025</text>
+  <rect x="352" y="15" width="93" height="90" fill="#8fbc7a"/>
+  <text x="398" y="35" text-anchor="middle" font-size="7" fill="#fff" font-weight="bold">DESPUÉS</text>
+  <text x="398" y="55" text-anchor="middle" font-size="7" fill="rgba(255,255,255,0.8)">Marzo 2026</text>
+  <text x="350" y="125" text-anchor="middle" font-size="8" fill="#888">Modo Lado a Lado</text>
+</svg>
+<div class="fig-caption">Fig. 15 — Modos de comparación: slider horizontal con deslizador vs. lado a lado</div>
+</div>
+
+<!-- CAP 27 -->
+<h2 id="c27">27. Galería Multimedia</h2>
+
+<h3>27.1 Pestañas</h3>
+<table>
+  <tr><th>Pestaña</th><th>Contenido</th><th>Fuente</th></tr>
+  <tr><td><strong>Todas</strong></td><td>Todas las fotos capturadas</td><td>IndexedDB: fotos</td></tr>
+  <tr><td><strong>Comparativas</strong></td><td>Solo fotos de waypoints W1/W2</td><td>Filtrado por subtipo</td></tr>
+  <tr><td><strong>Pre-cargadas</strong></td><td>Fotos descargadas del servidor para uso offline</td><td>IndexedDB: fotos_precargadas</td></tr>
+</table>
+
+<h3>27.2 Funcionalidades</h3>
+<ul>
+  <li><strong>Filtros</strong>: por unidad, tipo (VP/EL/EI), fecha, subtipo (G/W1/W2)</li>
+  <li><strong>Lightbox</strong>: visualización a pantalla completa con zoom pellizcar</li>
+  <li><strong>Selección múltiple</strong>: checkbox para seleccionar varias fotos</li>
+  <li><strong>Descarga ZIP</strong>: paquete de fotos seleccionadas como archivo ZIP</li>
+  <li><strong>Cadena de carga</strong>: IndexedDB local → Servidor → Cloudinary CDN</li>
+</ul>
+
+<!-- CAP 28 -->
+<h2 id="c28">28. Precarga Offline</h2>
+<p>Antes de ir al campo, los operadores pueden <strong>precargar fotos</strong> para trabajo offline:</p>
+<ol class="steps">
+  <li>En la sección <strong>Precarga</strong>, selecciona zona y/o unidad</li>
+  <li>Pulsa <strong>"Descargar fotos"</strong> → se descargan las fotos del servidor a IndexedDB</li>
+  <li>Las fotos quedan disponibles sin conexión en la galería, el comparador y el ghost image</li>
+  <li>Indicador de progreso muestra el avance de la descarga</li>
+</ol>
+
+<div class="tip">Realiza la precarga en una zona con buena conexión WiFi antes de salir al campo. Las fotos pueden ocupar bastante espacio, pero IndexedDB permite gigabytes de almacenamiento.</div>
+
+<!-- CAP 29 -->
+<h2 id="c29" class="page-break">29. Gabinete: Informes y Estadísticas</h2>
+
+<h3>29.1 Informe de Zona</h3>
+<p>El módulo de Gabinete genera informes HTML completos por zona con:</p>
+<ul>
+  <li>Resumen de registros (VP/EL/EI) por zona/unidad</li>
+  <li>Estadísticas de pastoreo: distribución de niveles NP/PL/PM/PI/PMI</li>
+  <li>Indicadores de presencia ganadera: señal, veredas, cagarrutas</li>
+  <li>Datos de matorralización: cobertura media, altura media, volumen medio por unidad</li>
+  <li>Fotografías comparativas del periodo seleccionado</li>
+</ul>
+
+<h3>29.2 Informe por Infraestructura</h3>
+<p>Genera un informe HTML por infraestructura ganadera con:</p>
+<ul>
+  <li>Datos de la infraestructura (nombre, tipo, superficie, ganadero asociado)</li>
+  <li>Registros de evaluación vinculados por campo de enlace</li>
+  <li>Fotografías comparativas dispuestas en 2 columnas por fila</li>
+  <li>Fotografías generales en 3 columnas por fila</li>
+  <li>Mapa de ubicación con miniatura de ortofoto</li>
+</ul>
+
+<!-- CAP 30 -->
+<h2 id="c30">30. Infraestructuras</h2>
+
+<h3>30.1 Gestión de Infraestructuras</h3>
+<p>Las infraestructuras representan los elementos físicos de la red: parcelas, cercados, vallados, abrevaderos, corraletas, etc.</p>
+
+<h3>30.2 Importación desde Excel</h3>
+<ol class="steps">
+  <li>Prepara un archivo Excel con los datos de infraestructuras (nombre, tipo, coordenadas, superficie, etc.)</li>
+  <li>Pulsa <strong>"Importar Excel"</strong> → selecciona el archivo</li>
+  <li>La app lee las cabeceras del Excel y <strong>propone automáticamente</strong> el mapeo de columnas</li>
+  <li>Revisa y ajusta las asociaciones si es necesario → pulsa <strong>"Importar"</strong></li>
+  <li>Los datos se cargan en localStorage y aparecen en la tabla de infraestructuras</li>
+</ol>
+
+<div class="tip">El auto-matching usa comparación difusa (tipo Levenshtein) para proponer las mejores coincidencias entre columnas del Excel y campos del sistema. La mayoría de veces acertará sin necesidad de ajustar nada.</div>
+
+<h3>30.3 Importación KML de Infraestructuras</h3>
+<ol class="steps">
+  <li>Pulsa <strong>"Importar KML infraestructuras"</strong> → selecciona archivo KML/KMZ</li>
+  <li>La app parsea los Placemarks y extrae los ExtendedData</li>
+  <li>Selecciona el campo que se usará como nombre visible del marcador</li>
+  <li>Los marcadores aparecen en el mapa con iconos 🌳 y búsqueda interactiva</li>
+  <li>Se guardan en IndexedDB para persistencia offline</li>
+</ol>
+
+<!-- CAP 31 -->
+<h2 id="c31">31. Ganaderos</h2>
+<p>El módulo de ganaderos permite gestionar la información de los titulares de explotaciones ganaderas vinculados a la red:</p>
+<ul>
+  <li>Nombre, DNI/NIF, teléfono, email, dirección</li>
+  <li>Tipo de ganado (ovino, caprino, vacuno, mixto)</li>
+  <li>Número de cabezas UGM</li>
+  <li>Parcelas/infraestructuras asignadas</li>
+  <li>Campos personalizados configurables por el administrador</li>
+</ul>
+
+<!-- CAP 32 -->
+<h2 id="c32" class="page-break">32. Sincronización de Datos</h2>
+
+<h3>32.1 Sincronización Automática</h3>
+<p>La sincronización se dispara automáticamente cuando se detecta conexión a Internet:</p>
+<ul>
+  <li>Evento <code>online</code> del navegador</li>
+  <li>Polling cada 30 segundos</li>
+  <li>Background Sync API (cuando está disponible)</li>
+</ul>
+
+<h3>32.2 Sincronización Manual</h3>
+<p>Pulsa el indicador de pendientes en la cabecera para forzar la sincronización de todos los registros y fotos pendientes.</p>
+
+<h3>32.3 Estados de Sincronización</h3>
+<table>
+  <tr><th>Estado</th><th>Indicador</th><th>Significado</th></tr>
+  <tr><td><code>pendiente</code></td><td>⏳</td><td>Registro guardado localmente, esperando conexión</td></tr>
+  <tr><td><code>sincronizando</code></td><td>↻</td><td>Envío en progreso al servidor</td></tr>
+  <tr><td><code>sincronizado</code></td><td>✓ verde</td><td>Datos confirmados en el servidor</td></tr>
+  <tr><td><code>error</code></td><td>✗ rojo</td><td>Fallo en el envío, se reintentará automáticamente</td></tr>
+</table>
+
+<h3>32.4 Flujo Técnico Detallado</h3>
+<div class="fig">
+<svg width="520" height="250" viewBox="0 0 520 250">
+  <defs><marker id="arr8" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#1a3d2e"/></marker></defs>
+
+  <rect x="10" y="10" width="100" height="35" rx="6" fill="#e8f5e9" stroke="#2e7d32"/>
+  <text x="60" y="27" text-anchor="middle" font-size="8" font-weight="bold">Guardar registro</text>
+  <text x="60" y="38" text-anchor="middle" font-size="6" fill="#555">localStorage</text>
+  <line x1="110" y1="27" x2="140" y2="27" stroke="#1a3d2e" stroke-width="1" marker-end="url(#arr8)"/>
+
+  <rect x="143" y="10" width="80" height="35" rx="6" fill="#e3f2fd" stroke="#1565c0"/>
+  <text x="183" y="27" text-anchor="middle" font-size="8" font-weight="bold">¿Online?</text>
+  <!-- Yes -->
+  <line x1="223" y1="27" x2="255" y2="27" stroke="#2e7d32" stroke-width="1" marker-end="url(#arr8)"/>
+  <text x="239" y="22" font-size="6" fill="#2e7d32">Sí</text>
+  <!-- No -->
+  <line x1="183" y1="45" x2="183" y2="75" stroke="#e65100" stroke-width="1" marker-end="url(#arr8)"/>
+  <text x="195" y="63" font-size="6" fill="#e65100">No</text>
+
+  <!-- Online path -->
+  <rect x="258" y="10" width="100" height="35" rx="6" fill="#e8f5e9" stroke="#2e7d32"/>
+  <text x="308" y="24" text-anchor="middle" font-size="7" font-weight="bold">POST datos.php</text>
+  <text x="308" y="36" text-anchor="middle" font-size="6" fill="#555">JWT + JSON</text>
+  <line x1="358" y1="27" x2="390" y2="27" stroke="#1a3d2e" stroke-width="1" marker-end="url(#arr8)"/>
+
+  <rect x="393" y="5" width="60" height="22" rx="6" fill="#e8f5e9" stroke="#2e7d32"/>
+  <text x="423" y="19" text-anchor="middle" font-size="7" font-weight="bold" fill="#2e7d32">OK ✓</text>
+
+  <rect x="393" y="32" width="100" height="22" rx="6" fill="#fff3e0" stroke="#e65100"/>
+  <text x="443" y="46" text-anchor="middle" font-size="7" font-weight="bold" fill="#e65100">Error → Retry 2^n s</text>
+  <line x1="358" y1="35" x2="390" y2="42" stroke="#e65100" stroke-width="1" marker-end="url(#arr8)"/>
+
+  <!-- Offline path -->
+  <rect x="113" y="78" width="140" height="35" rx="6" fill="#fff3e0" stroke="#e65100"/>
+  <text x="183" y="92" text-anchor="middle" font-size="7" font-weight="bold" fill="#e65100">Cola de espera (pendiente)</text>
+  <text x="183" y="104" text-anchor="middle" font-size="6" fill="#555">subidas_pendientes (IndexedDB)</text>
+  <line x1="183" y1="113" x2="183" y2="138" stroke="#1a3d2e" stroke-width="1" marker-end="url(#arr8)"/>
+
+  <rect x="113" y="141" width="140" height="35" rx="6" fill="#e3f2fd" stroke="#1565c0"/>
+  <text x="183" y="155" text-anchor="middle" font-size="7" font-weight="bold">Detectar reconexión</text>
+  <text x="183" y="167" text-anchor="middle" font-size="6" fill="#555">online event / polling 30s</text>
+  <line x1="253" y1="158" x2="285" y2="158" stroke="#1a3d2e" stroke-width="1" marker-end="url(#arr8)"/>
+
+  <rect x="288" y="141" width="100" height="35" rx="6" fill="#e8f5e9" stroke="#2e7d32"/>
+  <text x="338" y="155" text-anchor="middle" font-size="7" font-weight="bold">Enviar todo</text>
+  <text x="338" y="167" text-anchor="middle" font-size="6" fill="#555">PHP→Forms→Cloudinary</text>
+  <line x1="388" y1="158" x2="420" y2="158" stroke="#1a3d2e" stroke-width="1" marker-end="url(#arr8)"/>
+
+  <rect x="423" y="141" width="70" height="35" rx="6" fill="#e8f5e9" stroke="#2e7d32"/>
+  <text x="458" y="155" text-anchor="middle" font-size="7" font-weight="bold" fill="#2e7d32">✓ Sync</text>
+  <text x="458" y="167" text-anchor="middle" font-size="6" fill="#555">Limpiar cola</text>
+</svg>
+<div class="fig-caption">Fig. 16 — Flujo completo de sincronización con ruta online y offline</div>
+</div>
+
+<!-- CAP 33 -->
+<h2 id="c33">33. Uso Offline Completo</h2>
+
+<h3>33.1 ¿Qué Funciona Sin Conexión?</h3>
+<table>
+  <tr><th>Funcionalidad</th><th>Offline</th><th>Nota</th></tr>
+  <tr><td>Abrir la app</td><td>✓</td><td>Service Worker sirve desde caché</td></tr>
+  <tr><td>Login</td><td>✓</td><td>Con credenciales previamente guardadas</td></tr>
+  <tr><td>Formularios VP/EL/EI</td><td>✓</td><td>Datos en localStorage</td></tr>
+  <tr><td>Cámara + Watermark</td><td>✓</td><td>Fotos en IndexedDB</td></tr>
+  <tr><td>GPS y coordenadas</td><td>✓</td><td>Módulo GPS del dispositivo</td></tr>
+  <tr><td>Brújula</td><td>✓</td><td>Magnetómetro del dispositivo</td></tr>
+  <tr><td>Mapa (capas base)</td><td>Parcial</td><td>Solo tiles previamente visitados (caché navegador)</td></tr>
+  <tr><td>KML/GPX importados</td><td>✓</td><td>Guardados en IndexedDB</td></tr>
+  <tr><td>Dashboard / estadísticas</td><td>✓</td><td>Datos locales</td></tr>
+  <tr><td>Exportar PDF/Excel/SHP</td><td>✓</td><td>Se generan en el navegador</td></tr>
+  <tr><td>Galería (fotos locales)</td><td>✓</td><td>IndexedDB fotos</td></tr>
+  <tr><td>Comparador (fotos precargadas)</td><td>✓</td><td>Si se precargaron antes</td></tr>
+  <tr><td>Ghost image</td><td>✓</td><td>Busca en IndexedDB local</td></tr>
+  <tr><td>Geocodificación inversa</td><td>✗</td><td>Requiere Nominatim (Internet)</td></tr>
+  <tr><td>Sincronización</td><td>✗ (encolada)</td><td>Se encola y envía al reconectar</td></tr>
+  <tr><td>Mini-mapa en watermark</td><td>Parcial</td><td>Solo si los tiles están en caché</td></tr>
+</table>
+
+<div class="warning">Antes de ir al campo, asegúrate de: (1) haber abierto la app al menos una vez con conexión, (2) precargar fotos si necesitas el comparador offline, (3) navegar por la zona del mapa donde trabajarás para que los tiles queden en caché.</div>
+
+<!-- ========================================================== -->
+<!-- PARTE III — MANUAL DE ADMINISTRADOR -->
+<!-- ========================================================== -->
+
+<!-- CAP 34 -->
+<h2 id="c34" class="page-break">34. Gestión de Usuarios</h2>
+
+<h3>34.1 Acceso al Panel de Administración</h3>
+<p>Solo los usuarios con <code>rol: 'admin'</code> ven el botón ⚙️ <strong>Admin</strong> en la barra de navegación.</p>
+
+<h3>34.2 Crear Usuario</h3>
+<ol class="steps">
+  <li>Accede a <strong>Admin → Usuarios</strong></li>
+  <li>Pulsa <strong>"Nuevo usuario"</strong></li>
+  <li>Rellena: nombre, email, contraseña, rol (operador/admin)</li>
+  <li>Pulsa <strong>"Crear"</strong> → el usuario se envía al servidor (<code>auth.php</code> con acción <code>crear_usuario</code>)</li>
+  <li>La contraseña se almacena con hash <code>bcrypt</code> en el servidor</li>
+</ol>
+
+<h3>34.3 Gestionar Usuarios</h3>
+<ul>
+  <li><strong>Activar/Desactivar</strong>: usuario desactivado no puede iniciar sesión</li>
+  <li><strong>Cambiar rol</strong>: promover operador a admin o viceversa</li>
+  <li><strong>Restablecer contraseña</strong>: genera nueva contraseña</li>
+</ul>
+
+<!-- CAP 35 -->
+<h2 id="c35" class="page-break">35. Configuración de Marca de Agua (Watermark)</h2>
+
+<h3>35.1 Opciones Configurables</h3>
+<p>El administrador puede configurar todos los elementos del watermark sin modificar código:</p>
+
+<table class="field-table">
+  <tr><th>Opción</th><th>Valores</th><th>Por defecto</th></tr>
+  <tr><td>Mostrar RAPCA EMA</td><td>Sí / No</td><td>Sí</td></tr>
+  <tr><td>Mostrar código de foto</td><td>Sí / No</td><td>Sí</td></tr>
+  <tr><td>Mostrar fecha/hora</td><td>Sí / No</td><td>Sí</td></tr>
+  <tr><td>Mostrar coordenadas</td><td>Sí / No</td><td>Sí</td></tr>
+  <tr><td>Formato coordenadas</td><td>UTM / Geográficas (lat,lon)</td><td>UTM</td></tr>
+  <tr><td>Mostrar orientación</td><td>Sí / No</td><td>Sí</td></tr>
+  <tr><td>Mostrar municipio</td><td>Sí / No</td><td>Sí</td></tr>
+  <tr><td>Mostrar brújula</td><td>Sí / No</td><td>Sí</td></tr>
+  <tr><td>Tipo de mini-mapa</td><td>Topográfico / Ortofoto / Ninguno</td><td>Topográfico</td></tr>
+  <tr><td>Factor de texto</td><td>0.5 - 2.0</td><td>1.0</td></tr>
+</table>
+
+<h3>35.2 Dónde se Almacena</h3>
+<pre><span class="cm">// localStorage: rapca_watermark_config</span>
+{
+  <span class="str">"mostrarRapca"</span>: <span class="kw">true</span>,
+  <span class="str">"mostrarCodigo"</span>: <span class="kw">true</span>,
+  <span class="str">"mostrarFecha"</span>: <span class="kw">true</span>,
+  <span class="str">"mostrarCoords"</span>: <span class="kw">true</span>,
+  <span class="str">"formatoCoords"</span>: <span class="str">"utm"</span>,
+  <span class="str">"mostrarOrientacion"</span>: <span class="kw">true</span>,
+  <span class="str">"mostrarMunicipio"</span>: <span class="kw">true</span>,
+  <span class="str">"mostrarBrujula"</span>: <span class="kw">true</span>,
+  <span class="str">"tipoMiniMapa"</span>: <span class="str">"topografico"</span>,
+  <span class="str">"factorTexto"</span>: <span class="num">1.0</span>
+}</pre>
+
+<!-- CAP 36 -->
+<h2 id="c36">36. Campos Personalizados</h2>
+
+<h3>36.1 Campos para Infraestructuras</h3>
+<p>El administrador puede crear campos adicionales para infraestructuras:</p>
+<ol class="steps">
+  <li>Accede a <strong>Admin → Campos personalizados → Infraestructuras</strong></li>
+  <li>Pulsa <strong>"Nuevo campo"</strong></li>
+  <li>Define: nombre del campo, tipo (texto/número/fecha/select), opciones (para select)</li>
+  <li>El campo aparece automáticamente en formularios de infraestructuras, tablas, exportaciones e informes</li>
+</ol>
+
+<h3>36.2 Campos para Ganaderos</h3>
+<p>Mismo proceso para añadir campos personalizados a la ficha de ganaderos.</p>
+
+<h3>36.3 Almacenamiento Técnico</h3>
+<pre><span class="cm">// localStorage: rapca_campos_infra</span>
+[
+  {<span class="str">"nombre"</span>: <span class="str">"Superficie ha"</span>, <span class="str">"tipo"</span>: <span class="str">"number"</span>},
+  {<span class="str">"nombre"</span>: <span class="str">"Tipo cercado"</span>, <span class="str">"tipo"</span>: <span class="str">"select"</span>,
+   <span class="str">"opciones"</span>: [<span class="str">"Alambre"</span>, <span class="str">"Pastor eléctrico"</span>, <span class="str">"Piedra"</span>, <span class="str">"Mixto"</span>]},
+  {<span class="str">"nombre"</span>: <span class="str">"Fecha alta"</span>, <span class="str">"tipo"</span>: <span class="str">"date"</span>}
+]</pre>
+
+<!-- CAP 37 -->
+<h2 id="c37" class="page-break">37. Herramientas de Datos</h2>
+
+<h3>37.1 Borrar Registros Locales</h3>
+<p>Disponible en Admin → requiere escribir la palabra "BORRAR" para confirmar. Elimina registros de localStorage pero NO del servidor.</p>
+
+<h3>37.2 Borrar Fotos Locales</h3>
+<p>Limpia los stores de IndexedDB (<code>fotos</code>, <code>subidas_pendientes</code>, <code>fotos_precargadas</code>). Útil para liberar espacio de almacenamiento.</p>
+
+<h3>37.3 Forzar Actualización</h3>
+<p>Desregistra el Service Worker actual y fuerza la descarga de una versión nueva. Útil si hay problemas de caché.</p>
+
+<div class="warning">Antes de borrar datos locales, asegúrate de que todos los registros estén sincronizados (✓) con el servidor. Los datos no sincronizados se perderán.</div>
+
+<!-- CAP 38 -->
+<h2 id="c38">38. Despliegue y Build de Producción</h2>
+
+<h3>38.1 Estructura del Proyecto</h3>
+<pre>RAPCA-Campo/
+├── index.html          <span class="cm"># SPA shell (HTML + CSS)</span>
+├── manifest.json       <span class="cm"># PWA manifest (nombre, iconos, display)</span>
+├── sw.js               <span class="cm"># Service Worker (estrategias caché)</span>
+├── js/
+│   ├── app.js          <span class="cm"># Core: DB, utils, UTM, globals (654L)</span>
+│   ├── auth.js         <span class="cm"># Autenticación JWT + offline (197L)</span>
+│   ├── forms.js        <span class="cm"># Formularios VP/EL/EI (771L)</span>
+│   ├── camera.js       <span class="cm"># Cámara + watermark + ghost (1084L)</span>
+│   ├── map.js          <span class="cm"># GIS: Leaflet, KML, WMS (1248L)</span>
+│   ├── panel.js        <span class="cm"># Registros + exportación + SHP (1573L)</span>
+│   ├── sync.js         <span class="cm"># Sincronización triple (547L)</span>
+│   ├── dashboard.js    <span class="cm"># Chart.js dashboard (169L)</span>
+│   ├── timeline.js     <span class="cm"># Historial cronológico (129L)</span>
+│   ├── comparador.js   <span class="cm"># Comparador temporal fotos (293L)</span>
+│   ├── galeria.js      <span class="cm"># Galería multimedia (283L)</span>
+│   ├── gabinete.js     <span class="cm"># Informes y estadísticas (552L)</span>
+│   ├── admin.js        <span class="cm"># Panel administración (423L)</span>
+│   └── precarga.js     <span class="cm"># Precarga offline (377L)</span>
+├── icons/              <span class="cm"># Iconos PWA (72-512px)</span>
+├── docs/               <span class="cm"># Documentación técnica</span>
+└── build.sh            <span class="cm"># Script de build (concat + minify)</span></pre>
+
+<h3>38.2 Build de Producción</h3>
+<pre><span class="cm"># build.sh — Concat + Minify con terser</span>
+<span class="cm"># 1. Concatenar 14 JS en orden de dependencia</span>
+cat js/app.js js/auth.js js/forms.js js/camera.js js/map.js \
+    js/panel.js js/sync.js js/dashboard.js js/timeline.js \
+    js/comparador.js js/galeria.js js/gabinete.js js/admin.js \
+    js/precarga.js > dist/rapca-bundle.js
+
+<span class="cm"># 2. Minificar con terser (34% reducción)</span>
+npx terser dist/rapca-bundle.js -o dist/rapca-bundle.min.js \
+    --compress --mangle
+
+<span class="cm"># 3. Actualizar hash en sw.js para invalidar caché</span>
+<span class="cm"># 4. Desplegar en servidor web (Apache/Nginx con HTTPS)</span></pre>
+
+<!-- CAP 39 -->
+<h2 id="c39" class="page-break">39. API Backend: Endpoints PHP</h2>
+
+<h3>39.1 Endpoints Disponibles</h3>
+<table>
+  <tr><th>Endpoint</th><th>Método</th><th>Autenticación</th><th>Función</th></tr>
+  <tr><td><code>auth.php</code></td><td>POST</td><td>—</td><td>Login (bcrypt verify) → devuelve JWT</td></tr>
+  <tr><td><code>auth.php</code></td><td>POST</td><td>JWT Admin</td><td>Crear/listar/activar/desactivar usuarios</td></tr>
+  <tr><td><code>datos.php</code></td><td>POST</td><td>JWT</td><td>Upsert registro (crear o actualizar)</td></tr>
+  <tr><td><code>datos.php</code></td><td>GET</td><td>JWT</td><td>Listar registros (filtros: zona, tipo, fecha)</td></tr>
+  <tr><td><code>fotos.php</code></td><td>GET</td><td>JWT</td><td>Listar fotos por unidad/tipo</td></tr>
+  <tr><td><code>upload.php</code></td><td>POST</td><td>JWT</td><td>Subir foto (JPEG base64 → Cloudinary)</td></tr>
+</table>
+
+<h3>39.2 Formato de Petición</h3>
+<pre><span class="cm">// Ejemplo: Upsert registro</span>
+POST /datos.php HTTP/1.1
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+{
+  <span class="str">"accion"</span>: <span class="str">"upsert"</span>,
+  <span class="str">"registro_id"</span>: <span class="num">1710583200000</span>,
+  <span class="str">"email"</span>: <span class="str">"tecnico@rapca.app"</span>,
+  <span class="str">"tipo"</span>: <span class="str">"EI"</span>,
+  <span class="str">"fecha"</span>: <span class="str">"2026-03-16"</span>,
+  <span class="str">"zona"</span>: <span class="str">"23AJE"</span>,
+  <span class="str">"unidad"</span>: <span class="str">"23AJE01"</span>,
+  <span class="str">"transecto"</span>: <span class="str">"T1"</span>,
+  <span class="str">"datos"</span>: <span class="str">"{\"pastoreo\":[\"PM\",\"PI\",\"PM\"],...}"</span>,
+  <span class="str">"lat"</span>: <span class="num">37.7801</span>,
+  <span class="str">"lon"</span>: <span class="num">-3.7892</span>
+}</pre>
+
+<h3>39.3 Formato de Respuesta</h3>
+<pre><span class="cm">// Respuesta exitosa</span>
+{<span class="str">"ok"</span>: <span class="kw">true</span>, <span class="str">"id"</span>: <span class="num">1710583200000</span>, <span class="str">"msg"</span>: <span class="str">"Registro guardado"</span>}
+
+<span class="cm">// Error</span>
+{<span class="str">"ok"</span>: <span class="kw">false</span>, <span class="str">"error"</span>: <span class="str">"Token expirado"</span>, <span class="str">"code"</span>: <span class="num">401</span>}</pre>
+
+<!-- CAP 40 -->
+<h2 id="c40" class="page-break">40. Resolución de Problemas</h2>
+
+<h3>40.1 Problemas Frecuentes</h3>
+<table>
+  <tr><th>Problema</th><th>Causa</th><th>Solución</th></tr>
+  <tr><td>No puedo instalar la app</td><td>Navegador no compatible</td><td>Usar Chrome en Android o Safari en iOS. Asegurarse de estar en HTTPS</td></tr>
+  <tr><td>Login fallido offline</td><td>Nunca inició sesión con conexión</td><td>Primer login siempre requiere conexión para guardar credenciales locales</td></tr>
+  <tr><td>GPS no funciona</td><td>Permisos denegados</td><td>Ajustes del dispositivo → Permisos → Ubicación → Permitir para Chrome/Safari</td></tr>
+  <tr><td>Cámara no se abre</td><td>Permisos de cámara denegados</td><td>Ajustes → Permisos → Cámara → Permitir. En iOS, solo Safari soporta getUserMedia</td></tr>
+  <tr><td>Fotos sin brújula</td><td>Dispositivo sin magnetómetro</td><td>Normal en tablets básicas. La orientación será "N/D" en el watermark</td></tr>
+  <tr><td>Fotos sin municipio</td><td>Sin conexión para Nominatim</td><td>Normal offline. La geocodificación inversa requiere Internet</td></tr>
+  <tr><td>Datos no se sincronizan</td><td>Servidor caído o sin conexión</td><td>Los datos se enviarán automáticamente cuando haya conexión. Verificar el indicador de pendientes</td></tr>
+  <tr><td>Mapa en blanco</td><td>Tiles no cacheados</td><td>Navegar por la zona con conexión para cachear los tiles. Cambiar de capa base</td></tr>
+  <tr><td>App antigua / no actualiza</td><td>SW sirviendo versión vieja</td><td>Admin → Forzar actualización, o borrar datos del sitio en ajustes del navegador</td></tr>
+  <tr><td>Espacio de almacenamiento lleno</td><td>Muchas fotos en IndexedDB</td><td>Admin → Borrar fotos locales (solo las ya sincronizadas)</td></tr>
+  <tr><td>Ghost image no aparece</td><td>No hay foto anterior del waypoint</td><td>Normal en primera visita. Será visible a partir de la segunda captura en el mismo waypoint</td></tr>
+</table>
+
+<h3>40.2 Diagnóstico Técnico</h3>
+<p>Para diagnóstico avanzado, usar las DevTools del navegador:</p>
+<ul>
+  <li><strong>Console</strong>: errores JavaScript, logs de sincronización</li>
+  <li><strong>Application → Service Workers</strong>: estado del SW, forzar update</li>
+  <li><strong>Application → IndexedDB → RAPCA_Fotos</strong>: inspeccionar stores y conteo de registros</li>
+  <li><strong>Application → Local Storage</strong>: ver rapca_registros, rapca_sesion, configs</li>
+  <li><strong>Network</strong>: verificar peticiones a datos.php, upload.php</li>
+</ul>
+
+<!-- CONCLUSIONES -->
+<h2 id="conclusiones" class="page-break">Conclusiones</h2>
+
+<p><strong>RAPCA Campo</strong> es un ecosistema digital completo para la evaluación de pastoreo en Áreas Pasto-Cortafuegos que cubre todo el ciclo de vida del dato:</p>
+
+<div class="fig">
+<svg width="500" height="80" viewBox="0 0 500 80">
+  <defs><marker id="arr9" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2e7d32"/></marker></defs>
+  <rect x="5" y="20" width="80" height="40" rx="6" fill="#e8f5e9" stroke="#2e7d32"/>
+  <text x="45" y="38" text-anchor="middle" font-size="8" font-weight="bold">Captura</text>
+  <text x="45" y="50" text-anchor="middle" font-size="7" fill="#555">Campo</text>
+  <line x1="85" y1="40" x2="105" y2="40" stroke="#2e7d32" stroke-width="1.5" marker-end="url(#arr9)"/>
+  <rect x="108" y="20" width="80" height="40" rx="6" fill="#e3f2fd" stroke="#1565c0"/>
+  <text x="148" y="38" text-anchor="middle" font-size="8" font-weight="bold">Almacén</text>
+  <text x="148" y="50" text-anchor="middle" font-size="7" fill="#555">Offline</text>
+  <line x1="188" y1="40" x2="208" y2="40" stroke="#2e7d32" stroke-width="1.5" marker-end="url(#arr9)"/>
+  <rect x="211" y="20" width="80" height="40" rx="6" fill="#fff3e0" stroke="#e65100"/>
+  <text x="251" y="38" text-anchor="middle" font-size="8" font-weight="bold">Sync</text>
+  <text x="251" y="50" text-anchor="middle" font-size="7" fill="#555">3x redundancia</text>
+  <line x1="291" y1="40" x2="311" y2="40" stroke="#2e7d32" stroke-width="1.5" marker-end="url(#arr9)"/>
+  <rect x="314" y="20" width="80" height="40" rx="6" fill="#f3e5f5" stroke="#7b1fa2"/>
+  <text x="354" y="38" text-anchor="middle" font-size="8" font-weight="bold">Análisis</text>
+  <text x="354" y="50" text-anchor="middle" font-size="7" fill="#555">Dashboard</text>
+  <line x1="394" y1="40" x2="414" y2="40" stroke="#2e7d32" stroke-width="1.5" marker-end="url(#arr9)"/>
+  <rect x="417" y="20" width="80" height="40" rx="6" fill="#fff8e1" stroke="#f57f17"/>
+  <text x="457" y="38" text-anchor="middle" font-size="8" font-weight="bold">Exportación</text>
+  <text x="457" y="50" text-anchor="middle" font-size="7" fill="#555">8 formatos</text>
+</svg>
+<div class="fig-caption">Fig. 17 — Ciclo de vida completo del dato en RAPCA Campo</div>
+</div>
+
+<p>Sus principales aportaciones son:</p>
+<ol>
+  <li><strong>Independencia de conectividad</strong>: opera al 100% sin cobertura móvil, resolviendo el principal obstáculo del trabajo en campo remoto.</li>
+  <li><strong>Calidad del dato garantizada</strong>: georreferenciación automática, marcas de agua inteligentes y validación eliminan los errores de los métodos tradicionales.</li>
+  <li><strong>Eficiencia operativa radical</strong>: integra captura, fotografía, cartografía GIS y exportación en una sola herramienta, reduciendo un 80% los tiempos de procesamiento.</li>
+  <li><strong>Interoperabilidad total</strong>: exportación en 8 formatos (PDF, Excel, CSV, ZIP, Shapefile, KML, HTML, Informes) garantiza la integración con cualquier sistema existente.</li>
+  <li><strong>Innovación técnica</strong>: watermark con geocodificación inversa, Shapefiles generados en navegador, triple redundancia de sincronización, ghost image y comparador temporal son capacidades únicas.</li>
+  <li><strong>Coste mínimo</strong>: como PWA, funciona en cualquier smartphone con navegador moderno, sin hardware dedicado, sin licencias, sin App Store.</li>
+</ol>
+
+<div class="highlight-box">
+  <strong>RAPCA Campo contribuye directamente a la eficacia de la prevención de incendios forestales mediante pastoreo extensivo controlado en Andalucía</strong>, proporcionando a los equipos de campo y gestores una herramienta digital completa, fiable y accesible.
+</div>
+
+<div class="footer">
+  RAPCA Campo v6.0 — Manual Técnico Completo — Marzo 2026<br>
+  Red de Áreas Pasto-Cortafuegos de Andalucía — EMA<br>
+  Junta de Andalucía
+</div>
+
+</body>
+</html>

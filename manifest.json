@@ -1,7 +1,7 @@
 {
   "name": "RAPCA Campo",
   "short_name": "RAPCA",
-  "description": "Recogida de datos de campo para evaluación ecológica y pastoral — RAPCA EMA",
+  "description": "Recogida de datos de campo para evaluación de pastoreo en Áreas Pasto-Cortafuegos — RAPCA EMA",
   "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",
