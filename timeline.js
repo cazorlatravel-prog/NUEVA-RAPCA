@@ -68,16 +68,24 @@ function filtrarTimeline() {
     h += '<div style="font-size:12px;color:#888">' + escapeHtml(r.fecha) + ' · ' + escapeHtml(r.operador_nombre || '') + '</div>';
     if (r.datos && r.datos.observaciones) h += '<div style="font-size:13px;margin-top:4px">' + escapeHtml(r.datos.observaciones.substring(0, 100)) + '</div>';
 
-    // Thumbnails de fotos
+    // Thumbnails de fotos (generales + comparativas)
+    var todosCodigosFotos = [];
     if (r.datos.fotos) {
-      var codigos = r.datos.fotos.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
-      if (codigos.length > 0) {
-        h += '<div class="tl-thumbs" id="tl-thumbs-' + r.id + '">';
-        codigos.forEach(function(cod) {
-          h += '<img data-codigo="' + cod + '" src="" alt="' + cod + '" onclick="abrirLightboxFoto(this.src,\'' + cod + '\')">';
-        });
-        h += '</div>';
-      }
+      r.datos.fotos.split(',').map(function(s) { return s.trim(); }).filter(Boolean).forEach(function(cod) {
+        todosCodigosFotos.push(cod);
+      });
+    }
+    if (r.datos.fotosComp && Array.isArray(r.datos.fotosComp)) {
+      r.datos.fotosComp.forEach(function(fc) {
+        if (fc.numero) todosCodigosFotos.push(fc.numero);
+      });
+    }
+    if (todosCodigosFotos.length > 0) {
+      h += '<div class="tl-thumbs" id="tl-thumbs-' + r.id + '">';
+      todosCodigosFotos.forEach(function(cod) {
+        h += '<img data-codigo="' + escapeHtml(cod) + '" data-tipo="' + escapeHtml(r.tipo) + '" data-unidad="' + escapeHtml(r.unidad) + '" src="" alt="' + escapeHtml(cod) + '" onclick="if(this.src)abrirLightboxFoto(this.src,\'' + escapeHtml(cod) + '\')">';
+      });
+      h += '</div>';
     }
 
     h += '</div></div>';
@@ -91,15 +99,31 @@ function filtrarTimeline() {
 function cargarThumbsTimeline(regs) {
   if (!db) return;
   regs.forEach(function(r) {
-    if (!r.datos.fotos) return;
-    var codigos = r.datos.fotos.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
-    codigos.forEach(function(cod) {
-      obtenerDeDB('fotos', cod).then(function(foto) {
-        if (foto) {
-          var imgs = document.querySelectorAll('img[data-codigo="' + cod + '"]');
-          for (var i = 0; i < imgs.length; i++) imgs[i].src = foto.data;
-        }
-      });
-    });
+    var container = document.getElementById('tl-thumbs-' + r.id);
+    if (!container) return;
+    var imgs = container.querySelectorAll('img[data-codigo]');
+    for (var i = 0; i < imgs.length; i++) {
+      (function(img) {
+        var cod = img.dataset.codigo;
+        var tipo = img.dataset.tipo || r.tipo;
+        var unidad = img.dataset.unidad || r.unidad;
+        buscarFotoData(cod, tipo, unidad).then(function(data) {
+          if (data) {
+            img.src = data;
+          } else {
+            // Fallback: intentar directamente desde servidor
+            var serverUrl = API_BASE + 'uploads/rapca/' + tipo + '/' + unidad + '/' + cod + '.jpg';
+            img.onerror = function() {
+              img.onerror = null;
+              img.src = 'https://res.cloudinary.com/drnqs1jwl/image/upload/w_120,q_60/rapca/' + tipo + '/' + unidad + '/' + cod;
+              img.onerror = function() { img.style.display = 'none'; };
+            };
+            img.src = serverUrl;
+          }
+        }).catch(function() {
+          img.style.display = 'none';
+        });
+      })(imgs[i]);
+    }
   });
 }
