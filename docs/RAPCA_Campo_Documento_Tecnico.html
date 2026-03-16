@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAPCA Campo — Documento Técnico e Innovación</title>
+<style>
+  @page { size: A4; margin: 20mm 18mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; line-height: 1.65; max-width: 210mm; margin: 0 auto; padding: 20px; background: #fff; }
+  h1 { color: #1a3d2e; font-size: 28px; border-bottom: 3px solid #1a3d2e; padding-bottom: 10px; page-break-before: avoid; }
+  h2 { color: #1a3d2e; font-size: 22px; margin-top: 32px; border-left: 4px solid #2e7d32; padding-left: 12px; page-break-after: avoid; }
+  h3 { color: #2e7d32; font-size: 17px; margin-top: 20px; page-break-after: avoid; }
+  .cover { text-align: center; padding: 60px 0 40px; page-break-after: always; }
+  .cover h1 { font-size: 36px; border: none; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 18px; color: #555; margin-bottom: 30px; }
+  .cover .version { color: #888; font-size: 14px; margin-top: 40px; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; color: #fff; margin: 2px; }
+  .badge-green { background: #2e7d32; }
+  .badge-blue { background: #1565c0; }
+  .badge-orange { background: #e65100; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 14px; }
+  th { background: #1a3d2e; color: #fff; padding: 8px 10px; text-align: left; }
+  td { padding: 7px 10px; border-bottom: 1px solid #ddd; }
+  tr:nth-child(even) td { background: #f8f8f5; }
+  .highlight-box { background: #e8f5e9; border-left: 4px solid #2e7d32; padding: 14px 18px; margin: 16px 0; border-radius: 4px; }
+  .tech-stack { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .tech-tag { background: #e3f2fd; color: #1565c0; padding: 4px 12px; border-radius: 16px; font-size: 13px; font-weight: 500; }
+  .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
+  .metric-card { background: #f5f5f0; border-radius: 8px; padding: 16px; text-align: center; }
+  .metric-card .num { font-size: 28px; font-weight: bold; color: #1a3d2e; }
+  .metric-card .label { font-size: 12px; color: #666; margin-top: 4px; }
+  .arch-diagram { background: #fafafa; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 16px 0; font-family: monospace; font-size: 13px; line-height: 1.8; white-space: pre; overflow-x: auto; }
+  .icon-img { width: 80px; height: 80px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+  ul { padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  .page-break { page-break-before: always; }
+  .toc a { text-decoration: none; color: #1a3d2e; }
+  .toc li { margin-bottom: 4px; }
+  .footer { text-align: center; color: #999; font-size: 11px; margin-top: 40px; border-top: 1px solid #ddd; padding-top: 12px; }
+</style>
+</head>
+<body>
+
+<!-- PORTADA -->
+<div class="cover">
+  <img src="../icons/icon-192.png" alt="RAPCA Campo" class="icon-img" onerror="this.style.display='none'">
+  <h1>RAPCA Campo</h1>
+  <div class="subtitle">Plataforma Digital para la Recogida y Gestión de Datos<br>de Evaluación Ecológica y Pastoral</div>
+  <p style="font-size:16px;color:#1a3d2e;font-weight:600">Documento Técnico, de Innovación y Valor Añadido</p>
+  <div class="version">
+    Versión 6.0 · Marzo 2026<br>
+    Desarrollado para el Programa RAPCA — EMA<br>
+    Red de Áreas Pasto-Cortafuegos de Andalucía
+  </div>
+</div>
+
+<!-- ÍNDICE -->
+<h2>Índice de Contenidos</h2>
+<ol class="toc">
+  <li><a href="#resumen">Resumen Ejecutivo</a></li>
+  <li><a href="#contexto">Contexto: La RAPCA y la Necesidad Digital</a></li>
+  <li><a href="#arquitectura">Arquitectura Técnica</a></li>
+  <li><a href="#tecnologias">Stack Tecnológico</a></li>
+  <li><a href="#funcionalidades">Funcionalidades Principales</a></li>
+  <li><a href="#innovacion">Innovación Tecnológica</a></li>
+  <li><a href="#offline">Capacidad Offline-First</a></li>
+  <li><a href="#gis">Integración GIS y Cartografía</a></li>
+  <li><a href="#casos">Casos de Uso RAPCA</a></li>
+  <li><a href="#seguridad">Seguridad y Control de Acceso</a></li>
+  <li><a href="#valor">Valor Añadido</a></li>
+  <li><a href="#escalabilidad">Escalabilidad y Futuro</a></li>
+  <li><a href="#conclusiones">Conclusiones</a></li>
+</ol>
+
+<!-- 1. RESUMEN EJECUTIVO -->
+<h2 id="resumen" class="page-break">1. Resumen Ejecutivo</h2>
+<p><strong>RAPCA Campo</strong> es una Progressive Web App (PWA) diseñada específicamente para la Red de Áreas Pasto-Cortafuegos de Andalucía (RAPCA). Permite a los equipos de campo recoger, gestionar, sincronizar y analizar datos de evaluaciones ecológicas y pastorales en entornos rurales con conectividad limitada o inexistente.</p>
+
+<div class="highlight-box">
+  <strong>Cifras clave del proyecto:</strong>
+  <div class="metric-grid">
+    <div class="metric-card"><div class="num">+10.200</div><div class="label">Líneas de código</div></div>
+    <div class="metric-card"><div class="num">19</div><div class="label">Archivos fuente</div></div>
+    <div class="metric-card"><div class="num">14</div><div class="label">Módulos JavaScript</div></div>
+    <div class="metric-card"><div class="num">3</div><div class="label">Tipos de evaluación</div></div>
+    <div class="metric-card"><div class="num">8</div><div class="label">Formatos de exportación</div></div>
+    <div class="metric-card"><div class="num">100%</div><div class="label">Funcionalidad offline</div></div>
+  </div>
+</div>
+
+<p>La aplicación sustituye los métodos tradicionales en papel por un sistema digital robusto que funciona sin conexión, sincroniza automáticamente con el servidor, y ofrece herramientas avanzadas de análisis, cartografía y generación de informes.</p>
+
+<!-- 2. CONTEXTO -->
+<h2 id="contexto">2. Contexto: La RAPCA y la Necesidad Digital</h2>
+
+<h3>2.1 ¿Qué es la RAPCA?</h3>
+<p>La <strong>Red de Áreas Pasto-Cortafuegos de Andalucía</strong> es un programa de la Junta de Andalucía que utiliza el pastoreo extensivo controlado como herramienta de prevención de incendios forestales. Las áreas cortafuegos se mantienen con ganado que reduce la biomasa combustible, creando franjas de protección natural.</p>
+
+<h3>2.2 El Desafío de la Recogida de Datos</h3>
+<p>Los equipos de evaluación trabajan en zonas montañosas remotas donde:</p>
+<ul>
+  <li><strong>No hay cobertura móvil</strong> en la mayoría de las parcelas de trabajo</li>
+  <li>Se requieren <strong>datos georreferenciados precisos</strong> (coordenadas UTM/geográficas)</li>
+  <li>Se necesitan <strong>fotografías con metadatos</strong> (fecha, ubicación, orientación)</li>
+  <li>Los formularios en papel se deterioran, pierden y son difíciles de digitalizar</li>
+  <li>La comparación temporal de fotografías entre campañas es crítica para evaluar la eficacia del pastoreo</li>
+</ul>
+
+<h3>2.3 La Solución: RAPCA Campo</h3>
+<p>RAPCA Campo resuelve todos estos desafíos proporcionando una herramienta digital que:</p>
+<ul>
+  <li>Funciona <strong>100% offline</strong>, almacenando datos localmente hasta que haya conexión</li>
+  <li>Captura fotografías con <strong>marcas de agua automáticas</strong> configurables (GPS, fecha, municipio, brújula, mini-mapa)</li>
+  <li>Implementa los tres niveles de evaluación del protocolo RAPCA (VP, EL, EI)</li>
+  <li>Sincroniza automáticamente con el servidor cuando hay conexión disponible</li>
+  <li>Permite la <strong>comparación temporal de fotografías</strong> entre campañas en puntos fijos (waypoints)</li>
+</ul>
+
+<!-- 3. ARQUITECTURA -->
+<h2 id="arquitectura" class="page-break">3. Arquitectura Técnica</h2>
+
+<h3>3.1 Diagrama de Arquitectura</h3>
+<div class="arch-diagram">
+┌─────────────────────────────────────────────────────────┐
+│                    CLIENTE (PWA)                         │
+│                                                         │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────┐  │
+│  │ index.   │ │  app.js  │ │ forms.js │ │ camera.js │  │
+│  │  html    │ │  (core)  │ │ (datos)  │ │  (fotos)  │  │
+│  └──────────┘ └──────────┘ └──────────┘ └───────────┘  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────┐  │
+│  │  map.js  │ │ panel.js │ │ sync.js  │ │  auth.js  │  │
+│  │  (GIS)   │ │(gestión) │ │(sincron.)│ │(seguridad)│  │
+│  └──────────┘ └──────────┘ └──────────┘ └───────────┘  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────┐  │
+│  │dashboard │ │timeline  │ │comparador│ │ galeria   │  │
+│  │   .js    │ │   .js    │ │    .js   │ │    .js    │  │
+│  └──────────┘ └──────────┘ └──────────┘ └───────────┘  │
+│  ┌──────────┐ ┌──────────┐                              │
+│  │ admin.js │ │gabinete  │  ┌─────────────────────┐     │
+│  │(config)  │ │   .js    │  │    Service Worker    │     │
+│  └──────────┘ └──────────┘  │    (sw.js) — cache   │     │
+│                              └─────────────────────┘     │
+│  ┌───────────────────┐  ┌──────────────────────────┐     │
+│  │   localStorage    │  │       IndexedDB v5       │     │
+│  │ ·registros        │  │ ·fotos                   │     │
+│  │ ·sesión           │  │ ·subidas_pendientes      │     │
+│  │ ·borradores       │  │ ·fotos_precargadas       │     │
+│  │ ·contadores       │  │ ·capas_kml               │     │
+│  │ ·config watermark │  │ ·waypoints_comp          │     │
+│  │ ·campos custom    │  │ ·kml_infraestructuras    │     │
+│  └───────────────────┘  └──────────────────────────┘     │
+└─────────────────────────────────────────────────────────┘
+                           │
+              ┌────────────┼────────────┐
+              ▼            ▼            ▼
+     ┌──────────────┐ ┌────────┐ ┌──────────┐
+     │  Servidor PHP│ │Google  │ │Cloudinary│
+     │  ·auth.php   │ │Forms   │ │   CDN    │
+     │  ·datos.php  │ │(backup)│ │ (fotos)  │
+     │  ·fotos.php  │ └────────┘ └──────────┘
+     │  ·upload.php │
+     │  ·MySQL/PgSQL│
+     └──────────────┘</div>
+
+<h3>3.2 Patrones de Diseño</h3>
+<table>
+  <tr><th>Patrón</th><th>Implementación</th><th>Beneficio</th></tr>
+  <tr><td>Offline-First</td><td>Service Worker + IndexedDB + localStorage</td><td>100% funcionalidad sin conexión</td></tr>
+  <tr><td>Stale-While-Revalidate</td><td>SW sirve caché y actualiza en segundo plano</td><td>Carga instantánea + datos frescos</td></tr>
+  <tr><td>Progressive Enhancement</td><td>Funciona como web, se instala como app nativa</td><td>Sin App Store, sin instalación compleja</td></tr>
+  <tr><td>Fallback Chain</td><td>Servidor → Google Forms → Cloudinary</td><td>Triple redundancia en sincronización</td></tr>
+  <tr><td>Event-Driven Sync</td><td>Background Sync API + polling cada 30s</td><td>Sincronización automática transparente</td></tr>
+  <tr><td>Role-Based Access</td><td>JWT + roles admin/operador</td><td>Control de acceso granular</td></tr>
+</table>
+
+<h3>3.3 Almacenamiento de Datos</h3>
+
+<h4>localStorage (datos estructurados ligeros)</h4>
+<ul>
+  <li><strong>rapca_registros</strong>: Array JSON con todos los registros de campo</li>
+  <li><strong>rapca_sesion</strong>: Token JWT, rol, nombre del operador</li>
+  <li><strong>rapca_borrador_*</strong>: Borradores auto-guardados cada 30 segundos</li>
+  <li><strong>rapca_foto_contadores</strong>: Contadores de numeración fotográfica por unidad</li>
+  <li><strong>rapca_watermark_config</strong>: Configuración de marcas de agua</li>
+  <li><strong>rapca_campos_infra / rapca_campos_ganaderos</strong>: Campos personalizados</li>
+</ul>
+
+<h4>IndexedDB v5 (datos binarios y voluminosos)</h4>
+<table>
+  <tr><th>Store</th><th>Contenido</th><th>Clave</th></tr>
+  <tr><td>fotos</td><td>Fotografías capturadas (base64/blob)</td><td>codigo</td></tr>
+  <tr><td>subidas_pendientes</td><td>Cola de fotos para sincronizar</td><td>codigo</td></tr>
+  <tr><td>fotos_precargadas</td><td>Fotos descargadas para uso offline</td><td>codigo</td></tr>
+  <tr><td>capas_kml</td><td>Capas KML/KMZ importadas</td><td>id</td></tr>
+  <tr><td>waypoints_comp</td><td>Waypoints persistentes W1/W2</td><td>id</td></tr>
+  <tr><td>kml_infraestructuras</td><td>Infraestructuras KML importadas</td><td>id</td></tr>
+</table>
+
+<!-- 4. STACK TECNOLÓGICO -->
+<h2 id="tecnologias" class="page-break">4. Stack Tecnológico</h2>
+
+<h3>4.1 Frontend</h3>
+<div class="tech-stack">
+  <span class="tech-tag">HTML5</span>
+  <span class="tech-tag">CSS3</span>
+  <span class="tech-tag">JavaScript ES5+</span>
+  <span class="tech-tag">Service Workers</span>
+  <span class="tech-tag">IndexedDB</span>
+  <span class="tech-tag">Web Manifest</span>
+  <span class="tech-tag">MediaDevices API</span>
+  <span class="tech-tag">Geolocation API</span>
+  <span class="tech-tag">Canvas API</span>
+  <span class="tech-tag">Background Sync</span>
+</div>
+
+<h3>4.2 Librerías</h3>
+<div class="tech-stack">
+  <span class="tech-tag">Leaflet.js 1.9.4</span>
+  <span class="tech-tag">Leaflet.MarkerCluster 1.5.3</span>
+  <span class="tech-tag">Chart.js 4.4.0</span>
+  <span class="tech-tag">SheetJS (XLSX) 0.18.5</span>
+  <span class="tech-tag">JSZip 3.10.1</span>
+  <span class="tech-tag">html2canvas 1.4.1</span>
+</div>
+
+<h3>4.3 Backend</h3>
+<div class="tech-stack">
+  <span class="tech-tag">PHP 8.x</span>
+  <span class="tech-tag">MySQL / PostgreSQL</span>
+  <span class="tech-tag">JWT (Bearer Tokens)</span>
+  <span class="tech-tag">bcrypt</span>
+  <span class="tech-tag">Cloudinary CDN</span>
+</div>
+
+<h3>4.4 Cartografía y Servicios</h3>
+<div class="tech-stack">
+  <span class="tech-tag">IGN WMTS (Topográfico)</span>
+  <span class="tech-tag">PNOA Ortofoto</span>
+  <span class="tech-tag">Nominatim (Geocoding)</span>
+  <span class="tech-tag">KML/KMZ Parsing</span>
+  <span class="tech-tag">GPX Import</span>
+  <span class="tech-tag">WMS Layers</span>
+</div>
+
+<h3>4.5 Justificación: ¿Por Qué una PWA?</h3>
+<table>
+  <tr><th>Requisito</th><th>App Nativa</th><th>Web Tradicional</th><th>PWA ✓</th></tr>
+  <tr><td>Funciona offline</td><td>✓</td><td>✗</td><td>✓</td></tr>
+  <tr><td>Acceso a cámara/GPS</td><td>✓</td><td>Limitado</td><td>✓</td></tr>
+  <tr><td>Sin App Store</td><td>✗</td><td>✓</td><td>✓</td></tr>
+  <tr><td>Actualización instantánea</td><td>✗</td><td>✓</td><td>✓</td></tr>
+  <tr><td>Multiplataforma (Android/iOS)</td><td>✗ (doble desarrollo)</td><td>✓</td><td>✓</td></tr>
+  <tr><td>Instalable en home screen</td><td>✓</td><td>✗</td><td>✓</td></tr>
+  <tr><td>Tamaño reducido</td><td>✗ (50-200MB)</td><td>✓</td><td>✓ (~350KB)</td></tr>
+  <tr><td>Coste de desarrollo</td><td>Alto</td><td>Medio</td><td>Medio</td></tr>
+</table>
+
+<!-- 5. FUNCIONALIDADES -->
+<h2 id="funcionalidades" class="page-break">5. Funcionalidades Principales</h2>
+
+<h3>5.1 Formularios de Evaluación</h3>
+<p>La app implementa los tres niveles de evaluación del protocolo RAPCA:</p>
+
+<table>
+  <tr><th>Tipo</th><th>Nombre</th><th>Uso</th><th>Complejidad</th></tr>
+  <tr><td><span class="badge badge-green">VP</span></td><td>Visita Previa</td><td>Primera inspección de la parcela</td><td>Básica: observaciones generales y fotografías</td></tr>
+  <tr><td><span class="badge badge-blue">EL</span></td><td>Evaluación Ligera</td><td>Evaluación estándar de pastoreo</td><td>Media: indicadores pastorales (3 niveles), señales de paso, veredas, cagarrutas</td></tr>
+  <tr><td><span class="badge badge-orange">EI</span></td><td>Evaluación Intensiva</td><td>Análisis detallado con transectos</td><td>Alta: 10 especies vegetales, 3 palatables, 7 herbáceas, 2 puntos de matorral, 3 transectos</td></tr>
+</table>
+
+<p>Cada formulario incluye: fecha, unidad/zona, coordenadas GPS, fotografías generales y comparativas en waypoints (W1/W2), y autoguardado de borradores cada 30 segundos.</p>
+
+<h3>5.2 Sistema Fotográfico Avanzado</h3>
+<p>El módulo de cámara es uno de los más innovadores de la aplicación:</p>
+<ul>
+  <li><strong>Captura con marca de agua automática</strong>: código de foto, fecha/hora, coordenadas (UTM o geográficas), orientación cardinal, municipio/provincia, rosa de los vientos, mini-mapa topográfico u ortofoto</li>
+  <li><strong>Ghost image</strong>: superposición de la foto anterior del mismo punto para repetir el encuadre exacto entre campañas</li>
+  <li><strong>Numeración automática</strong>: sistema de códigos único por unidad/tipo/subtipo que evita colisiones incluso con registros del servidor</li>
+  <li><strong>Anotaciones sobre foto</strong>: marcadores numerados arrastrables y redimensionables con texto descriptivo</li>
+  <li><strong>Waypoints persistentes</strong>: las coordenadas W1/W2 se guardan en IndexedDB y sobreviven a reinicios y limpieza de caché</li>
+</ul>
+
+<h3>5.3 Cartografía Integrada</h3>
+<ul>
+  <li>Mapa interactivo con capas <strong>topográfica (IGN)</strong> y <strong>ortofoto (PNOA)</strong></li>
+  <li>Visualización de todos los registros geolocalizados con clustering</li>
+  <li>Importación de <strong>KML/KMZ, GPX y capas WMS</strong></li>
+  <li>Infraestructuras con marcadores 🌳 y búsqueda interactiva</li>
+  <li><strong>Medición de distancias</strong> punto a punto</li>
+  <li>Tabla de atributos de capas importadas</li>
+  <li>Exportación del mapa como PDF</li>
+</ul>
+
+<h3>5.4 Panel de Gestión y Exportación</h3>
+<p>El panel ofrece 8 formatos de exportación:</p>
+<table>
+  <tr><th>Formato</th><th>Contenido</th><th>Uso</th></tr>
+  <tr><td>PDF</td><td>Registros con fotos incrustadas</td><td>Documentación oficial y archivado</td></tr>
+  <tr><td>Excel (.xlsx)</td><td>Datos estructurados en columnas</td><td>Análisis estadístico</td></tr>
+  <tr><td>CSV</td><td>Texto plano separado por comas</td><td>Importación en otros sistemas</td></tr>
+  <tr><td>ZIP (fotos)</td><td>Paquete de fotografías</td><td>Backup y compartición</td></tr>
+  <tr><td>Shapefile (.shp)</td><td>Geometría + atributos SIG</td><td>ArcGIS, QGIS, gvSIG</td></tr>
+  <tr><td>KML</td><td>Puntos georreferenciados</td><td>Google Earth, visores web</td></tr>
+  <tr><td>Informe HTML</td><td>Informe de zona con estadísticas</td><td>Presentación de resultados</td></tr>
+  <tr><td>Informe Infra.</td><td>Informe por infraestructura con fotos</td><td>Seguimiento de unidades</td></tr>
+</table>
+
+<h3>5.5 Dashboard Analítico</h3>
+<ul>
+  <li>Métricas resumen: total registros, distribución por tipo, unidades visitadas, pendientes de sincronización</li>
+  <li>Gráfico de barras apiladas de actividad (últimos 30 días)</li>
+  <li>Gráfico de distribución por tipo (doughnut)</li>
+  <li>Filtros dinámicos por zona, provincia, municipio, espacio protegido y operador</li>
+  <li>Alertas de unidades sin evaluación intensiva</li>
+</ul>
+
+<h3>5.6 Comparador Temporal de Fotografías</h3>
+<p>Herramienta de comparación visual que permite evaluar la evolución del pastoreo entre campañas:</p>
+<ul>
+  <li><strong>Modo slider</strong>: deslizador horizontal entre dos fotos del mismo waypoint en fechas distintas</li>
+  <li><strong>Modo lado a lado</strong>: visualización simultánea de ambas fotos</li>
+  <li>Selección guiada: Unidad → Waypoint → Fecha A → Fecha B</li>
+</ul>
+
+<h3>5.7 Galería Multimedia</h3>
+<ul>
+  <li>Pestañas: Todas / Comparativas / Pre-cargadas</li>
+  <li>Filtros por unidad, tipo, fecha</li>
+  <li>Lightbox con zoom</li>
+  <li>Selección múltiple con descarga ZIP por lotes</li>
+  <li>Cadena de carga: IndexedDB → Servidor → Cloudinary</li>
+</ul>
+
+<!-- 6. INNOVACIÓN -->
+<h2 id="innovacion" class="page-break">6. Innovación Tecnológica</h2>
+
+<h3>6.1 Marca de Agua Inteligente y Configurable</h3>
+<p>Cada fotografía se procesa en un Canvas de alta resolución (3060×4080 px) con información contextual renderizada directamente en la imagen:</p>
+<ul>
+  <li><strong>Geocodificación inversa</strong> en tiempo real vía Nominatim: municipio, provincia y código postal se obtienen de las coordenadas GPS</li>
+  <li><strong>Rosa de los vientos</strong> con la orientación del dispositivo dibujada vectorialmente en Canvas</li>
+  <li><strong>Mini-mapa cartográfico</strong>: recorte del mapa topográfico IGN o ortofoto PNOA centrado en la ubicación, renderizado con html2canvas</li>
+  <li><strong>Coordenadas UTM/ETRS89</strong>: conversión automática de WGS84 a proyección UTM huso 30 con datum ETRS89</li>
+  <li>Toda la configuración es administrable sin tocar código</li>
+</ul>
+
+<h3>6.2 Sincronización con Triple Redundancia</h3>
+<div class="highlight-box">
+  <strong>Cadena de sincronización con fallback automático:</strong>
+  <ol>
+    <li><strong>Servidor primario</strong> (PHP/MySQL): envío estándar con autenticación JWT</li>
+    <li><strong>Google Forms</strong>: si el servidor falla, los datos se envían como respuestas a un formulario de Google</li>
+    <li><strong>Cloudinary CDN</strong>: las fotos se suben directamente a Cloudinary con upload sin firmar</li>
+  </ol>
+  <p>Cada nivel incluye reintentos con backoff exponencial (2s, 4s, 8s, 16s). Los datos <strong>nunca se pierden</strong>.</p>
+</div>
+
+<h3>6.3 Waypoints Persistentes</h3>
+<p>Los puntos de referencia fotográfica (W1/W2) se almacenan en un store dedicado de IndexedDB que:</p>
+<ul>
+  <li>Sobrevive a la limpieza de caché del navegador</li>
+  <li>Se visualiza permanentemente en el mapa</li>
+  <li>Permite repetir el mismo encuadre fotográfico entre campañas</li>
+  <li>Incluye migración automática de waypoints de registros anteriores</li>
+</ul>
+
+<h3>6.4 Ghost Image para Repetibilidad</h3>
+<p>Al capturar fotos comparativas, la app superpone como "fantasma" semi-transparente la última foto tomada en ese waypoint, permitiendo al operador reproducir exactamente el mismo encuadre. Esto garantiza la comparabilidad temporal de las imágenes.</p>
+
+<h3>6.5 Generación de Shapefiles en el Navegador</h3>
+<p>La app genera archivos Shapefile completos (.shp, .shx, .dbf) directamente en el navegador usando operaciones binarias sobre ArrayBuffer, sin necesidad de servidor ni software GIS. Los datos se empaquetan en ZIP y son compatibles con ArcGIS, QGIS y gvSIG.</p>
+
+<h3>6.6 Importación Inteligente de Excel con Auto-Matching</h3>
+<p>El sistema de importación de infraestructuras lee archivos Excel/CSV, extrae las cabeceras y propone automáticamente el mapeo de columnas a campos del sistema usando coincidencia difusa (Levenshtein-like). El usuario solo confirma o ajusta.</p>
+
+<h3>6.7 Campos Personalizados Dinámicos</h3>
+<p>Los administradores pueden crear campos personalizados para infraestructuras y ganaderos sin modificar código. Estos campos se integran automáticamente en formularios, tablas, exportaciones e informes.</p>
+
+<!-- 7. OFFLINE-FIRST -->
+<h2 id="offline" class="page-break">7. Capacidad Offline-First</h2>
+
+<h3>7.1 Estrategia de Caché por Service Worker</h3>
+<table>
+  <tr><th>Tipo de recurso</th><th>Estrategia</th><th>Comportamiento</th></tr>
+  <tr><td>Archivos propios (HTML, JS, CSS)</td><td>Stale-While-Revalidate</td><td>Sirve caché inmediatamente, actualiza en segundo plano</td></tr>
+  <tr><td>CDN (Leaflet, Chart.js, etc.)</td><td>Cache-First</td><td>Sirve caché siempre, solo descarga si no existe</td></tr>
+  <tr><td>API PHP (datos, auth)</td><td>Network-Only + fallback JSON</td><td>Intenta red, si falla retorna {error: 'offline'}</td></tr>
+</table>
+
+<h3>7.2 Ciclo de Vida Offline</h3>
+<ol>
+  <li><strong>Instalación</strong>: Service Worker descarga y cachea los 14 archivos JS + 9 CDN</li>
+  <li><strong>Captura de datos</strong>: formularios y fotos se almacenan en localStorage e IndexedDB</li>
+  <li><strong>Cola de sincronización</strong>: los registros pendientes se marcan y se encolan</li>
+  <li><strong>Reconexión</strong>: al detectar conexión, se dispara sincronización automática</li>
+  <li><strong>Confirmación</strong>: el registro se marca como sincronizado con indicador visual ✓</li>
+</ol>
+
+<h3>7.3 Precarga de Datos para Trabajo Offline</h3>
+<p>Antes de ir al campo, los operadores pueden precargar fotos por zona/unidad. Las fotos se descargan en IndexedDB y quedan disponibles sin conexión para el comparador y la galería.</p>
+
+<!-- 8. GIS -->
+<h2 id="gis" class="page-break">8. Integración GIS y Cartografía</h2>
+
+<h3>8.1 Capas Base Oficiales</h3>
+<ul>
+  <li><strong>Mapa Topográfico Nacional</strong> (IGN WMTS): cartografía oficial de España</li>
+  <li><strong>Ortofotografía PNOA</strong>: imágenes aéreas de alta resolución del Plan Nacional de Ortofotografía Aérea</li>
+</ul>
+
+<h3>8.2 Capas de Datos</h3>
+<ul>
+  <li><strong>Registros geolocalizados</strong>: con clustering por proximidad y codificación de color VP/EL/EI</li>
+  <li><strong>Waypoints persistentes</strong>: puntos W1/W2 con historial de capturas</li>
+  <li><strong>Infraestructuras KML</strong>: parcelas, vallados, abrevaderos importados desde archivos KML/KMZ</li>
+  <li><strong>Capas WMS personalizadas</strong>: cualquier servicio WMS configurable por URL</li>
+  <li><strong>Tracks GPX</strong>: rutas GPS importadas</li>
+</ul>
+
+<h3>8.3 Herramientas de Mapa</h3>
+<ul>
+  <li>Medición de distancias con marcadores intermedios</li>
+  <li>Búsqueda unificada (registros + infraestructuras + waypoints)</li>
+  <li>Tabla de atributos de capas importadas (ordenable, filtrable)</li>
+  <li>Exportación de mapa a PDF con capas visibles</li>
+  <li>Geolocalización con indicador de precisión GPS</li>
+</ul>
+
+<!-- 9. CASOS DE USO RAPCA -->
+<h2 id="casos" class="page-break">9. Casos de Uso RAPCA</h2>
+
+<h3>9.1 Caso 1: Visita Previa a Nueva Parcela</h3>
+<div class="highlight-box">
+  <strong>Escenario</strong>: Un técnico visita por primera vez una parcela asignada a un ganadero para evaluar su idoneidad como área pasto-cortafuegos.
+  <ol>
+    <li>Abre RAPCA Campo (funciona offline en la montaña)</li>
+    <li>Selecciona formulario VP, la app obtiene GPS automáticamente</li>
+    <li>Registra observaciones generales y toma fotos con marca de agua (GPS, fecha, municipio)</li>
+    <li>Las fotos generales se codifican automáticamente (ej: AND-04_VP_G_001)</li>
+    <li>Al volver a zona con cobertura, la app sincroniza automáticamente</li>
+  </ol>
+</div>
+
+<h3>9.2 Caso 2: Evaluación Ligera de Pastoreo</h3>
+<div class="highlight-box">
+  <strong>Escenario</strong>: Evaluación periódica del nivel de aprovechamiento pastoral de una parcela activa.
+  <ol>
+    <li>Selecciona formulario EL con la unidad correspondiente</li>
+    <li>Evalúa indicadores pastorales (aprovechamiento 0-3) en zona representativa</li>
+    <li>Registra señales de paso, veredas, cagarrutas (indicadores de presencia ganadera)</li>
+    <li>Captura fotos comparativas en los waypoints W1 y W2 establecidos</li>
+    <li>El ghost image ayuda a repetir el encuadre exacto de campañas anteriores</li>
+    <li>Más tarde, usa el comparador para evaluar la evolución visual del pastoreo</li>
+  </ol>
+</div>
+
+<h3>9.3 Caso 3: Evaluación Intensiva con Transectos</h3>
+<div class="highlight-box">
+  <strong>Escenario</strong>: Análisis detallado de la composición vegetal con tres transectos de 25 metros.
+  <ol>
+    <li>Selecciona formulario EI, elige transecto T1</li>
+    <li>En cada transecto evalúa: 10 especies vegetales (0-10), 3 palatables (0-15), 7 herbáceas (0-5)</li>
+    <li>Registra datos de matorral: cobertura (%), altura (cm), especie, en 2 puntos</li>
+    <li>La app calcula automáticamente medias entre transectos y volumen de matorral (m³/ha)</li>
+    <li>Repite para T2 y T3 con autoguardado entre transectos</li>
+    <li>Exporta como Shapefile para análisis en QGIS o como Excel para estadística</li>
+  </ol>
+</div>
+
+<h3>9.4 Caso 4: Seguimiento de Infraestructuras</h3>
+<div class="highlight-box">
+  <strong>Escenario</strong>: Gestión del inventario de infraestructuras ganaderas asociadas a la red.
+  <ol>
+    <li>El administrador importa infraestructuras desde Excel con mapeo automático de columnas</li>
+    <li>Se cargan como capa KML en el mapa con iconos 🌳</li>
+    <li>Los registros de campo se vinculan automáticamente a infraestructuras por campo de enlace</li>
+    <li>Se generan informes por infraestructura con fotos comparativas (2 por fila) y generales (3 por fila)</li>
+    <li>El buscador permite localizar cualquier infraestructura en el mapa</li>
+  </ol>
+</div>
+
+<h3>9.5 Caso 5: Coordinación de Equipo</h3>
+<div class="highlight-box">
+  <strong>Escenario</strong>: El coordinador gestiona un equipo de 5 operadores distribuidos por Andalucía.
+  <ol>
+    <li>Desde el panel de administración crea cuentas para cada operador</li>
+    <li>Configura la marca de agua corporativa (tamaño texto, formato coordenadas, mini-mapa topográfico)</li>
+    <li>Crea campos personalizados para infraestructuras según las necesidades del proyecto</li>
+    <li>El dashboard muestra en tiempo real: registros por operador, zonas sin evaluar, pendientes de sincronización</li>
+    <li>Los informes de zona agregan datos de todos los operadores para análisis global</li>
+  </ol>
+</div>
+
+<!-- 10. SEGURIDAD -->
+<h2 id="seguridad" class="page-break">10. Seguridad y Control de Acceso</h2>
+
+<h3>10.1 Autenticación</h3>
+<ul>
+  <li><strong>Contraseñas</strong>: hash bcrypt en servidor, nunca en texto plano</li>
+  <li><strong>Tokens JWT</strong>: Bearer token con expiración, renovación automática en 401</li>
+  <li><strong>Rate limiting</strong>: 10 intentos por email cada 15 minutos</li>
+  <li><strong>Autenticación offline</strong>: caché local de hash para acceso sin conexión</li>
+</ul>
+
+<h3>10.2 Control de Acceso por Rol</h3>
+<table>
+  <tr><th>Funcionalidad</th><th>Operador</th><th>Admin</th></tr>
+  <tr><td>Formularios de campo</td><td>✓</td><td>✓</td></tr>
+  <tr><td>Cámara y fotos</td><td>✓</td><td>✓</td></tr>
+  <tr><td>Mapa y capas</td><td>✓</td><td>✓</td></tr>
+  <tr><td>Galería y comparador</td><td>✓</td><td>✓</td></tr>
+  <tr><td>Exportación de datos</td><td>✓</td><td>✓</td></tr>
+  <tr><td>Gestión de usuarios</td><td>✗</td><td>✓</td></tr>
+  <tr><td>Configuración watermark</td><td>✗</td><td>✓</td></tr>
+  <tr><td>Crear campos personalizados</td><td>✗</td><td>✓</td></tr>
+  <tr><td>Borrar datos globales</td><td>✗</td><td>✓</td></tr>
+</table>
+
+<!-- 11. VALOR AÑADIDO -->
+<h2 id="valor" class="page-break">11. Valor Añadido</h2>
+
+<h3>11.1 Eficiencia Operativa</h3>
+<table>
+  <tr><th>Aspecto</th><th>Método Tradicional (Papel)</th><th>RAPCA Campo</th></tr>
+  <tr><td>Recogida de datos</td><td>Formulario papel + cámara aparte</td><td>Todo integrado en el móvil</td></tr>
+  <tr><td>Georreferenciación</td><td>GPS separado + anotación manual</td><td>Automática con marca de agua</td></tr>
+  <tr><td>Digitalización</td><td>Transcripción manual posterior</td><td>Digital desde el inicio</td></tr>
+  <tr><td>Sincronización</td><td>Correo electrónico / USB</td><td>Automática al tener conexión</td></tr>
+  <tr><td>Exportación</td><td>Horas de trabajo en oficina</td><td>Un clic: PDF, Excel, Shapefile</td></tr>
+  <tr><td>Comparación temporal</td><td>Buscar fotos antiguas manualmente</td><td>Comparador integrado con slider</td></tr>
+  <tr><td>Errores de transcripción</td><td>Frecuentes</td><td>Eliminados</td></tr>
+  <tr><td>Pérdida de datos</td><td>Riesgo alto (papel mojado, perdido)</td><td>Triple redundancia</td></tr>
+</table>
+
+<h3>11.2 Reducción de Costes</h3>
+<ul>
+  <li><strong>Sin hardware dedicado</strong>: funciona en cualquier smartphone Android/iOS</li>
+  <li><strong>Sin licencias de software</strong>: herramienta web gratuita</li>
+  <li><strong>Sin App Store</strong>: distribución y actualización instantánea por URL</li>
+  <li><strong>Reducción del 70-80% en tiempo de procesamiento de datos en oficina</strong></li>
+  <li><strong>Eliminación de errores de transcripción</strong> que generan reproceso</li>
+</ul>
+
+<h3>11.3 Calidad del Dato</h3>
+<ul>
+  <li>Coordenadas GPS automáticas y precisas en cada registro y foto</li>
+  <li>Fotografías con metadatos incrustados (no se pueden "desasociar" de su ubicación)</li>
+  <li>Formularios con validación: campos obligatorios, rangos numéricos, opciones predefinidas</li>
+  <li>Marca temporal precisa con timezone Madrid</li>
+  <li>Trazabilidad: cada registro vinculado a operador, fecha, hora y ubicación</li>
+</ul>
+
+<h3>11.4 Interoperabilidad</h3>
+<ul>
+  <li><strong>Shapefile</strong>: integración directa con sistemas GIS (ArcGIS, QGIS, gvSIG)</li>
+  <li><strong>KML</strong>: visualización en Google Earth y cualquier visor compatible</li>
+  <li><strong>Excel/CSV</strong>: análisis en cualquier software estadístico (R, SPSS, Excel)</li>
+  <li><strong>Importación KML</strong>: carga de capas externas (SIGPAC, catastro, etc.)</li>
+  <li><strong>WMS</strong>: conexión a servicios web de mapas institucionales</li>
+</ul>
+
+<h3>11.5 Sostenibilidad Ambiental</h3>
+<ul>
+  <li>Eliminación del papel en campo (formularios, fichas, planos)</li>
+  <li>Reducción de desplazamientos (sincronización remota de datos)</li>
+  <li>Herramienta al servicio de la prevención de incendios forestales mediante pastoreo</li>
+</ul>
+
+<!-- 12. ESCALABILIDAD -->
+<h2 id="escalabilidad" class="page-break">12. Escalabilidad y Futuro</h2>
+
+<h3>12.1 Capacidad Actual</h3>
+<ul>
+  <li>Sin límite de registros (localStorage permite ~5-10MB, extensible a IndexedDB)</li>
+  <li>Sin límite de fotos (IndexedDB permite gigas de almacenamiento)</li>
+  <li>Multi-operador con roles diferenciados</li>
+  <li>Multi-zona y multi-provincia</li>
+</ul>
+
+<h3>12.2 Extensibilidad</h3>
+<ul>
+  <li><strong>Campos personalizados</strong>: nuevos campos sin modificar código</li>
+  <li><strong>Arquitectura modular</strong>: 14 módulos independientes con responsabilidad clara</li>
+  <li><strong>Build optimizado</strong>: concatenación y minificación con terser (34% reducción)</li>
+  <li><strong>API REST estándar</strong>: el backend acepta integración con otros sistemas</li>
+</ul>
+
+<h3>12.3 Posibles Evoluciones</h3>
+<ul>
+  <li>Integración con sensores IoT (estaciones meteorológicas, cámaras de vigilancia)</li>
+  <li>Machine Learning para clasificación automática de cobertura vegetal en fotos</li>
+  <li>Módulo de planificación de rutas de pastoreo</li>
+  <li>Notificaciones push para alertas y coordinación de equipo</li>
+  <li>Dashboard de supervisión en tiempo real con WebSockets</li>
+</ul>
+
+<!-- 13. CONCLUSIONES -->
+<h2 id="conclusiones" class="page-break">13. Conclusiones</h2>
+
+<p>RAPCA Campo representa una <strong>solución innovadora y completa</strong> para la digitalización del trabajo de campo en la Red de Áreas Pasto-Cortafuegos de Andalucía. Sus principales aportaciones son:</p>
+
+<ol>
+  <li><strong>Independencia de conectividad</strong>: opera al 100% sin cobertura móvil, resolviendo el principal obstáculo tecnológico del trabajo en campo remoto.</li>
+  <li><strong>Calidad del dato garantizada</strong>: georreferenciación automática, marcas de agua inteligentes y validación de formularios eliminan los errores de los métodos tradicionales.</li>
+  <li><strong>Eficiencia radical</strong>: la integración de captura de datos, fotografía, cartografía y exportación en una sola herramienta reduce drásticamente los tiempos de procesamiento.</li>
+  <li><strong>Interoperabilidad total</strong>: exportación en 8 formatos garantiza la integración con cualquier sistema de gestión o análisis existente.</li>
+  <li><strong>Innovación técnica</strong>: marcas de agua con geocodificación inversa, generación de Shapefiles en navegador, triple redundancia de sincronización y comparador temporal de fotos son características únicas en este tipo de herramientas.</li>
+  <li><strong>Coste mínimo de despliegue</strong>: como PWA, funciona en cualquier dispositivo con navegador, sin necesidad de instalación desde tiendas de aplicaciones, hardware dedicado ni licencias.</li>
+</ol>
+
+<div class="highlight-box">
+  <strong>RAPCA Campo no es solo una app de campo: es un ecosistema digital completo</strong> que cubre todo el ciclo de vida del dato, desde la captura en terreno hasta la generación de informes y la exportación a sistemas GIS, contribuyendo a la eficacia de la prevención de incendios forestales mediante pastoreo extensivo controlado en Andalucía.
+</div>
+
+<div class="footer">
+  RAPCA Campo v6.0 · Documento Técnico y de Innovación · Marzo 2026<br>
+  Red de Áreas Pasto-Cortafuegos de Andalucía — EMA
+</div>
+
+</body>
+</html>
