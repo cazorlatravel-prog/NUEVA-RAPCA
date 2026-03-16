@@ -4994,7 +4994,9 @@ function nuevoGanadero() {
   campos.forEach(function(c) {
     html += '<div class="form-group"><label>' + c.charAt(0).toUpperCase() + c.slice(1) + '</label><input type="text" id="gan-' + c + '"></div>';
   });
-  html += '<div class="form-group"><label>Nuevo campo personalizado</label><div style="display:flex;gap:6px"><input type="text" id="gan-nuevo-campo" placeholder="Nombre del campo"><button class="btn btn-sm btn-outline" onclick="agregarCampoGanadero()">＋</button></div></div>';
+  if (sesion && sesion.rol === 'admin') {
+    html += '<div class="form-group"><label>Nuevo campo personalizado</label><div style="display:flex;gap:6px"><input type="text" id="gan-nuevo-campo" placeholder="Nombre del campo"><button class="btn btn-sm btn-outline" onclick="agregarCampoGanadero()">＋</button></div></div>';
+  }
   html += '<div class="modal-actions"><button class="btn btn-primary" onclick="guardarGanadero()">Guardar</button><button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button></div>';
   abrirModal(html);
 }
@@ -5038,6 +5040,69 @@ function eliminarGanadero(idx) {
   guardarGanaderosLS();
   renderGanaderos();
   showToast('Ganadero eliminado', 'info');
+}
+
+// --- Gestión de campos de ganaderos (solo admin) ---
+var GANADERO_CAMPOS_BASE = ['nombre','nif','telefono','email','municipio','explotacion'];
+
+function gestionarCamposGanaderos() {
+  if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
+  var campos = JSON.parse(localStorage.getItem('rapca_campos_ganadero') || '["nombre","nif","telefono","email","municipio","explotacion"]');
+  var extras = campos.filter(function(c) { return GANADERO_CAMPOS_BASE.indexOf(c) < 0; });
+
+  var html = '<h2>Gestionar Campos de Ganaderos</h2>';
+
+  // Campos base
+  html += '<div class="form-group"><label>Campos base</label>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+  GANADERO_CAMPOS_BASE.forEach(function(c) {
+    html += '<span style="background:#fff3e0;padding:3px 8px;border-radius:12px;font-size:12px">' + c + '</span>';
+  });
+  html += '</div></div>';
+
+  // Campos personalizados
+  html += '<div class="form-group"><label>Campos personalizados</label>';
+  if (extras.length > 0) {
+    extras.forEach(function(c, i) {
+      html += '<div style="display:flex;align-items:center;gap:6px;margin:4px 0">' +
+        '<span style="flex:1;padding:4px 8px;background:#f5f5f5;border-radius:6px;font-size:13px">' + escapeHtml(c) + '</span>' +
+        '<button class="btn btn-sm" onclick="eliminarCampoGanadero(' + i + ')" style="color:#e74c3c;border:none;padding:4px">✕</button>' +
+        '</div>';
+    });
+  } else {
+    html += '<p style="color:#888;font-size:13px">No hay campos personalizados</p>';
+  }
+  html += '</div>';
+
+  // Añadir nuevo campo
+  html += '<div class="form-group"><label>Añadir campo</label>';
+  html += '<div style="display:flex;gap:6px"><input type="text" id="gan-admin-nuevo-campo" placeholder="Nombre del campo" style="flex:1"><button class="btn btn-sm btn-outline" onclick="agregarCampoGanaderoAdmin()">＋ Añadir</button></div></div>';
+
+  html += '<div class="modal-actions"><button class="btn btn-primary" onclick="cerrarModal()">Cerrar</button></div>';
+  abrirModal(html);
+}
+
+function agregarCampoGanaderoAdmin() {
+  var campo = document.getElementById('gan-admin-nuevo-campo').value.trim().toLowerCase();
+  if (!campo) return;
+  var campos = JSON.parse(localStorage.getItem('rapca_campos_ganadero') || '["nombre","nif","telefono","email","municipio","explotacion"]');
+  if (campos.indexOf(campo) < 0) {
+    campos.push(campo);
+    localStorage.setItem('rapca_campos_ganadero', JSON.stringify(campos));
+  }
+  gestionarCamposGanaderos();
+  showToast('Campo "' + campo + '" añadido', 'success');
+}
+
+function eliminarCampoGanadero(idx) {
+  var campos = JSON.parse(localStorage.getItem('rapca_campos_ganadero') || '["nombre","nif","telefono","email","municipio","explotacion"]');
+  var extras = campos.filter(function(c) { return GANADERO_CAMPOS_BASE.indexOf(c) < 0; });
+  var campoEliminar = extras[idx];
+  if (!campoEliminar) return;
+  campos = campos.filter(function(c) { return c !== campoEliminar; });
+  localStorage.setItem('rapca_campos_ganadero', JSON.stringify(campos));
+  gestionarCamposGanaderos();
+  showToast('Campo "' + campoEliminar + '" eliminado', 'info');
 }
 
 
@@ -5156,6 +5221,7 @@ function filtrarInfras(val) {
 
 // --- Gestión de campos personalizados ---
 function gestionarCamposInfra() {
+  if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores pueden gestionar campos', 'error'); return; }
   var extras = JSON.parse(localStorage.getItem('rapca_campos_infra') || '[]');
   var campoEnlace = obtenerCampoEnlace();
   var todosCampos = INFRA_CAMPOS_BASE.concat(extras);
@@ -5233,7 +5299,9 @@ function nuevaInfra() {
   campos.forEach(function(c) {
     html += '<div class="form-group"><label>' + escapeHtml(c) + '</label><input type="text" id="infra-f-' + c + '"></div>';
   });
-  html += '<div class="form-group"><label>Nuevo campo rápido</label><div style="display:flex;gap:6px"><input type="text" id="infra-nuevo-campo" placeholder="Nombre"><button class="btn btn-sm btn-outline" onclick="agregarCampoInfra()">＋</button></div></div>';
+  if (sesion && sesion.rol === 'admin') {
+    html += '<div class="form-group"><label>Nuevo campo rápido</label><div style="display:flex;gap:6px"><input type="text" id="infra-nuevo-campo" placeholder="Nombre"><button class="btn btn-sm btn-outline" onclick="agregarCampoInfra()">＋</button></div></div>';
+  }
   html += '<div class="modal-actions"><button class="btn btn-primary" onclick="guardarInfra()">Guardar</button><button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button></div>';
   abrirModal(html);
 }
