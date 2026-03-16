@@ -1,11 +1,20 @@
 // RAPCA Campo — Service Worker v1.0
-const CACHE_NAME = 'rapca-v3';
+const CACHE_NAME = 'rapca-v4';
 const CDN_CACHE = 'rapca-cdn-v1';
 
 const APP_FILES = [
   './',
   './index.html',
   './app.js',
+  './auth.js',
+  './forms.js',
+  './camera.js',
+  './sync.js',
+  './map.js',
+  './panel.js',
+  './admin.js',
+  './gabinete.js',
+  './precarga.js',
   './dashboard.js',
   './timeline.js',
   './comparador.js',

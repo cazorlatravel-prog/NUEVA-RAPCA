@@ -1,0 +1,936 @@
+// RAPCA Campo — camera.js — Cámara y fotos
+// ============================================================
+
+function abrirCamara(tipo, subtipo) {
+  camaraTipo = tipo;
+  camaraSubtipo = subtipo;
+  vibrar();
+
+  // Generar código de foto
+  var prefix = tipo === 'EI' ? 'ev' : tipo.toLowerCase();
+  var unidad = document.getElementById(prefix + '-unidad').value || 'SIN_ID';
+  // EI y EL usan 'EV' en el código de foto, VP usa 'VP'
+  var codeTipo = (tipo === 'EI' || tipo === 'EL') ? 'EV' : tipo;
+  var contKey = unidad + '_' + codeTipo + '_' + subtipo;
+  var contadores = safeParse('rapca_contadores_' + tipo, {});
+
+  // Buscar el máximo número usado en TODOS los registros (locales + servidor) para evitar colisiones
+  var maxEnRegistros = 0;
+  var prefijoBuscar = subtipo === 'G' ? unidad + '_' + codeTipo + '_' : unidad + '_' + codeTipo + '_' + subtipo + '_';
+
+  function extraerNumDeCodigo(codigo) {
+    if (!codigo || codigo.indexOf(prefijoBuscar) !== 0) return 0;
+    var num = parseInt(codigo.substring(prefijoBuscar.length));
+    return isNaN(num) ? 0 : num;
+  }
+
+  registros.forEach(function(r) {
+    if (!r.datos) return;
+    // Buscar en fotos generales
+    if (r.datos.fotos && typeof r.datos.fotos === 'string') {
+      r.datos.fotos.split(',').forEach(function(f) {
+        var n = extraerNumDeCodigo(f.trim());
+        if (n > maxEnRegistros) maxEnRegistros = n;
+      });
+    }
+    // Buscar en fotos comparativas (fotosComp)
+    if (r.datos.fotosComp && Array.isArray(r.datos.fotosComp)) {
+      r.datos.fotosComp.forEach(function(fc) {
+        var n = extraerNumDeCodigo(fc.numero || '');
+        if (n > maxEnRegistros) maxEnRegistros = n;
+      });
+    }
+  });
+
+  // También buscar en fotos de la página/formulario actual
+  var todasFotosPagina = [].concat(fotosPagina['G'] || [], fotosPagina['W1'] || [], fotosPagina['W2'] || []);
+  todasFotosPagina.forEach(function(f) {
+    var codigo = typeof f === 'object' ? f.codigo : f;
+    var n = extraerNumDeCodigo(codigo);
+    if (n > maxEnRegistros) maxEnRegistros = n;
+  });
+
+  // Usar el mayor entre el contador localStorage y el máximo en registros
+  // Si se reiniciaron manualmente, ignorar registros anteriores
+  var contadorLocal = contadores[contKey] || 0;
+  var reiniciados = localStorage.getItem('rapca_contadores_reiniciados') === 'true';
+  var nuevoContador = reiniciados ? contadorLocal + 1 : Math.max(contadorLocal, maxEnRegistros) + 1;
+  contadores[contKey] = nuevoContador;
+  safeStore('rapca_contadores_' + tipo, contadores);
+  // Quitar flag de reinicio tras la primera foto nueva
+  if (reiniciados) localStorage.removeItem('rapca_contadores_reiniciados');
+
+  if (subtipo === 'G') {
+    fotoCodigo = unidad + '_' + codeTipo + '_' + nuevoContador;
+  } else {
+    fotoCodigo = unidad + '_' + codeTipo + '_' + subtipo + '_' + nuevoContador;
+  }
+
+  document.getElementById('cam-code').textContent = fotoCodigo;
+
+  // Abrir cámara
+  var constraints = {video: {facingMode: camaraFacing, width: {ideal: 1920}, height: {ideal: 1080}}, audio: false};
+  navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
+    camaraStream = stream;
+    var video = document.getElementById('camera-video');
+    video.srcObject = stream;
+    document.getElementById('camera-modal').classList.add('open');
+    iniciarOverlayCamara();
+    cargarGhostFoto(tipo, subtipo);
+  }).catch(function(err) {
+    showToast('Error al acceder a la cámara: ' + err.message, 'error');
+    // Decrementar contador
+    contadores[contKey]--;
+    safeStore('rapca_contadores_' + tipo, contadores);
+  });
+}
+
+function cerrarCamara() {
+  if (camaraStream) {
+    camaraStream.getTracks().forEach(function(t) { t.stop(); });
+    camaraStream = null;
+  }
+  document.getElementById('camera-modal').classList.remove('open');
+  if (miniMapaCamera) { miniMapaCamera.remove(); miniMapaCamera = null; }
+  // Limpiar ghost
+  document.getElementById('ghost-overlay').style.display = 'none';
+  document.getElementById('ghost-controls').style.display = 'none';
+  ghostingActivo = false;
+
+  // Decrementar contador si se cancela
+  var prefix = camaraTipo === 'EI' ? 'ev' : camaraTipo.toLowerCase();
+  var unidad = document.getElementById(prefix + '-unidad').value || 'SIN_ID';
+  var codeTipo = (camaraTipo === 'EI' || camaraTipo === 'EL') ? 'EV' : camaraTipo;
+  var contKey = unidad + '_' + codeTipo + '_' + camaraSubtipo;
+  var contadores = safeParse('rapca_contadores_' + camaraTipo, {});
+  if (contadores[contKey] > 0) contadores[contKey]--;
+  safeStore('rapca_contadores_' + camaraTipo, contadores);
+}
+
+function switchCamara() {
+  camaraFacing = camaraFacing === 'environment' ? 'user' : 'environment';
+  if (camaraStream) {
+    camaraStream.getTracks().forEach(function(t) { t.stop(); });
+  }
+  var constraints = {video: {facingMode: camaraFacing, width: {ideal: 1920}, height: {ideal: 1080}}, audio: false};
+  navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
+    camaraStream = stream;
+    document.getElementById('camera-video').srcObject = stream;
+  });
+}
+
+var miniMapaImg = null; // Imagen capturada del mini mapa para overlay
+
+function capturarMiniMapaDesdeDiv(mapDiv) {
+  try {
+    var mapCanvas = document.createElement('canvas');
+    var mapRect = mapDiv.getBoundingClientRect();
+    if (mapRect.width === 0 || mapRect.height === 0) return;
+    mapCanvas.width = mapRect.width * 2;
+    mapCanvas.height = mapRect.height * 2;
+    var mctx = mapCanvas.getContext('2d');
+
+    var tiles = mapDiv.querySelectorAll('.leaflet-tile');
+    var dibujados = 0;
+    tiles.forEach(function(tile) {
+      if (!tile.complete || tile.naturalWidth === 0) return;
+      var tileRect = tile.getBoundingClientRect();
+      var dx = (tileRect.left - mapRect.left) * 2;
+      var dy = (tileRect.top - mapRect.top) * 2;
+      try { mctx.drawImage(tile, dx, dy, tileRect.width * 2, tileRect.height * 2); dibujados++; } catch(e) {}
+    });
+
+    if (dibujados > 0) {
+      var centerX = mapCanvas.width / 2;
+      var centerY = mapCanvas.height / 2;
+      mctx.beginPath();
+      mctx.arc(centerX, centerY, 12, 0, Math.PI * 2);
+      mctx.fillStyle = '#e74c3c';
+      mctx.fill();
+      mctx.strokeStyle = '#fff';
+      mctx.lineWidth = 4;
+      mctx.stroke();
+      miniMapaImg = mapCanvas;
+    }
+  } catch(e) { console.warn('No se pudo capturar mini mapa:', e); }
+}
+
+function iniciarOverlayCamara() {
+  // Brújula
+  var handler = function(e) {
+    compassHeading = e.alpha ? Math.round(e.alpha) : 0;
+    var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+    var dir = dirs[Math.floor((compassHeading + 22.5) / 45) % 8];
+    document.getElementById('cam-compass').textContent = dir + ' ' + compassHeading + '°';
+  };
+  if (window.DeviceOrientationEvent) {
+    window.addEventListener('deviceorientationabsolute', handler, true);
+    window.addEventListener('deviceorientation', handler, true);
+  }
+
+  miniMapaImg = null;
+
+  // GPS para overlay
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(function(pos) {
+      gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude};
+      document.getElementById('cam-coords').textContent = formatCoordNW(gpsPos.lat, gpsPos.lon);
+
+      // Mini mapa a escala ~1:50000 (zoom 12)
+      try {
+        var mapDiv = document.getElementById('camera-minimap');
+        if (miniMapaCamera) miniMapaCamera.remove();
+        miniMapaCamera = L.map(mapDiv, {zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false}).setView([gpsPos.lat, gpsPos.lon], 12);
+        // Usar tile layer con CORS forzado en createTile
+        var CORSTileLayer = L.TileLayer.extend({
+          createTile: function(coords, done) {
+            var tile = document.createElement('img');
+            tile.crossOrigin = 'anonymous';
+            tile.alt = '';
+            tile.setAttribute('role', 'presentation');
+            tile.onload = function() { done(null, tile); };
+            tile.onerror = function(e) { done(e, tile); };
+            tile.src = this.getTileUrl(coords);
+            return tile;
+          }
+        });
+        new CORSTileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(miniMapaCamera);
+        L.marker([gpsPos.lat, gpsPos.lon], {
+          icon: L.divIcon({className: '', html: '<div style="width:14px;height:14px;background:#e74c3c;border:3px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>', iconSize: [14,14], iconAnchor: [7,7]})
+        }).addTo(miniMapaCamera);
+
+        // Esperar al evento 'load' de Leaflet (tiles cargados) + reintentos
+        miniMapaCamera.on('load', function() {
+          setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 300);
+        });
+        // Reintentos por si los tiles tardan
+        setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 3000);
+        setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 6000);
+        setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 10000);
+      } catch(e) {}
+    }, function() {}, {enableHighAccuracy: true});
+  }
+}
+
+// Dibujar rosa de los vientos en canvas
+function dibujarRosaVientos(ctx, cx, cy, size) {
+  ctx.save();
+  // Fondo circular semitransparente
+  ctx.beginPath();
+  ctx.arc(cx, cy, size, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(80,80,80,0.7)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Circulo interior
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * 0.85, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  var r = size * 0.7; // radio de las puntas
+
+  // Flecha Norte (cian/turquesa como en la imagen)
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);           // punta norte
+  ctx.lineTo(cx - r * 0.18, cy);    // base izq
+  ctx.lineTo(cx, cy - r * 0.15);    // muesca central
+  ctx.closePath();
+  ctx.fillStyle = '#00e5ff';
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);
+  ctx.lineTo(cx + r * 0.18, cy);
+  ctx.lineTo(cx, cy - r * 0.15);
+  ctx.closePath();
+  ctx.fillStyle = '#00b8d4';
+  ctx.fill();
+
+  // Flecha Sur (gris oscuro)
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + r);
+  ctx.lineTo(cx - r * 0.18, cy);
+  ctx.lineTo(cx, cy + r * 0.15);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + r);
+  ctx.lineTo(cx + r * 0.18, cy);
+  ctx.lineTo(cx, cy + r * 0.15);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.fill();
+
+  // Flecha Este
+  ctx.beginPath();
+  ctx.moveTo(cx + r * 0.6, cy);
+  ctx.lineTo(cx, cy - r * 0.12);
+  ctx.lineTo(cx + r * 0.1, cy);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cx + r * 0.6, cy);
+  ctx.lineTo(cx, cy + r * 0.12);
+  ctx.lineTo(cx + r * 0.1, cy);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.fill();
+
+  // Flecha Oeste
+  ctx.beginPath();
+  ctx.moveTo(cx - r * 0.6, cy);
+  ctx.lineTo(cx, cy - r * 0.12);
+  ctx.lineTo(cx - r * 0.1, cy);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cx - r * 0.6, cy);
+  ctx.lineTo(cx, cy + r * 0.12);
+  ctx.lineTo(cx - r * 0.1, cy);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.fill();
+
+  // Letras cardinales
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  var fs = size * 0.28;
+  ctx.font = 'bold ' + fs + 'px sans-serif';
+
+  // N (en cian)
+  ctx.fillStyle = '#00e5ff';
+  ctx.fillText('N', cx, cy - size * 0.88);
+  // S
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.fillText('S', cx, cy + size * 0.90);
+  // E
+  ctx.fillText('E', cx + size * 0.88, cy);
+  // W
+  ctx.fillText('W', cx - size * 0.88, cy);
+
+  ctx.restore();
+}
+
+function capturarFoto() {
+  vibrar(30);
+
+  // Intentar capturar mini mapa una última vez si no se tiene
+  if (!miniMapaImg) {
+    var mapDiv = document.getElementById('camera-minimap');
+    if (mapDiv) capturarMiniMapaDesdeDiv(mapDiv);
+  }
+
+  var video = document.getElementById('camera-video');
+  var canvas = document.getElementById('preview-canvas');
+  var W = 3060, H = 4080;
+  canvas.width = W;
+  canvas.height = H;
+  var ctx = canvas.getContext('2d');
+
+  // Dibujar foto del video
+  var vw = video.videoWidth, vh = video.videoHeight;
+  var scale = Math.max(W / vw, H / vh);
+  var sw = W / scale, sh = H / scale;
+  var sx = (vw - sw) / 2, sy = (vh - sh) / 2;
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, W, H);
+
+  // --- ROSA DE LOS VIENTOS (esquina superior izquierda) ---
+  dibujarRosaVientos(ctx, 120, 120, 95);
+
+  // --- MINI MAPA (esquina inferior izquierda, ~1:50000) ---
+  var mapSize = 500;
+  var mapX = 30, mapY = H - mapSize - 30;
+  if (miniMapaImg) {
+    // Borde redondeado para el mapa
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
+    ctx.clip();
+    ctx.drawImage(miniMapaImg, mapX, mapY, mapSize, mapSize);
+    ctx.restore();
+    // Borde
+    ctx.beginPath();
+    ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  } else if (gpsPos) {
+    // Fallback: recuadro con coordenadas si no se capturó el mapa
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
+    ctx.fillStyle = 'rgba(200,220,200,0.7)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.restore();
+    // Marcador rojo centrado
+    ctx.beginPath();
+    ctx.arc(mapX + mapSize / 2, mapY + mapSize / 2, 16, 0, Math.PI * 2);
+    ctx.fillStyle = '#e74c3c';
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    // Texto posición
+    ctx.fillStyle = '#333';
+    ctx.font = '22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('1:50.000', mapX + mapSize / 2, mapY + mapSize - 20);
+    ctx.textAlign = 'start';
+  }
+
+  // --- INFO PANEL (esquina inferior derecha, texto amarillo sin fondo) ---
+  var utm = gpsPos ? formatCoordNW(gpsPos.lat, gpsPos.lon) : 'Sin GPS';
+  var fechaFoto = new Date();
+  var dd = ('0' + fechaFoto.getDate()).slice(-2);
+  var mm = ('0' + (fechaFoto.getMonth() + 1)).slice(-2);
+  var yyyy = fechaFoto.getFullYear();
+  var fechaStr = dd + '/' + mm + '/' + yyyy;
+
+  // Sombra para legibilidad
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetX = 2;
+  ctx.shadowOffsetY = 2;
+
+  ctx.textAlign = 'right';
+
+  // RAPCA EMA
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 56px sans-serif';
+  ctx.fillText('RAPCA EMA', W - 50, H - 230);
+
+  // Código foto
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold 48px sans-serif';
+  ctx.fillText(fotoCodigo, W - 50, H - 165);
+
+  // Fecha (sin hora)
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '42px sans-serif';
+  ctx.fillText(fechaStr, W - 50, H - 110);
+
+  // Coordenadas UTM 30N ETRS89
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '38px sans-serif';
+  ctx.fillText(utm, W - 50, H - 55);
+
+  // Resetear sombra y alineación
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.textAlign = 'start';
+
+  fotoCapturada = canvas;
+  anotaciones = [];
+
+  // Cerrar cámara, mostrar preview
+  if (camaraStream) {
+    camaraStream.getTracks().forEach(function(t) { t.stop(); });
+    camaraStream = null;
+  }
+  document.getElementById('camera-modal').classList.remove('open');
+  document.getElementById('preview-modal').classList.add('open');
+}
+
+// --- SISTEMA DE GHOSTING PARA FOTOS COMPARATIVAS ---
+
+function cargarGhostFoto(tipo, subtipo) {
+  // Buscar foto previa del mismo waypoint y unidad para usar como ghost
+  var ghostEl = document.getElementById('ghost-overlay');
+  var ghostControls = document.getElementById('ghost-controls');
+  ghostEl.style.display = 'none';
+  ghostControls.style.display = 'none';
+  ghostingActivo = false;
+
+  // Solo para fotos comparativas W1/W2
+  if (subtipo !== 'W1' && subtipo !== 'W2') return;
+
+  var prefix = tipo === 'EI' ? 'ev' : tipo.toLowerCase();
+  var unidad = document.getElementById(prefix + '-unidad').value || '';
+  if (!unidad) return;
+
+  // Buscar en registros anteriores fotos comparativas del mismo waypoint/unidad
+  var codeTipo = (tipo === 'EI' || tipo === 'EL') ? 'EV' : tipo;
+  var patronBusqueda = unidad + '_' + codeTipo + '_' + subtipo;
+
+  function activarGhost(src) {
+    ghostEl.src = src;
+    ghostEl.onload = function() {
+      ghostEl.style.display = 'block';
+      ghostEl.style.opacity = ghostOpacity / 100;
+      ghostControls.style.display = 'flex';
+      ghostingActivo = true;
+
+      var btn = document.getElementById('ghost-toggle-btn');
+      btn.textContent = '👻 Ghost ON';
+      btn.style.color = '#00e5ff';
+      btn.style.borderColor = '#00e5ff';
+
+      var slider = document.getElementById('ghost-slider');
+      slider.value = ghostOpacity;
+    };
+  }
+
+  // Buscar en IndexedDB el thumbnail más reciente que coincida
+  if (!db) return;
+  obtenerTodosDB('fotos').then(function(fotos) {
+    // Buscar la foto más reciente cuyo código empiece con el patrón
+    var matches = fotos.filter(function(f) {
+      return f.codigo && f.codigo.indexOf(patronBusqueda) === 0;
+    }).sort(function(a, b) { return (b.fecha || 0) - (a.fecha || 0); });
+
+    if (matches.length > 0 && matches[0].data) {
+      activarGhost(matches[0].data);
+    } else {
+      // Buscar en subidas_pendientes
+      obtenerTodosDB('subidas_pendientes').then(function(pendientes) {
+        var matchesPend = pendientes.filter(function(f) {
+          return f.codigo && f.codigo.indexOf(patronBusqueda) === 0;
+        }).sort(function(a, b) { return (b.fecha || 0) - (a.fecha || 0); });
+
+        if (matchesPend.length > 0 && matchesPend[0].data) {
+          activarGhost(matchesPend[0].data);
+        } else {
+          // Buscar en fotos precargadas offline
+          buscarGhostEnPrecargadas(unidad, subtipo, activarGhost);
+        }
+      });
+    }
+  });
+}
+
+function buscarGhostEnPrecargadas(unidad, subtipo, callback) {
+  if (!db) return;
+  try {
+    var tx = db.transaction('fotos_precargadas', 'readonly');
+    var store = tx.objectStore('fotos_precargadas');
+    var index = store.index('unidad');
+    var req = index.getAll(unidad);
+    req.onsuccess = function() {
+      var fotos = req.result || [];
+      // Filtrar por waypoint (W1/W2)
+      var matches = fotos.filter(function(f) {
+        return f.waypoint === subtipo;
+      }).sort(function(a, b) {
+        // Más reciente primero
+        return (b.fecha || '').localeCompare(a.fecha || '');
+      });
+
+      if (matches.length > 0 && matches[0].data) {
+        callback(matches[0].data);
+      }
+    };
+  } catch(e) {
+    console.warn('Error buscando ghost en precargadas:', e);
+  }
+}
+
+function toggleGhost() {
+  var ghostEl = document.getElementById('ghost-overlay');
+  var btn = document.getElementById('ghost-toggle-btn');
+  ghostingActivo = !ghostingActivo;
+  if (ghostingActivo) {
+    ghostEl.style.display = 'block';
+    ghostEl.style.opacity = ghostOpacity / 100;
+    btn.textContent = '👻 Ghost ON';
+    btn.style.color = '#00e5ff';
+    btn.style.borderColor = '#00e5ff';
+  } else {
+    ghostEl.style.display = 'none';
+    btn.textContent = '👻 Ghost OFF';
+    btn.style.color = '#888';
+    btn.style.borderColor = '#888';
+  }
+}
+
+function ajustarGhost(val) {
+  ghostOpacity = parseInt(val);
+  var ghostEl = document.getElementById('ghost-overlay');
+  if (ghostingActivo) {
+    ghostEl.style.opacity = ghostOpacity / 100;
+  }
+  var label = document.getElementById('ghost-label');
+  if (label) label.textContent = ghostOpacity + '%';
+}
+
+function repetirFoto() {
+  limpiarAnotaciones();
+  document.getElementById('preview-modal').classList.remove('open');
+  abrirCamara(camaraTipo, camaraSubtipo);
+}
+
+// --- Anotaciones interactivas ---
+var anotDragging = null;
+var anotResizing = null;
+var anotStartPos = null;
+
+function anotarFoto() {
+  var previewModal = document.getElementById('preview-modal');
+  var canvas = document.getElementById('preview-canvas');
+
+  // Crear overlay de anotaciones si no existe
+  var overlay = document.getElementById('anot-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'anot-overlay';
+    overlay.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;';
+    // Posicionar relativamente al canvas
+    var canvasWrap = document.getElementById('anot-canvas-wrap');
+    if (!canvasWrap) {
+      canvasWrap = document.createElement('div');
+      canvasWrap.id = 'anot-canvas-wrap';
+      canvasWrap.style.cssText = 'position:relative;display:inline-block;max-width:95vw;max-height:70vh;';
+      canvas.parentNode.insertBefore(canvasWrap, canvas);
+      canvasWrap.appendChild(canvas);
+      canvasWrap.appendChild(overlay);
+    }
+  }
+
+  var numAnot = anotaciones.length + 1;
+  var circleSize = 50; // Radio en píxeles de pantalla
+
+  // Mostrar diálogo para escribir la anotación
+  mostrarDialogoAnotacion(numAnot, function(texto) {
+    if (texto === null) return; // Cancelado
+
+    // Crear elemento de anotación
+    var anot = document.createElement('div');
+    anot.className = 'anot-circle';
+    anot.dataset.num = numAnot;
+    anot.dataset.radius = circleSize;
+    anot.dataset.texto = texto;
+    anot.style.cssText = 'position:absolute;left:50%;top:50%;width:' + (circleSize * 2) + 'px;height:' + (circleSize * 2) + 'px;' +
+      'margin-left:-' + circleSize + 'px;margin-top:-' + circleSize + 'px;' +
+      'border:3px solid #e74c3c;border-radius:50%;pointer-events:auto;touch-action:none;cursor:grab;' +
+      'display:flex;align-items:center;justify-content:center;z-index:10;';
+    anot.innerHTML = '<span style="color:#e74c3c;font-weight:700;font-size:18px;pointer-events:none;text-shadow:0 0 3px #fff,0 0 5px #fff;">' + numAnot + '</span>' +
+      '<div class="anot-resize-handle" style="position:absolute;bottom:-6px;right:-6px;width:18px;height:18px;background:#e74c3c;border-radius:50%;cursor:nwse-resize;pointer-events:auto;touch-action:none;border:2px solid #fff;"></div>';
+
+    // Etiqueta de texto debajo del círculo
+    if (texto) {
+      var label = document.createElement('div');
+      label.className = 'anot-label';
+      label.style.cssText = 'position:absolute;top:' + (circleSize * 2 + 4) + 'px;left:50%;transform:translateX(-50%);' +
+        'background:rgba(231,76,60,0.9);color:#fff;padding:2px 8px;border-radius:4px;font-size:12px;' +
+        'white-space:nowrap;pointer-events:none;max-width:200px;overflow:hidden;text-overflow:ellipsis;';
+      label.textContent = texto;
+      anot.appendChild(label);
+    }
+
+    overlay.appendChild(anot);
+
+    // Eventos táctiles y ratón para arrastrar
+    anot.addEventListener('mousedown', anotStartDrag);
+    anot.addEventListener('touchstart', anotStartDrag, {passive: false});
+
+    // Eventos para redimensionar
+    var handle = anot.querySelector('.anot-resize-handle');
+    handle.addEventListener('mousedown', anotStartResize);
+    handle.addEventListener('touchstart', anotStartResize, {passive: false});
+
+    anotaciones.push({el: anot, num: numAnot, radius: circleSize, texto: texto});
+    showToast('Anotación ' + numAnot + (texto ? ': ' + texto : '') + '. Arrastra para mover.', 'info');
+  });
+}
+
+function mostrarDialogoAnotacion(numAnot, callback) {
+  // Crear modal de anotación
+  var modal = document.createElement('div');
+  modal.id = 'anot-dialog';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);' +
+    'display:flex;align-items:center;justify-content:center;z-index:10000;';
+
+  var box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:12px;padding:20px;max-width:90vw;width:340px;box-shadow:0 8px 32px rgba(0,0,0,0.3);';
+  box.innerHTML = '<h3 style="margin:0 0 12px;color:#1a3d2e;font-size:16px;">Anotación ' + numAnot + '</h3>' +
+    '<textarea id="anot-texto-input" placeholder="Escribe la anotación..." ' +
+    'style="width:100%;height:80px;padding:10px;border:2px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box;" autofocus></textarea>' +
+    '<div style="display:flex;gap:10px;margin-top:12px;">' +
+    '<button id="anot-cancelar-btn" style="flex:1;padding:10px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;font-size:14px;cursor:pointer;">Cancelar</button>' +
+    '<button id="anot-guardar-btn" style="flex:1;padding:10px;border:none;border-radius:8px;background:#1a3d2e;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">Guardar</button>' +
+    '</div>';
+
+  modal.appendChild(box);
+  document.body.appendChild(modal);
+
+  var input = document.getElementById('anot-texto-input');
+  setTimeout(function() { input.focus(); }, 100);
+
+  document.getElementById('anot-guardar-btn').addEventListener('click', function() {
+    var texto = input.value.trim();
+    document.body.removeChild(modal);
+    callback(texto);
+  });
+
+  document.getElementById('anot-cancelar-btn').addEventListener('click', function() {
+    document.body.removeChild(modal);
+    callback(null);
+  });
+
+  // Enter para guardar
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById('anot-guardar-btn').click();
+    }
+  });
+}
+
+function anotStartDrag(e) {
+  // Evitar si es el handle de resize
+  if (e.target.classList.contains('anot-resize-handle')) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  var anot = e.currentTarget;
+  anotDragging = anot;
+  anot.style.cursor = 'grabbing';
+
+  var touch = e.touches ? e.touches[0] : e;
+  anotStartPos = {
+    x: touch.clientX,
+    y: touch.clientY,
+    left: anot.offsetLeft + parseInt(anot.style.marginLeft || 0),
+    top: anot.offsetTop + parseInt(anot.style.marginTop || 0)
+  };
+}
+
+function anotStartResize(e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  var anot = e.currentTarget.parentElement;
+  anotResizing = anot;
+
+  var touch = e.touches ? e.touches[0] : e;
+  var rect = anot.getBoundingClientRect();
+  var cx = rect.left + rect.width / 2;
+  var cy = rect.top + rect.height / 2;
+  anotStartPos = {
+    x: touch.clientX,
+    y: touch.clientY,
+    cx: cx,
+    cy: cy,
+    origRadius: parseInt(anot.dataset.radius)
+  };
+}
+
+document.addEventListener('mousemove', anotOnMove);
+document.addEventListener('touchmove', anotOnMove, {passive: false});
+document.addEventListener('mouseup', anotEndDrag);
+document.addEventListener('touchend', anotEndDrag);
+
+function anotOnMove(e) {
+  if (!anotDragging && !anotResizing) return;
+  e.preventDefault();
+
+  var touch = e.touches ? e.touches[0] : e;
+
+  if (anotDragging) {
+    var dx = touch.clientX - anotStartPos.x;
+    var dy = touch.clientY - anotStartPos.y;
+    anotDragging.style.left = (anotStartPos.left + dx) + 'px';
+    anotDragging.style.top = (anotStartPos.top + dy) + 'px';
+    anotDragging.style.marginLeft = '0';
+    anotDragging.style.marginTop = '0';
+  }
+
+  if (anotResizing) {
+    var dx2 = touch.clientX - anotStartPos.cx;
+    var dy2 = touch.clientY - anotStartPos.cy;
+    var newRadius = Math.max(20, Math.round(Math.sqrt(dx2 * dx2 + dy2 * dy2)));
+    anotResizing.style.width = (newRadius * 2) + 'px';
+    anotResizing.style.height = (newRadius * 2) + 'px';
+    anotResizing.dataset.radius = newRadius;
+    // Ajustar posición para mantener centrado
+    var currentLeft = anotResizing.offsetLeft;
+    var currentTop = anotResizing.offsetTop;
+    var oldRadius = parseInt(anotResizing.style.width) / 2;
+    // No recentrar, dejar que el usuario mueva después si quiere
+  }
+}
+
+function anotEndDrag() {
+  if (anotDragging) {
+    anotDragging.style.cursor = 'grab';
+    anotDragging = null;
+  }
+  anotResizing = null;
+  anotStartPos = null;
+}
+
+// Renderizar anotaciones sobre el canvas antes de guardar
+function renderizarAnotaciones() {
+  var canvas = document.getElementById('preview-canvas');
+  var overlay = document.getElementById('anot-overlay');
+  if (!overlay || anotaciones.length === 0) return;
+
+  var ctx = canvas.getContext('2d');
+  var canvasRect = canvas.getBoundingClientRect();
+
+  // Escala entre el canvas visual y el canvas real
+  var scaleX = canvas.width / canvasRect.width;
+  var scaleY = canvas.height / canvasRect.height;
+
+  for (var i = 0; i < anotaciones.length; i++) {
+    var a = anotaciones[i];
+    var el = a.el;
+    if (!el) continue;
+
+    var elRect = el.getBoundingClientRect();
+    // Centro del elemento relativo al canvas
+    var cx = (elRect.left + elRect.width / 2 - canvasRect.left) * scaleX;
+    var cy = (elRect.top + elRect.height / 2 - canvasRect.top) * scaleY;
+    var radius = (elRect.width / 2) * scaleX;
+
+    // Dibujar círculo
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.strokeStyle = '#e74c3c';
+    ctx.lineWidth = Math.max(4, radius * 0.08);
+    ctx.stroke();
+
+    // Dibujar número
+    ctx.fillStyle = '#e74c3c';
+    ctx.font = 'bold ' + Math.max(24, radius * 0.6) + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(a.num.toString(), cx, cy);
+
+    // Dibujar texto de anotación debajo del círculo
+    if (a.texto) {
+      var fontSize = Math.max(18, radius * 0.35);
+      ctx.font = 'bold ' + fontSize + 'px sans-serif';
+      var textWidth = ctx.measureText(a.texto).width;
+      var padding = 8 * scaleX;
+      var textY = cy + radius + fontSize + padding;
+      // Fondo del texto
+      ctx.fillStyle = 'rgba(231,76,60,0.85)';
+      ctx.beginPath();
+      var rr = 6 * scaleX;
+      var bx = cx - textWidth / 2 - padding;
+      var by = textY - fontSize;
+      var bw = textWidth + padding * 2;
+      var bh = fontSize + padding;
+      ctx.roundRect(bx, by, bw, bh, rr);
+      ctx.fill();
+      // Texto
+      ctx.fillStyle = '#fff';
+      ctx.fillText(a.texto, cx, textY - padding / 2);
+    }
+  }
+  ctx.textAlign = 'start';
+  ctx.textBaseline = 'alphabetic';
+}
+
+// Limpiar overlay de anotaciones
+function limpiarAnotaciones() {
+  var overlay = document.getElementById('anot-overlay');
+  if (overlay) overlay.innerHTML = '';
+  anotaciones = [];
+}
+
+function aceptarFoto() {
+  vibrar(30);
+
+  // Renderizar anotaciones sobre el canvas antes de exportar
+  renderizarAnotaciones();
+
+  var canvas = document.getElementById('preview-canvas');
+
+  // Verificar db disponible
+  if (!db) {
+    showToast('Base de datos no disponible. Reintenta.', 'error');
+    return;
+  }
+
+  // Guardar thumbnail en IndexedDB
+  var thumbCanvas = document.createElement('canvas');
+  thumbCanvas.width = 400;
+  thumbCanvas.height = 533;
+  var tCtx = thumbCanvas.getContext('2d');
+  tCtx.drawImage(canvas, 0, 0, 400, 533);
+  var thumbData = thumbCanvas.toDataURL('image/jpeg', 0.5);
+
+  // Capturar datos de upload antes de cerrar (evitar múltiples toDataURL)
+  var uploadData;
+  var downloadData;
+  try {
+    uploadData = canvas.toDataURL('image/jpeg', 0.85);
+    downloadData = canvas.toDataURL('image/jpeg', 0.95);
+  } catch(e) {
+    showToast('Error al procesar foto. Reintenta.', 'error');
+    return;
+  }
+
+  // Capturar variables en closure antes de cerrar modal
+  var _fotoCodigo = fotoCodigo;
+  var _camaraSubtipo = camaraSubtipo;
+  var _camaraTipo = camaraTipo;
+  var _gpsLat = gpsPos ? gpsPos.lat : null;
+  var _gpsLon = gpsPos ? gpsPos.lon : null;
+
+  // Limpiar anotaciones y cerrar inmediatamente
+  limpiarAnotaciones();
+  document.getElementById('preview-modal').classList.remove('open');
+
+  guardarEnDB('fotos', {codigo: _fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
+    return guardarEnDB('subidas_pendientes', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
+  }).then(function() {
+    // Auto-descarga full-res
+    var link = document.createElement('a');
+    link.href = downloadData;
+    link.download = _fotoCodigo + '.jpg';
+    link.click();
+    setTimeout(function() { URL.revokeObjectURL(link.href); }, 2000);
+
+    // Añadir preview a la página
+    if (!fotosPagina[_camaraSubtipo]) fotosPagina[_camaraSubtipo] = [];
+    if (_camaraSubtipo === 'W1' || _camaraSubtipo === 'W2') {
+      fotosPagina[_camaraSubtipo].push({codigo: _fotoCodigo, lat: _gpsLat, lon: _gpsLon});
+    } else {
+      fotosPagina[_camaraSubtipo].push(_fotoCodigo);
+    }
+
+    var prefix = _camaraTipo === 'EI' ? 'ev' : _camaraTipo.toLowerCase();
+    var previewGrid = document.getElementById(prefix + '-fotos-preview');
+    if (previewGrid) {
+      var img = document.createElement('img');
+      img.src = thumbData;
+      img.title = _fotoCodigo;
+      img.onclick = function() { abrirLightboxFoto(this.src, _fotoCodigo); };
+      previewGrid.appendChild(img);
+    }
+
+    actualizarContadorFotos();
+    if (navigator.onLine) {
+      showToast('Foto ' + _fotoCodigo + ' guardada. Subiendo...', 'success');
+      subirFotosPendientesAuto();
+    } else {
+      showToast('Foto ' + _fotoCodigo + ' guardada. Sin conexión — se subirá al conectar.', 'info');
+    }
+  }).catch(function(err) {
+    console.error('Error guardando foto:', err);
+    showToast('Error al guardar foto: ' + (err.message || err), 'error');
+  });
+}
+
+function actualizarContadorFotos() {
+  if (!db) return;
+  obtenerTodosDB('subidas_pendientes').then(function(items) {
+    document.getElementById('menu-pending-fotos').textContent = items.length;
+  });
+}
+
