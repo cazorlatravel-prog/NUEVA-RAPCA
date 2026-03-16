@@ -156,6 +156,11 @@ function capturarMiniMapaDesdeDiv(mapDiv) {
 }
 
 function iniciarOverlayCamara() {
+  var cfg = typeof obtenerConfigWatermark === 'function' ? obtenerConfigWatermark() : {
+    mostrarBrujula: true, tipoMiniMapa: 'topografico', escalaMiniMapa: 14,
+    tipoCoordenadas: 'utm', mostrarMunicipio: false
+  };
+
   // Brújula
   var handler = function(e) {
     compassHeading = e.alpha ? Math.round(e.alpha) : 0;
@@ -174,40 +179,65 @@ function iniciarOverlayCamara() {
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(function(pos) {
       gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude};
-      document.getElementById('cam-coords').textContent = formatCoordNW(gpsPos.lat, gpsPos.lon);
 
-      // Mini mapa a escala ~1:50000 (zoom 12)
-      try {
-        var mapDiv = document.getElementById('camera-minimap');
-        if (miniMapaCamera) miniMapaCamera.remove();
-        miniMapaCamera = L.map(mapDiv, {zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false}).setView([gpsPos.lat, gpsPos.lon], 12);
-        // Usar tile layer con CORS forzado en createTile
-        var CORSTileLayer = L.TileLayer.extend({
-          createTile: function(coords, done) {
-            var tile = document.createElement('img');
-            tile.crossOrigin = 'anonymous';
-            tile.alt = '';
-            tile.setAttribute('role', 'presentation');
-            tile.onload = function() { done(null, tile); };
-            tile.onerror = function(e) { done(e, tile); };
-            tile.src = this.getTileUrl(coords);
-            return tile;
+      // Mostrar coordenadas según config
+      if (cfg.tipoCoordenadas === 'geograficas') {
+        document.getElementById('cam-coords').textContent = formatCoordGeo(gpsPos.lat, gpsPos.lon);
+      } else {
+        document.getElementById('cam-coords').textContent = formatUTMString(gpsPos.lat, gpsPos.lon);
+      }
+
+      // Geocodificación inversa para municipio/provincia/CP
+      if (cfg.mostrarMunicipio) {
+        geocodificarInverso(gpsPos.lat, gpsPos.lon, function(geo) {
+          gpsPos._geo = geo;
+        });
+      }
+
+      // Mini mapa configurable
+      if (cfg.tipoMiniMapa !== 'ninguno') {
+        try {
+          var mapDiv = document.getElementById('camera-minimap');
+          if (miniMapaCamera) miniMapaCamera.remove();
+          var zoomLevel = cfg.escalaMiniMapa || 14;
+          miniMapaCamera = L.map(mapDiv, {zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false}).setView([gpsPos.lat, gpsPos.lon], zoomLevel);
+
+          var CORSTileLayer = L.TileLayer.extend({
+            createTile: function(coords, done) {
+              var tile = document.createElement('img');
+              tile.crossOrigin = 'anonymous';
+              tile.alt = '';
+              tile.setAttribute('role', 'presentation');
+              tile.onload = function() { done(null, tile); };
+              tile.onerror = function(e) { done(e, tile); };
+              tile.src = this.getTileUrl(coords);
+              return tile;
+            }
+          });
+
+          // Seleccionar capa según configuración
+          var tileUrl;
+          if (cfg.tipoMiniMapa === 'ortofoto') {
+            tileUrl = 'https://www.ign.es/wmts/pnoa-ma?layer=OI.OrthoimageCoverage&style=default&tilematrixset=GoogleMapsCompatible&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/jpeg&TileMatrix={z}&TileCol={x}&TileRow={y}';
+            new CORSTileLayer(tileUrl, {maxZoom: 20}).addTo(miniMapaCamera);
+          } else {
+            // Topográfico (IGN España)
+            tileUrl = 'https://www.ign.es/wmts/mapa-raster?layer=MTN&style=default&tilematrixset=GoogleMapsCompatible&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/jpeg&TileMatrix={z}&TileCol={x}&TileRow={y}';
+            new CORSTileLayer(tileUrl, {maxZoom: 20}).addTo(miniMapaCamera);
           }
-        });
-        new CORSTileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(miniMapaCamera);
-        L.marker([gpsPos.lat, gpsPos.lon], {
-          icon: L.divIcon({className: '', html: '<div style="width:14px;height:14px;background:#e74c3c;border:3px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>', iconSize: [14,14], iconAnchor: [7,7]})
-        }).addTo(miniMapaCamera);
 
-        // Esperar al evento 'load' de Leaflet (tiles cargados) + reintentos
-        miniMapaCamera.on('load', function() {
-          setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 300);
-        });
-        // Reintentos por si los tiles tardan
-        setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 3000);
-        setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 6000);
-        setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 10000);
-      } catch(e) {}
+          L.marker([gpsPos.lat, gpsPos.lon], {
+            icon: L.divIcon({className: '', html: '<div style="width:14px;height:14px;background:#e74c3c;border:3px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>', iconSize: [14,14], iconAnchor: [7,7]})
+          }).addTo(miniMapaCamera);
+
+          miniMapaCamera.on('load', function() {
+            setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 300);
+          });
+          setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 3000);
+          setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 6000);
+          setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 10000);
+        } catch(e) {}
+      }
     }, function() {}, {enableHighAccuracy: true});
   }
 }
@@ -319,11 +349,55 @@ function dibujarRosaVientos(ctx, cx, cy, size) {
   ctx.restore();
 }
 
+// Formatear coordenadas geográficas con grados/minutos/segundos
+function formatCoordGeo(lat, lon) {
+  function toDMS(val, pos, neg) {
+    var abs = Math.abs(val);
+    var d = Math.floor(abs);
+    var m = Math.floor((abs - d) * 60);
+    var s = ((abs - d) * 60 - m) * 60;
+    return d + '° ' + ('0' + m).slice(-2) + "' " + s.toFixed(1) + '" ' + (val >= 0 ? pos : neg);
+  }
+  return toDMS(lat, 'N', 'S') + '  ' + toDMS(lon, 'E', 'W');
+}
+
+// Formatear coordenadas UTM como string
+function formatUTMString(lat, lon) {
+  var u = latLonToUTM(lat, lon);
+  return 'UTM ' + u.zone + u.letter + ' ' + u.easting + ' ' + u.northing;
+}
+
+// Geocodificación inversa usando Nominatim (cacheada)
+var _geocodeCache = {};
+function geocodificarInverso(lat, lon, callback) {
+  var key = lat.toFixed(4) + ',' + lon.toFixed(4);
+  if (_geocodeCache[key]) { callback(_geocodeCache[key]); return; }
+  fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lon + '&zoom=16&addressdetails=1&accept-language=es')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var addr = data.address || {};
+      var result = {
+        municipio: addr.city || addr.town || addr.village || addr.municipality || '',
+        provincia: addr.province || addr.state || '',
+        cp: addr.postcode || ''
+      };
+      _geocodeCache[key] = result;
+      callback(result);
+    })
+    .catch(function() { callback({municipio: '', provincia: '', cp: ''}); });
+}
+
 function capturarFoto() {
   vibrar(30);
 
+  var cfg = typeof obtenerConfigWatermark === 'function' ? obtenerConfigWatermark() : {
+    tamanoTexto: 'mediano', mostrarCodigo: true, formatoFecha: 'fecha',
+    tipoCoordenadas: 'utm', mostrarOrientacion: true, mostrarMunicipio: false,
+    mostrarBrujula: true, tipoMiniMapa: 'topografico', escalaMiniMapa: 14
+  };
+
   // Intentar capturar mini mapa una última vez si no se tiene
-  if (!miniMapaImg) {
+  if (!miniMapaImg && cfg.tipoMiniMapa !== 'ninguno') {
     var mapDiv = document.getElementById('camera-minimap');
     if (mapDiv) capturarMiniMapaDesdeDiv(mapDiv);
   }
@@ -342,88 +416,146 @@ function capturarFoto() {
   var sx = (vw - sw) / 2, sy = (vh - sh) / 2;
   ctx.drawImage(video, sx, sy, sw, sh, 0, 0, W, H);
 
-  // --- ROSA DE LOS VIENTOS (esquina superior izquierda) ---
-  dibujarRosaVientos(ctx, 120, 120, 95);
+  // --- Escala de texto según config ---
+  var factorTexto = cfg.tamanoTexto === 'pequeno' ? 0.75 : (cfg.tamanoTexto === 'grande' ? 1.3 : 1.0);
 
-  // --- MINI MAPA (esquina inferior izquierda, ~1:50000) ---
-  var mapSize = 500;
-  var mapX = 30, mapY = H - mapSize - 30;
-  if (miniMapaImg) {
-    // Borde redondeado para el mapa
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
-    ctx.clip();
-    ctx.drawImage(miniMapaImg, mapX, mapY, mapSize, mapSize);
-    ctx.restore();
-    // Borde
-    ctx.beginPath();
-    ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-    ctx.lineWidth = 4;
-    ctx.stroke();
-  } else if (gpsPos) {
-    // Fallback: recuadro con coordenadas si no se capturó el mapa
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
-    ctx.fillStyle = 'rgba(200,220,200,0.7)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-    ctx.lineWidth = 4;
-    ctx.stroke();
-    ctx.restore();
-    // Marcador rojo centrado
-    ctx.beginPath();
-    ctx.arc(mapX + mapSize / 2, mapY + mapSize / 2, 16, 0, Math.PI * 2);
-    ctx.fillStyle = '#e74c3c';
-    ctx.fill();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 5;
-    ctx.stroke();
-    // Texto posición
-    ctx.fillStyle = '#333';
-    ctx.font = '22px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('1:50.000', mapX + mapSize / 2, mapY + mapSize - 20);
-    ctx.textAlign = 'start';
+  // --- ROSA DE LOS VIENTOS (esquina superior izquierda) ---
+  if (cfg.mostrarBrujula) {
+    dibujarRosaVientos(ctx, 120, 120, 95);
   }
 
-  // --- INFO PANEL (esquina inferior derecha, texto amarillo sin fondo) ---
-  var utm = gpsPos ? formatCoordNW(gpsPos.lat, gpsPos.lon) : 'Sin GPS';
+  // --- MINI MAPA (esquina inferior izquierda) ---
+  if (cfg.tipoMiniMapa !== 'ninguno') {
+    var mapSize = 500;
+    var mapX = 30, mapY = H - mapSize - 30;
+    if (miniMapaImg) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
+      ctx.clip();
+      ctx.drawImage(miniMapaImg, mapX, mapY, mapSize, mapSize);
+      ctx.restore();
+      ctx.beginPath();
+      ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    } else if (gpsPos) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
+      ctx.fillStyle = 'rgba(200,220,200,0.7)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+      ctx.restore();
+      ctx.beginPath();
+      ctx.arc(mapX + mapSize / 2, mapY + mapSize / 2, 16, 0, Math.PI * 2);
+      ctx.fillStyle = '#e74c3c';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 5;
+      ctx.stroke();
+      ctx.fillStyle = '#333';
+      ctx.font = '22px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Zoom ' + cfg.escalaMiniMapa, mapX + mapSize / 2, mapY + mapSize - 20);
+      ctx.textAlign = 'start';
+    }
+  }
+
+  // --- INFO PANEL (esquina inferior derecha) ---
+  // Construir coordenadas según config
+  var coordStr = 'Sin GPS';
+  if (gpsPos) {
+    if (cfg.tipoCoordenadas === 'geograficas') {
+      coordStr = formatCoordGeo(gpsPos.lat, gpsPos.lon);
+    } else {
+      coordStr = formatUTMString(gpsPos.lat, gpsPos.lon);
+    }
+  }
+
+  // Construir fecha según config
   var fechaFoto = new Date();
   var dd = ('0' + fechaFoto.getDate()).slice(-2);
   var mm = ('0' + (fechaFoto.getMonth() + 1)).slice(-2);
   var yyyy = fechaFoto.getFullYear();
   var fechaStr = dd + '/' + mm + '/' + yyyy;
+  if (cfg.formatoFecha === 'fechahora') {
+    // Hora de Madrid (Europe/Madrid)
+    try {
+      var horaM = fechaFoto.toLocaleTimeString('es-ES', {timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', hour12: false});
+      fechaStr += ' ' + horaM;
+    } catch(e) {
+      var hh = ('0' + fechaFoto.getHours()).slice(-2);
+      var mi = ('0' + fechaFoto.getMinutes()).slice(-2);
+      fechaStr += ' ' + hh + ':' + mi;
+    }
+  }
+
+  // Orientación
+  var orientStr = '';
+  if (cfg.mostrarOrientacion && typeof compassHeading !== 'undefined') {
+    var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+    var dir = dirs[Math.floor((compassHeading + 22.5) / 45) % 8];
+    orientStr = dir + ' ' + compassHeading + '°';
+  }
 
   // Sombra para legibilidad
   ctx.shadowColor = 'rgba(0,0,0,0.8)';
   ctx.shadowBlur = 8;
   ctx.shadowOffsetX = 2;
   ctx.shadowOffsetY = 2;
-
   ctx.textAlign = 'right';
 
-  // RAPCA EMA
-  ctx.fillStyle = '#ffd700';
-  ctx.font = 'bold 56px sans-serif';
-  ctx.fillText('RAPCA EMA', W - 50, H - 230);
+  // Calcular líneas de texto de abajo hacia arriba
+  var lineY = H - 40;
+  var lineSpacing = Math.round(65 * factorTexto);
+  var fontBase = Math.round(42 * factorTexto);
+
+  // Municipio/Provincia/CP (si hay datos geocodificados disponibles)
+  if (cfg.mostrarMunicipio && gpsPos && gpsPos._geo) {
+    var geo = gpsPos._geo;
+    var geoStr = [geo.municipio, geo.provincia, geo.cp].filter(Boolean).join(', ');
+    if (geoStr) {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = Math.round(34 * factorTexto) + 'px sans-serif';
+      ctx.fillText(geoStr, W - 50, lineY);
+      lineY -= lineSpacing;
+    }
+  }
+
+  // Coordenadas
+  ctx.fillStyle = '#ffffff';
+  ctx.font = Math.round(38 * factorTexto) + 'px sans-serif';
+  ctx.fillText(coordStr, W - 50, lineY);
+  lineY -= lineSpacing;
+
+  // Orientación
+  if (orientStr) {
+    ctx.fillStyle = '#ffffff';
+    ctx.font = Math.round(38 * factorTexto) + 'px sans-serif';
+    ctx.fillText(orientStr, W - 50, lineY);
+    lineY -= lineSpacing;
+  }
+
+  // Fecha
+  ctx.fillStyle = '#ffffff';
+  ctx.font = fontBase + 'px sans-serif';
+  ctx.fillText(fechaStr, W - 50, lineY);
+  lineY -= lineSpacing;
 
   // Código foto
   ctx.fillStyle = '#ffd700';
-  ctx.font = 'bold 48px sans-serif';
-  ctx.fillText(fotoCodigo, W - 50, H - 165);
+  ctx.font = 'bold ' + Math.round(48 * factorTexto) + 'px sans-serif';
+  ctx.fillText(fotoCodigo, W - 50, lineY);
+  lineY -= lineSpacing;
 
-  // Fecha (sin hora)
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '42px sans-serif';
-  ctx.fillText(fechaStr, W - 50, H - 110);
-
-  // Coordenadas UTM 30N ETRS89
-  ctx.fillStyle = '#ffffff';
-  ctx.font = '38px sans-serif';
-  ctx.fillText(utm, W - 50, H - 55);
+  // RAPCA EMA
+  ctx.fillStyle = '#ffd700';
+  ctx.font = 'bold ' + Math.round(56 * factorTexto) + 'px sans-serif';
+  ctx.fillText('RAPCA EMA', W - 50, lineY);
 
   // Resetear sombra y alineación
   ctx.shadowColor = 'transparent';

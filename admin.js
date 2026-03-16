@@ -2,6 +2,118 @@
 // ADMIN - Gestión de usuarios (local y servidor)
 // ============================================================
 
+// --- Configuración de marca de agua por defecto ---
+var WATERMARK_DEFAULTS = {
+  tamanoTexto: 'mediano',      // pequeno, mediano, grande
+  mostrarCodigo: true,         // código + nº foto (siempre visible)
+  formatoFecha: 'fecha',       // 'fecha' (DD/MM/YYYY) o 'fechahora' (DD/MM/YYYY HH:MM)
+  tipoCoordenadas: 'utm',      // 'utm' o 'geograficas'
+  mostrarOrientacion: true,    // orientación (N, NE, etc.)
+  mostrarMunicipio: false,     // municipio, provincia, CP
+  mostrarBrujula: true,        // rosa de los vientos
+  tipoMiniMapa: 'topografico', // 'topografico', 'ortofoto', 'ninguno'
+  escalaMiniMapa: 14           // zoom level (8-18)
+};
+
+function obtenerConfigWatermark() {
+  try {
+    var stored = JSON.parse(localStorage.getItem('rapca_watermark_config') || 'null');
+    if (stored) {
+      // Merge con defaults para campos nuevos
+      var config = {};
+      for (var k in WATERMARK_DEFAULTS) config[k] = WATERMARK_DEFAULTS[k];
+      for (var k2 in stored) config[k2] = stored[k2];
+      return config;
+    }
+  } catch(e) {}
+  return JSON.parse(JSON.stringify(WATERMARK_DEFAULTS));
+}
+
+function guardarConfigWatermark(config) {
+  localStorage.setItem('rapca_watermark_config', JSON.stringify(config));
+}
+
+// --- Panel de configuración de marca de agua ---
+
+function renderWatermarkConfig() {
+  var div = document.getElementById('admin-watermark-config');
+  if (!div) return;
+  var cfg = obtenerConfigWatermark();
+
+  div.innerHTML =
+    '<div class="card" style="padding:12px">' +
+    // Tamaño texto
+    '<div class="form-group"><label>Tamaño del texto</label>' +
+    '<select id="wm-tamano" onchange="actualizarWatermarkConfig()">' +
+    '<option value="pequeno"' + (cfg.tamanoTexto === 'pequeno' ? ' selected' : '') + '>Pequeño</option>' +
+    '<option value="mediano"' + (cfg.tamanoTexto === 'mediano' ? ' selected' : '') + '>Mediano</option>' +
+    '<option value="grande"' + (cfg.tamanoTexto === 'grande' ? ' selected' : '') + '>Grande</option>' +
+    '</select></div>' +
+    // Formato fecha
+    '<div class="form-group"><label>Formato de fecha</label>' +
+    '<select id="wm-fecha" onchange="actualizarWatermarkConfig()">' +
+    '<option value="fecha"' + (cfg.formatoFecha === 'fecha' ? ' selected' : '') + '>Solo fecha (DD/MM/AAAA)</option>' +
+    '<option value="fechahora"' + (cfg.formatoFecha === 'fechahora' ? ' selected' : '') + '>Fecha + hora Madrid (DD/MM/AAAA HH:MM)</option>' +
+    '</select></div>' +
+    // Tipo coordenadas
+    '<div class="form-group"><label>Tipo de coordenadas</label>' +
+    '<select id="wm-coords" onchange="actualizarWatermarkConfig()">' +
+    '<option value="utm"' + (cfg.tipoCoordenadas === 'utm' ? ' selected' : '') + '>UTM (30N ETRS89)</option>' +
+    '<option value="geograficas"' + (cfg.tipoCoordenadas === 'geograficas' ? ' selected' : '') + '>Geográficas (lat/lon)</option>' +
+    '</select></div>' +
+    // Orientación
+    '<div class="form-group" style="display:flex;align-items:center;gap:10px">' +
+    '<label style="flex:1;margin:0">Mostrar orientación (N, NE, etc.)</label>' +
+    '<input type="checkbox" id="wm-orientacion"' + (cfg.mostrarOrientacion ? ' checked' : '') + ' onchange="actualizarWatermarkConfig()" style="width:22px;height:22px">' +
+    '</div>' +
+    // Municipio/Provincia/CP
+    '<div class="form-group" style="display:flex;align-items:center;gap:10px">' +
+    '<label style="flex:1;margin:0">Mostrar municipio, provincia y CP</label>' +
+    '<input type="checkbox" id="wm-municipio"' + (cfg.mostrarMunicipio ? ' checked' : '') + ' onchange="actualizarWatermarkConfig()" style="width:22px;height:22px">' +
+    '</div>' +
+    // Brújula
+    '<div class="form-group" style="display:flex;align-items:center;gap:10px">' +
+    '<label style="flex:1;margin:0">Brújula (rosa de los vientos)</label>' +
+    '<input type="checkbox" id="wm-brujula"' + (cfg.mostrarBrujula ? ' checked' : '') + ' onchange="actualizarWatermarkConfig()" style="width:22px;height:22px">' +
+    '</div>' +
+    // Mini-mapa tipo
+    '<div class="form-group"><label>Mini-mapa de localización</label>' +
+    '<select id="wm-minimapa" onchange="actualizarWatermarkConfig()">' +
+    '<option value="topografico"' + (cfg.tipoMiniMapa === 'topografico' ? ' selected' : '') + '>Topográfico</option>' +
+    '<option value="ortofoto"' + (cfg.tipoMiniMapa === 'ortofoto' ? ' selected' : '') + '>Ortofoto (PNOA)</option>' +
+    '<option value="ninguno"' + (cfg.tipoMiniMapa === 'ninguno' ? ' selected' : '') + '>Sin mini-mapa</option>' +
+    '</select></div>' +
+    // Escala mini-mapa
+    '<div class="form-group"><label>Escala mini-mapa (zoom: ' + cfg.escalaMiniMapa + ')</label>' +
+    '<input type="range" id="wm-escala" min="8" max="18" value="' + cfg.escalaMiniMapa + '" onchange="actualizarWatermarkConfig()" oninput="this.previousElementSibling.textContent=\'Escala mini-mapa (zoom: \'+this.value+\')\';" style="width:100%">' +
+    '<div style="display:flex;justify-content:space-between;font-size:11px;color:#888"><span>Alejado</span><span>Cercano</span></div>' +
+    '</div>' +
+    '<button class="btn btn-sm btn-outline" onclick="resetearWatermarkConfig()" style="margin-top:8px">Restaurar valores por defecto</button>' +
+    '</div>';
+}
+
+function actualizarWatermarkConfig() {
+  var config = {
+    tamanoTexto: document.getElementById('wm-tamano').value,
+    mostrarCodigo: true,
+    formatoFecha: document.getElementById('wm-fecha').value,
+    tipoCoordenadas: document.getElementById('wm-coords').value,
+    mostrarOrientacion: document.getElementById('wm-orientacion').checked,
+    mostrarMunicipio: document.getElementById('wm-municipio').checked,
+    mostrarBrujula: document.getElementById('wm-brujula').checked,
+    tipoMiniMapa: document.getElementById('wm-minimapa').value,
+    escalaMiniMapa: parseInt(document.getElementById('wm-escala').value)
+  };
+  guardarConfigWatermark(config);
+  showToast('Configuración guardada', 'success');
+}
+
+function resetearWatermarkConfig() {
+  localStorage.removeItem('rapca_watermark_config');
+  renderWatermarkConfig();
+  showToast('Configuración restaurada a valores por defecto', 'info');
+}
+
 // --- Renderizado del panel de administración ---
 
 function renderAdmin() {
@@ -21,6 +133,9 @@ function renderAdmin() {
 
   // Cargar usuarios del servidor
   cargarUsuariosServidor();
+
+  // Renderizar config de marca de agua
+  renderWatermarkConfig();
 }
 
 // --- Cargar usuarios del servidor ---
