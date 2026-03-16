@@ -79,13 +79,15 @@ var lightboxIdx = 0;
 // --- IndexedDB ---
 function abrirDB() {
   return new Promise(function(resolve, reject) {
-    var req = indexedDB.open('RAPCA_Fotos', 4);
+    var req = indexedDB.open('RAPCA_Fotos', 5);
     req.onupgradeneeded = function(e) {
       var d = e.target.result;
       if (!d.objectStoreNames.contains('fotos')) d.createObjectStore('fotos', {keyPath:'codigo'});
       if (!d.objectStoreNames.contains('subidas_pendientes')) d.createObjectStore('subidas_pendientes', {keyPath:'codigo'});
       if (!d.objectStoreNames.contains('fotos_precargadas')) d.createObjectStore('fotos_precargadas', {keyPath:'codigo'});
       if (!d.objectStoreNames.contains('capas_kml')) d.createObjectStore('capas_kml', {keyPath:'nombre'});
+      if (!d.objectStoreNames.contains('waypoints_comp')) d.createObjectStore('waypoints_comp', {keyPath:'id'});
+      if (!d.objectStoreNames.contains('kml_infraestructuras')) d.createObjectStore('kml_infraestructuras', {keyPath:'nombre'});
     };
     req.onsuccess = function(e) { db = e.target.result; resolve(db); };
     req.onerror = function(e) { reject(e); };
@@ -525,6 +527,10 @@ document.addEventListener('DOMContentLoaded', function() {
     actualizarContadorFotos();
     limpiarFotosAntiguas();
     if (typeof actualizarColaSubida === 'function') actualizarColaSubida();
+    // Migrar waypoints existentes al store persistente
+    if (typeof migrarWaypointsDeRegistros === 'function') {
+      setTimeout(function() { migrarWaypointsDeRegistros(); }, 2000);
+    }
   });
   if (typeof verificarSesion === 'function') verificarSesion();
   actualizarEstado();

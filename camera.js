@@ -1032,6 +1032,22 @@ function aceptarFoto() {
     if (!fotosPagina[_camaraSubtipo]) fotosPagina[_camaraSubtipo] = [];
     if (_camaraSubtipo === 'W1' || _camaraSubtipo === 'W2') {
       fotosPagina[_camaraSubtipo].push({codigo: _fotoCodigo, lat: _gpsLat, lon: _gpsLon});
+      // Guardar waypoint persistente en IndexedDB
+      if (_gpsLat && _gpsLon && db) {
+        var prefix = _camaraTipo === 'EI' ? 'ev' : _camaraTipo.toLowerCase();
+        var _unidad = document.getElementById(prefix + '-unidad') ? document.getElementById(prefix + '-unidad').value : '';
+        guardarEnDB('waypoints_comp', {
+          id: _fotoCodigo,
+          codigo: _fotoCodigo,
+          waypoint: _camaraSubtipo,
+          lat: _gpsLat,
+          lon: _gpsLon,
+          unidad: _unidad,
+          tipo: _camaraTipo,
+          fecha: new Date().toISOString(),
+          operador: sesion ? sesion.nombre : ''
+        }).catch(function(e) { console.warn('Error guardando waypoint:', e); });
+      }
     } else {
       fotosPagina[_camaraSubtipo].push(_fotoCodigo);
     }

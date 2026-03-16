@@ -2,6 +2,12 @@
 // RAPCA Campo — map.js — Mapa, KML, GPS, exportaciones geo
 // ============================================================
 
+// Capa persistente de waypoints comparativos
+var capaWaypointsPersist = null;
+// Capa de infraestructuras KML
+var capaInfraKML = null;
+var infraKMLFeatures = []; // Array de {nombre, lat, lon, attrs}
+
 function initMapa() {
   if (mapa) { mapa.invalidateSize(); actualizarMarcadores(); return; }
   var mapDiv = document.getElementById('map-container');
@@ -15,17 +21,29 @@ function initMapa() {
 
   // Capa de fotos comparativas (W1/W2)
   capaFotosComp = L.layerGroup();
+  // Capa persistente de waypoints
+  capaWaypointsPersist = L.layerGroup();
+  // Capa de infraestructuras KML
+  capaInfraKML = L.layerGroup();
 
-  L.control.layers({'OpenStreetMap': osm, 'PNOA Ortofoto': pnoa, 'Topográfico': topo}, {'Fotos comparativas W1/W2': capaFotosComp}, {position: 'topright'}).addTo(mapa);
+  L.control.layers(
+    {'OpenStreetMap': osm, 'PNOA Ortofoto': pnoa, 'Topográfico': topo},
+    {'Fotos comparativas W1/W2': capaFotosComp, 'Waypoints persistentes': capaWaypointsPersist, 'Infraestructuras KML': capaInfraKML},
+    {position: 'topright'}
+  ).addTo(mapa);
   L.control.zoom({position: 'topright'}).addTo(mapa);
 
   // MarkerCluster
   mapaMarkers = L.markerClusterGroup();
   mapa.addLayer(mapaMarkers);
   mapa.addLayer(capaFotosComp);
+  mapa.addLayer(capaWaypointsPersist);
+  mapa.addLayer(capaInfraKML);
 
   actualizarMarcadores();
   cargarCapasKML();
+  cargarWaypointsPersistentes();
+  cargarInfraKMLGuardada();
 
   // GPS tracking
   if (navigator.geolocation) {
@@ -199,9 +217,45 @@ function toggleMapSearch() {
 
 function buscarEnMapa(val) {
   if (!val || val.length < 2) return;
+  var v = val.toLowerCase();
+
+  // Buscar en infraestructuras KML
+  for (var i = 0; i < infraKMLFeatures.length; i++) {
+    var f = infraKMLFeatures[i];
+    if (f.nombre && f.nombre.toLowerCase().indexOf(v) >= 0) {
+      if (f.lat && f.lon) {
+        mapa.setView([f.lat, f.lon], 16);
+        // Abrir popup si existe
+        if (f.marker) f.marker.openPopup();
+        return;
+      }
+    }
+    // Buscar en todos los atributos
+    if (f.attrs) {
+      var found = false;
+      for (var k in f.attrs) {
+        if (String(f.attrs[k]).toLowerCase().indexOf(v) >= 0) { found = true; break; }
+      }
+      if (found && f.lat && f.lon) {
+        mapa.setView([f.lat, f.lon], 16);
+        if (f.marker) f.marker.openPopup();
+        return;
+      }
+    }
+  }
+
+  // Buscar en registros
   var regs = misRegistros();
-  var found = regs.find(function(r) { return r.unidad.toLowerCase().indexOf(val.toLowerCase()) >= 0; });
-  if (found && found.lat && found.lon) mapa.setView([found.lat, found.lon], 16);
+  var found = regs.find(function(r) { return r.unidad.toLowerCase().indexOf(v) >= 0; });
+  if (found && found.lat && found.lon) { mapa.setView([found.lat, found.lon], 16); return; }
+
+  // Buscar en waypoints persistentes
+  if (db) {
+    obtenerTodosDB('waypoints_comp').then(function(wps) {
+      var wp = wps.find(function(w) { return (w.unidad || '').toLowerCase().indexOf(v) >= 0 || (w.codigo || '').toLowerCase().indexOf(v) >= 0; });
+      if (wp && wp.lat && wp.lon) mapa.setView([wp.lat, wp.lon], 16);
+    });
+  }
 }
 
 function medirDistancia() {
@@ -717,4 +771,446 @@ function mostrarPrecisionGPS() {
   var label = acc <= 10 ? 'Excelente' : acc <= 30 ? 'Buena' : 'Baja';
   el.innerHTML = '<span style="color:' + color + '">📡 GPS: ±' + Math.round(acc) + 'm (' + label + ')</span>';
   el.style.display = 'block';
+}
+
+// ============================================================
+// WAYPOINTS PERSISTENTES (IndexedDB — sobreviven cierre/reinicio/borrar caché)
+// ============================================================
+
+function cargarWaypointsPersistentes() {
+  if (!db || !capaWaypointsPersist) return;
+  capaWaypointsPersist.clearLayers();
+
+  obtenerTodosDB('waypoints_comp').then(function(wps) {
+    if (!wps || wps.length === 0) return;
+    var coloresWP = {W1: '#e74c3c', W2: '#3498db'};
+
+    wps.forEach(function(wp) {
+      if (!wp.lat || !wp.lon) return;
+      var wColor = coloresWP[wp.waypoint] || '#888';
+      var marker = L.circleMarker([wp.lat, wp.lon], {
+        radius: 7, fillColor: wColor, color: '#fff', weight: 2, fillOpacity: 0.9
+      });
+
+      var popupId = 'popup-wp-' + wp.id.replace(/[^a-zA-Z0-9_]/g, '_');
+      marker.bindPopup(
+        '<strong style="color:' + wColor + '">' + escapeHtml(wp.waypoint) + '</strong>' +
+        '<br><small>' + escapeHtml(wp.codigo) + '</small>' +
+        '<br>' + escapeHtml(wp.unidad || '') +
+        '<br><span style="color:#888;font-size:11px">' + escapeHtml(wp.fecha ? wp.fecha.split('T')[0] : '') + '</span>' +
+        (wp.operador ? '<br><span style="color:#888;font-size:11px">' + escapeHtml(wp.operador) + '</span>' : '') +
+        '<div id="' + popupId + '" style="margin-top:6px;text-align:center"></div>',
+        {minWidth: 140, maxWidth: 200}
+      );
+
+      // Lazy load foto
+      (function(pId, codigo) {
+        marker.on('popupopen', function() {
+          var container = document.getElementById(pId);
+          if (!container || container.dataset.loaded) return;
+          container.dataset.loaded = '1';
+          obtenerDeDB('fotos', codigo).then(function(f) {
+            if (f && f.data && container) {
+              container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeHtml(codigo) + '\')">';
+            }
+          }).catch(function() {});
+        });
+      })(popupId, wp.codigo);
+
+      capaWaypointsPersist.addLayer(marker);
+    });
+
+    // Actualizar contador en toolbar
+    var badge = document.getElementById('wp-persist-count');
+    if (badge) badge.textContent = wps.length;
+  }).catch(function(e) { console.warn('Error cargando waypoints persistentes:', e); });
+}
+
+// También guardar waypoints desde registros existentes (migración)
+function migrarWaypointsDeRegistros() {
+  if (!db) return;
+  var regs = registros || [];
+  var promises = [];
+  regs.forEach(function(r) {
+    if (!r.datos || !r.datos.fotosComp) return;
+    r.datos.fotosComp.forEach(function(fc) {
+      if (!fc.lat || !fc.lon) return;
+      promises.push(
+        obtenerDeDB('waypoints_comp', fc.numero).then(function(existing) {
+          if (existing) return; // Ya existe
+          return guardarEnDB('waypoints_comp', {
+            id: fc.numero,
+            codigo: fc.numero,
+            waypoint: fc.waypoint || 'W1',
+            lat: fc.lat,
+            lon: fc.lon,
+            unidad: r.unidad,
+            tipo: r.tipo,
+            fecha: r.fecha,
+            operador: r.operador_nombre || ''
+          });
+        })
+      );
+    });
+  });
+  Promise.all(promises).then(function() {
+    cargarWaypointsPersistentes();
+  });
+}
+
+// ============================================================
+// KML INFRAESTRUCTURAS (carga, selección de campo nombre, búsqueda)
+// ============================================================
+
+function cargarKMLInfraestructuras() {
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.kml,.kmz';
+  input.onchange = function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    if (file.name.endsWith('.kmz')) {
+      reader.onload = function(ev) {
+        JSZip.loadAsync(ev.target.result).then(function(zip) {
+          var kmlFile = Object.keys(zip.files).find(function(f) { return f.endsWith('.kml'); });
+          if (kmlFile) return zip.files[kmlFile].async('string');
+        }).then(function(kmlStr) {
+          if (kmlStr) mostrarSelectorCampoInfraKML(kmlStr, file.name);
+        });
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.onload = function(ev) { mostrarSelectorCampoInfraKML(ev.target.result, file.name); };
+      reader.readAsText(file);
+    }
+  };
+  input.click();
+}
+
+function mostrarSelectorCampoInfraKML(kmlStr, nombre) {
+  // Parsear para obtener los campos disponibles
+  var parser = new DOMParser();
+  var doc = parser.parseFromString(kmlStr, 'text/xml');
+  var placemarks = doc.querySelectorAll('Placemark');
+  if (placemarks.length === 0) { showToast('No se encontraron elementos en el KML', 'error'); return; }
+
+  // Extraer campos de la primera entidad
+  var camposDisponibles = [];
+  var ejemplo = {};
+  placemarks.forEach(function(pm) {
+    var attrs = extraerAtributosKML(pm);
+    Object.keys(attrs).forEach(function(k) {
+      if (camposDisponibles.indexOf(k) < 0) {
+        camposDisponibles.push(k);
+        if (!ejemplo[k]) ejemplo[k] = attrs[k];
+      }
+    });
+  });
+
+  // Guardar KML temporalmente
+  window._infraKMLTemp = kmlStr;
+  window._infraKMLNombre = nombre;
+
+  var html = '<h2>Cargar Infraestructuras KML</h2>';
+  html += '<p style="color:#666;font-size:13px">' + placemarks.length + ' elementos encontrados en <strong>' + escapeHtml(nombre) + '</strong></p>';
+
+  html += '<div class="form-group"><label style="font-weight:700">Campo para el nombre de la infraestructura</label>';
+  html += '<select id="infra-kml-campo-nombre" style="width:100%;padding:8px;border-radius:6px;border:1px solid #ccc">';
+  camposDisponibles.forEach(function(c) {
+    var preview = ejemplo[c] ? ' (' + String(ejemplo[c]).substring(0, 30) + ')' : '';
+    html += '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + escapeHtml(preview) + '</option>';
+  });
+  html += '</select></div>';
+
+  // Vista previa de los campos
+  html += '<div style="max-height:200px;overflow-y:auto;margin:8px 0;border:1px solid #eee;border-radius:6px;padding:8px">';
+  html += '<div style="font-size:11px;color:#888;margin-bottom:4px">Vista previa del primer elemento:</div>';
+  camposDisponibles.forEach(function(c) {
+    html += '<div style="font-size:12px;padding:2px 0"><strong>' + escapeHtml(c) + ':</strong> ' + escapeHtml(String(ejemplo[c] || '')) + '</div>';
+  });
+  html += '</div>';
+
+  html += '<div class="modal-actions"><button class="btn btn-primary" onclick="ejecutarCargaInfraKML()">Cargar en mapa</button><button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button></div>';
+  abrirModal(html);
+}
+
+function ejecutarCargaInfraKML() {
+  var kmlStr = window._infraKMLTemp;
+  var nombre = window._infraKMLNombre;
+  var campoNombre = document.getElementById('infra-kml-campo-nombre').value;
+  if (!kmlStr) return;
+
+  cerrarModal();
+
+  // Parsear KML y crear marcadores
+  var parser = new DOMParser();
+  var doc = parser.parseFromString(kmlStr, 'text/xml');
+  var placemarks = doc.querySelectorAll('Placemark');
+
+  capaInfraKML.clearLayers();
+  infraKMLFeatures = [];
+
+  placemarks.forEach(function(pm) {
+    var attrs = extraerAtributosKML(pm);
+    var nombreInfra = attrs[campoNombre] || attrs['name'] || 'Sin nombre';
+
+    // Obtener coordenadas
+    var lat = null, lon = null;
+    var pointEl = pm.querySelector('Point');
+    var lineEl = pm.querySelector('LineString');
+    var polyEl = pm.querySelector('Polygon');
+    var geomEl = pointEl || lineEl || polyEl;
+    if (!geomEl) {
+      var multi = pm.querySelector('MultiGeometry');
+      if (multi) geomEl = multi.querySelector('Point') || multi.querySelector('LineString') || multi.querySelector('Polygon');
+    }
+    if (geomEl) {
+      var coordEl = geomEl.querySelector('coordinates');
+      if (coordEl) {
+        var txt = coordEl.textContent.trim().split(/\s+/)[0];
+        var parts = txt.split(',');
+        if (parts.length >= 2) {
+          lon = parseFloat(parts[0]);
+          lat = parseFloat(parts[1]);
+        }
+      }
+    }
+
+    // Construir popup con todos los atributos
+    var popupHtml = '<strong style="color:#8e44ad;font-size:14px">' + escapeHtml(nombreInfra) + '</strong><br>';
+    for (var k in attrs) {
+      if (k !== campoNombre) {
+        popupHtml += '<span style="font-size:11px"><strong>' + escapeHtml(k) + ':</strong> ' + escapeHtml(String(attrs[k])) + '</span><br>';
+      }
+    }
+
+    var marker = null;
+    if (lat && lon) {
+      // Crear marcador
+      marker = L.marker([lat, lon], {
+        icon: L.divIcon({
+          className: '',
+          html: '<div style="width:12px;height:12px;background:#8e44ad;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>',
+          iconSize: [12, 12],
+          iconAnchor: [6, 6]
+        })
+      });
+      marker.bindPopup(popupHtml, {minWidth: 160, maxWidth: 250});
+      capaInfraKML.addLayer(marker);
+    }
+
+    // También añadir geometrías de línea/polígono
+    if (lineEl || polyEl) {
+      var coords = parseKMLCoords(geomEl.querySelector('coordinates'));
+      if (lineEl && coords.length > 1) {
+        var line = L.polyline(coords, {color: '#8e44ad', weight: 3, opacity: 0.7});
+        line.bindPopup(popupHtml, {minWidth: 160, maxWidth: 250});
+        capaInfraKML.addLayer(line);
+      }
+      if (polyEl && coords.length > 2) {
+        var poly = L.polygon(coords, {color: '#8e44ad', fillColor: '#8e44ad', fillOpacity: 0.15, weight: 2});
+        poly.bindPopup(popupHtml, {minWidth: 160, maxWidth: 250});
+        capaInfraKML.addLayer(poly);
+      }
+      // Marcador central si no hay punto
+      if (!pointEl && lat && lon && !marker) {
+        marker = L.marker([lat, lon], {
+          icon: L.divIcon({
+            className: '',
+            html: '<div style="width:12px;height:12px;background:#8e44ad;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>',
+            iconSize: [12, 12],
+            iconAnchor: [6, 6]
+          })
+        });
+        marker.bindPopup(popupHtml, {minWidth: 160, maxWidth: 250});
+        capaInfraKML.addLayer(marker);
+      }
+    }
+
+    infraKMLFeatures.push({
+      nombre: nombreInfra,
+      lat: lat,
+      lon: lon,
+      attrs: attrs,
+      marker: marker
+    });
+  });
+
+  // Persistir en IndexedDB
+  guardarEnDB('kml_infraestructuras', {
+    nombre: nombre,
+    data: kmlStr,
+    campoNombre: campoNombre
+  });
+  localStorage.setItem('rapca_infra_kml_nombre', nombre);
+  localStorage.setItem('rapca_infra_kml_campo', campoNombre);
+
+  // Zoom a los elementos
+  if (capaInfraKML.getLayers().length > 0) {
+    try { mapa.fitBounds(capaInfraKML.getBounds().pad(0.1)); } catch(e) {}
+  }
+
+  showToast(infraKMLFeatures.length + ' infraestructuras cargadas de ' + nombre, 'success');
+  actualizarBuscadorInfraKML();
+
+  window._infraKMLTemp = null;
+  window._infraKMLNombre = null;
+}
+
+function cargarInfraKMLGuardada() {
+  var nombre = localStorage.getItem('rapca_infra_kml_nombre');
+  var campo = localStorage.getItem('rapca_infra_kml_campo');
+  if (!nombre || !campo || !db) return;
+
+  obtenerDeDB('kml_infraestructuras', nombre).then(function(stored) {
+    if (!stored || !stored.data) return;
+    // Simular la carga sin modal
+    window._infraKMLTemp = stored.data;
+    window._infraKMLNombre = nombre;
+    // Parsear directamente
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(stored.data, 'text/xml');
+    var placemarks = doc.querySelectorAll('Placemark');
+
+    capaInfraKML.clearLayers();
+    infraKMLFeatures = [];
+
+    placemarks.forEach(function(pm) {
+      var attrs = extraerAtributosKML(pm);
+      var nombreInfra = attrs[campo] || attrs['name'] || 'Sin nombre';
+      var lat = null, lon = null;
+
+      var pointEl = pm.querySelector('Point');
+      var lineEl = pm.querySelector('LineString');
+      var polyEl = pm.querySelector('Polygon');
+      var geomEl = pointEl || lineEl || polyEl;
+      if (!geomEl) {
+        var multi = pm.querySelector('MultiGeometry');
+        if (multi) geomEl = multi.querySelector('Point') || multi.querySelector('LineString') || multi.querySelector('Polygon');
+      }
+      if (geomEl) {
+        var coordEl = geomEl.querySelector('coordinates');
+        if (coordEl) {
+          var txt = coordEl.textContent.trim().split(/\s+/)[0];
+          var parts = txt.split(',');
+          if (parts.length >= 2) { lon = parseFloat(parts[0]); lat = parseFloat(parts[1]); }
+        }
+      }
+
+      var popupHtml = '<strong style="color:#8e44ad;font-size:14px">' + escapeHtml(nombreInfra) + '</strong><br>';
+      for (var k in attrs) {
+        if (k !== campo) popupHtml += '<span style="font-size:11px"><strong>' + escapeHtml(k) + ':</strong> ' + escapeHtml(String(attrs[k])) + '</span><br>';
+      }
+
+      var marker = null;
+      if (lat && lon) {
+        marker = L.marker([lat, lon], {
+          icon: L.divIcon({
+            className: '',
+            html: '<div style="width:12px;height:12px;background:#8e44ad;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>',
+            iconSize: [12, 12], iconAnchor: [6, 6]
+          })
+        });
+        marker.bindPopup(popupHtml, {minWidth: 160, maxWidth: 250});
+        capaInfraKML.addLayer(marker);
+      }
+
+      if (lineEl) {
+        var coords = parseKMLCoords(geomEl.querySelector('coordinates'));
+        if (coords.length > 1) {
+          var line = L.polyline(coords, {color: '#8e44ad', weight: 3, opacity: 0.7});
+          line.bindPopup(popupHtml); capaInfraKML.addLayer(line);
+        }
+      }
+      if (polyEl) {
+        var coords = parseKMLCoords(geomEl.querySelector('coordinates'));
+        if (coords.length > 2) {
+          var poly = L.polygon(coords, {color: '#8e44ad', fillColor: '#8e44ad', fillOpacity: 0.15, weight: 2});
+          poly.bindPopup(popupHtml); capaInfraKML.addLayer(poly);
+        }
+      }
+
+      infraKMLFeatures.push({ nombre: nombreInfra, lat: lat, lon: lon, attrs: attrs, marker: marker });
+    });
+
+    actualizarBuscadorInfraKML();
+    window._infraKMLTemp = null;
+    window._infraKMLNombre = null;
+  }).catch(function(e) { console.warn('Error cargando KML infraestructuras guardado:', e); });
+}
+
+function eliminarInfraKML() {
+  capaInfraKML.clearLayers();
+  infraKMLFeatures = [];
+  localStorage.removeItem('rapca_infra_kml_nombre');
+  localStorage.removeItem('rapca_infra_kml_campo');
+  if (db) {
+    var nombre = localStorage.getItem('rapca_infra_kml_nombre');
+    if (nombre) eliminarDeDB('kml_infraestructuras', nombre);
+  }
+  actualizarBuscadorInfraKML();
+  showToast('Infraestructuras KML eliminadas', 'info');
+}
+
+function actualizarBuscadorInfraKML() {
+  var container = document.getElementById('infra-kml-search-container');
+  if (!container) return;
+  if (infraKMLFeatures.length > 0) {
+    container.style.display = 'block';
+    container.querySelector('.infra-kml-count').textContent = infraKMLFeatures.length + ' infraestructuras';
+  } else {
+    container.style.display = 'none';
+  }
+}
+
+function buscarInfraKML(val) {
+  var results = document.getElementById('infra-kml-results');
+  if (!results) return;
+  if (!val || val.length < 2) { results.innerHTML = ''; results.style.display = 'none'; return; }
+
+  var v = val.toLowerCase();
+  var matches = infraKMLFeatures.filter(function(f) {
+    if (f.nombre && f.nombre.toLowerCase().indexOf(v) >= 0) return true;
+    if (f.attrs) {
+      for (var k in f.attrs) {
+        if (String(f.attrs[k]).toLowerCase().indexOf(v) >= 0) return true;
+      }
+    }
+    return false;
+  }).slice(0, 10); // Max 10 resultados
+
+  if (matches.length === 0) {
+    results.innerHTML = '<div style="padding:8px;color:#888;font-size:13px">Sin resultados</div>';
+    results.style.display = 'block';
+    return;
+  }
+
+  results.innerHTML = matches.map(function(f, i) {
+    return '<div class="infra-kml-result" onclick="irAInfraKML(' + i + ',\'' + escapeHtml(val) + '\')" style="padding:8px;cursor:pointer;border-bottom:1px solid #eee;font-size:13px">' +
+      '<strong style="color:#8e44ad">' + escapeHtml(f.nombre) + '</strong>' +
+      (f.lat ? '<br><span style="color:#888;font-size:11px">' + f.lat.toFixed(5) + ', ' + f.lon.toFixed(5) + '</span>' : '') +
+      '</div>';
+  }).join('');
+  results.style.display = 'block';
+}
+
+function irAInfraKML(idx, searchVal) {
+  // Encontrar el match real (ya que el idx es del slice filtrado)
+  var v = searchVal.toLowerCase();
+  var matches = infraKMLFeatures.filter(function(f) {
+    if (f.nombre && f.nombre.toLowerCase().indexOf(v) >= 0) return true;
+    if (f.attrs) { for (var k in f.attrs) { if (String(f.attrs[k]).toLowerCase().indexOf(v) >= 0) return true; } }
+    return false;
+  });
+  var f = matches[idx];
+  if (!f) return;
+
+  if (f.lat && f.lon) {
+    mapa.setView([f.lat, f.lon], 16);
+    if (f.marker) setTimeout(function() { f.marker.openPopup(); }, 300);
+  }
+
+  var results = document.getElementById('infra-kml-results');
+  if (results) { results.innerHTML = ''; results.style.display = 'none'; }
 }
