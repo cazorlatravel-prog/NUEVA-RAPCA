@@ -782,7 +782,11 @@ function cargarWaypointsPersistentes() {
   capaWaypointsPersist.clearLayers();
 
   obtenerTodosDB('waypoints_comp').then(function(wps) {
-    if (!wps || wps.length === 0) return;
+    if (!wps || wps.length === 0) {
+      var badge = document.getElementById('wp-persist-count');
+      if (badge) badge.textContent = '0';
+      return;
+    }
     var coloresWP = {W1: '#e74c3c', W2: '#3498db'};
 
     wps.forEach(function(wp) {
@@ -792,14 +796,17 @@ function cargarWaypointsPersistentes() {
         radius: 7, fillColor: wColor, color: '#fff', weight: 2, fillOpacity: 0.9
       });
 
-      var popupId = 'popup-wp-' + wp.id.replace(/[^a-zA-Z0-9_]/g, '_');
+      var safeId = wp.id.replace(/[^a-zA-Z0-9_]/g, '_');
+      var popupId = 'popup-wp-' + safeId;
+      var escapedId = escapeHtml(wp.id).replace(/'/g, "\\'");
       marker.bindPopup(
         '<strong style="color:' + wColor + '">' + escapeHtml(wp.waypoint) + '</strong>' +
         '<br><small>' + escapeHtml(wp.codigo) + '</small>' +
         '<br>' + escapeHtml(wp.unidad || '') +
         '<br><span style="color:#888;font-size:11px">' + escapeHtml(wp.fecha ? wp.fecha.split('T')[0] : '') + '</span>' +
         (wp.operador ? '<br><span style="color:#888;font-size:11px">' + escapeHtml(wp.operador) + '</span>' : '') +
-        '<div id="' + popupId + '" style="margin-top:6px;text-align:center"></div>',
+        '<div id="' + popupId + '" style="margin-top:6px;text-align:center"></div>' +
+        '<button onclick="borrarWaypointPersistente(\'' + escapedId + '\')" style="margin-top:6px;width:100%;padding:4px;background:#e74c3c;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer">Borrar waypoint</button>',
         {minWidth: 140, maxWidth: 200}
       );
 
@@ -824,6 +831,30 @@ function cargarWaypointsPersistentes() {
     var badge = document.getElementById('wp-persist-count');
     if (badge) badge.textContent = wps.length;
   }).catch(function(e) { console.warn('Error cargando waypoints persistentes:', e); });
+}
+
+function borrarWaypointPersistente(id) {
+  if (!confirm('¿Borrar este waypoint?')) return;
+  if (!db) return;
+  eliminarDeDB('waypoints_comp', id).then(function() {
+    mapa.closePopup();
+    cargarWaypointsPersistentes();
+    showToast('Waypoint borrado', 'info');
+  }).catch(function(e) { showToast('Error al borrar: ' + e, 'error'); });
+}
+
+function borrarTodosWaypointsPersistentes() {
+  if (!confirm('¿Borrar TODOS los waypoints persistentes? Esta acción no se puede deshacer.')) return;
+  if (!db) return;
+  obtenerTodosDB('waypoints_comp').then(function(wps) {
+    var promises = wps.map(function(wp) { return eliminarDeDB('waypoints_comp', wp.id); });
+    return Promise.all(promises);
+  }).then(function() {
+    capaWaypointsPersist.clearLayers();
+    var badge = document.getElementById('wp-persist-count');
+    if (badge) badge.textContent = '0';
+    showToast('Todos los waypoints borrados', 'info');
+  }).catch(function(e) { showToast('Error: ' + e, 'error'); });
 }
 
 // También guardar waypoints desde registros existentes (migración)
@@ -1018,9 +1049,9 @@ function ejecutarCargaInfraKML() {
         marker = L.marker([lat, lon], {
           icon: L.divIcon({
             className: '',
-            html: '<div style="width:12px;height:12px;background:#8e44ad;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>',
-            iconSize: [12, 12],
-            iconAnchor: [6, 6]
+            html: '<div style="font-size:20px;text-shadow:0 1px 4px rgba(0,0,0,0.4);line-height:1">🌳</div>',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
           })
         });
         marker.bindPopup(popupHtml, {minWidth: 160, maxWidth: 250});
@@ -1141,13 +1172,14 @@ function cargarInfraKMLGuardada() {
 }
 
 function eliminarInfraKML() {
+  if (!confirm('¿Borrar la capa de infraestructuras KML? Esta acción no se puede deshacer.')) return;
+  var nombre = localStorage.getItem('rapca_infra_kml_nombre');
   capaInfraKML.clearLayers();
   infraKMLFeatures = [];
   localStorage.removeItem('rapca_infra_kml_nombre');
   localStorage.removeItem('rapca_infra_kml_campo');
-  if (db) {
-    var nombre = localStorage.getItem('rapca_infra_kml_nombre');
-    if (nombre) eliminarDeDB('kml_infraestructuras', nombre);
+  if (db && nombre) {
+    eliminarDeDB('kml_infraestructuras', nombre);
   }
   actualizarBuscadorInfraKML();
   showToast('Infraestructuras KML eliminadas', 'info');
