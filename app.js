@@ -3034,6 +3034,223 @@ function filtrarOperadorMapa() {
   });
 }
 
+// ============================================================
+// SHAPEFILE — Generación de puntos comparativos VP
+// ============================================================
+function abrirModalShapefile() {
+  var regs = misRegistros().filter(function(r) { return r.tipo === 'VP' && r.datos.fotosComp && r.datos.fotosComp.length > 0; });
+  var zonas = [];
+  regs.forEach(function(r) {
+    var z = r.zona || '';
+    if (z && zonas.indexOf(z) < 0) zonas.push(z);
+  });
+  zonas.sort();
+
+  var html = '<h2>Descargar Shapefile Comparativas VP</h2>';
+  html += '<p style="color:#666;margin-bottom:12px">Puntos de fotos comparativas (W1/W2) con coordenadas GPS</p>';
+  html += '<div class="form-group"><label>Zona</label><select id="shp-zona">';
+  html += '<option value="">Todas las zonas</option>';
+  zonas.forEach(function(z) { html += '<option value="' + z + '">' + z + '</option>'; });
+  html += '</select></div>';
+
+  // Mostrar resumen de puntos disponibles
+  var totalPuntos = 0;
+  regs.forEach(function(r) {
+    r.datos.fotosComp.forEach(function(fc) { if (fc.lat && fc.lon) totalPuntos++; });
+  });
+  html += '<p style="font-size:13px;color:#888">' + totalPuntos + ' puntos con GPS disponibles en ' + regs.length + ' visitas</p>';
+
+  html += '<div class="modal-actions">';
+  html += '<button class="btn btn-primary" onclick="generarShapefile()">📍 Descargar Shapefile</button>';
+  html += '<button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button>';
+  html += '</div>';
+  abrirModal(html);
+}
+
+function generarShapefile() {
+  var zonaFiltro = document.getElementById('shp-zona').value;
+  var regs = misRegistros().filter(function(r) { return r.tipo === 'VP' && r.datos.fotosComp && r.datos.fotosComp.length > 0; });
+  if (zonaFiltro) regs = regs.filter(function(r) { return r.zona === zonaFiltro; });
+
+  // Recopilar puntos con GPS
+  var puntos = [];
+  regs.forEach(function(r) {
+    r.datos.fotosComp.forEach(function(fc) {
+      if (fc.lat && fc.lon) {
+        puntos.push({
+          nombre: r.unidad + '_' + (fc.waypoint || 'W1'),
+          lat: parseFloat(fc.lat),
+          lon: parseFloat(fc.lon),
+          fecha: r.fecha,
+          unidad: r.unidad,
+          zona: r.zona || '',
+          waypoint: fc.waypoint || 'W1',
+          foto: fc.numero || '',
+          operador: r.operador_nombre || ''
+        });
+      }
+    });
+  });
+
+  if (puntos.length === 0) {
+    showToast('No hay puntos comparativos con GPS', 'error');
+    return;
+  }
+
+  // Generar shapefile binario (tipo Point)
+  var shpData = generarSHPPoint(puntos);
+  var shxData = generarSHX(puntos);
+  var dbfData = generarDBF(puntos);
+  var prjData = 'GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]';
+
+  var nombreBase = 'VP_Comparativas' + (zonaFiltro ? '_' + zonaFiltro : '');
+
+  var zip = new JSZip();
+  zip.file(nombreBase + '.shp', shpData);
+  zip.file(nombreBase + '.shx', shxData);
+  zip.file(nombreBase + '.dbf', dbfData);
+  zip.file(nombreBase + '.prj', prjData);
+
+  zip.generateAsync({type: 'blob'}).then(function(blob) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = nombreBase + '.zip';
+    a.click();
+    showToast(puntos.length + ' puntos exportados a Shapefile', 'success');
+  });
+
+  cerrarModal();
+}
+
+function generarSHPPoint(puntos) {
+  // Calcular bounding box
+  var xmin = Infinity, ymin = Infinity, xmax = -Infinity, ymax = -Infinity;
+  puntos.forEach(function(p) {
+    if (p.lon < xmin) xmin = p.lon;
+    if (p.lat < ymin) ymin = p.lat;
+    if (p.lon > xmax) xmax = p.lon;
+    if (p.lat > ymax) ymax = p.lat;
+  });
+
+  // Header: 100 bytes
+  // Cada record: 8 bytes header + 20 bytes contenido (tipo 4 bytes + x 8 bytes + y 8 bytes) = 28 bytes
+  var fileLength = (100 + puntos.length * 28) / 2; // en words de 16 bits
+  var buf = new ArrayBuffer(100 + puntos.length * 28);
+  var view = new DataView(buf);
+
+  // File header (Big-Endian para file code y length)
+  view.setInt32(0, 9994); // File code
+  view.setInt32(24, fileLength); // File length en 16-bit words
+  // Little-endian a partir de aquí
+  view.setInt32(28, 1000, true); // Version
+  view.setInt32(32, 1, true); // Shape type: 1 = Point
+  view.setFloat64(36, xmin, true);
+  view.setFloat64(44, ymin, true);
+  view.setFloat64(52, xmax, true);
+  view.setFloat64(60, ymax, true);
+
+  // Records
+  var offset = 100;
+  puntos.forEach(function(p, i) {
+    // Record header (Big-Endian)
+    view.setInt32(offset, i + 1); // Record number (1-based)
+    view.setInt32(offset + 4, 10); // Content length: 20 bytes / 2 = 10 words
+    // Record content (Little-Endian)
+    view.setInt32(offset + 8, 1, true); // Shape type: Point
+    view.setFloat64(offset + 12, p.lon, true); // X
+    view.setFloat64(offset + 20, p.lat, true); // Y
+    offset += 28;
+  });
+
+  return buf;
+}
+
+function generarSHX(puntos) {
+  var fileLength = (100 + puntos.length * 8) / 2;
+  var buf = new ArrayBuffer(100 + puntos.length * 8);
+  var view = new DataView(buf);
+
+  // Mismo header que SHP
+  view.setInt32(0, 9994);
+  view.setInt32(24, fileLength);
+  view.setInt32(28, 1000, true);
+  view.setInt32(32, 1, true); // Point
+
+  var offset = 100;
+  var shpOffset = 50; // 100 bytes header / 2
+  puntos.forEach(function(p, i) {
+    view.setInt32(offset, shpOffset); // Offset en words
+    view.setInt32(offset + 4, 10); // Content length en words
+    offset += 8;
+    shpOffset += 14; // (8 header + 20 content) / 2
+  });
+
+  return buf;
+}
+
+function generarDBF(puntos) {
+  // Campos: NOMBRE(C,50), FECHA(C,10), UNIDAD(C,30), ZONA(C,30), WAYPOINT(C,3), FOTO(C,40), OPERADOR(C,40)
+  var campos = [
+    {name: 'NOMBRE', type: 'C', size: 50},
+    {name: 'FECHA', type: 'C', size: 10},
+    {name: 'UNIDAD', type: 'C', size: 30},
+    {name: 'ZONA', type: 'C', size: 30},
+    {name: 'WAYPOINT', type: 'C', size: 3},
+    {name: 'FOTO', type: 'C', size: 40},
+    {name: 'OPERADOR', type: 'C', size: 40}
+  ];
+
+  var recordSize = 1; // delete flag byte
+  campos.forEach(function(c) { recordSize += c.size; });
+
+  var headerSize = 32 + campos.length * 32 + 1; // header + field descriptors + terminator
+  var totalSize = headerSize + puntos.length * recordSize;
+  var buf = new ArrayBuffer(totalSize);
+  var view = new DataView(buf);
+  var uint8 = new Uint8Array(buf);
+
+  // Header
+  view.setUint8(0, 3); // Version
+  var now = new Date();
+  view.setUint8(1, now.getFullYear() - 1900);
+  view.setUint8(2, now.getMonth() + 1);
+  view.setUint8(3, now.getDate());
+  view.setInt32(4, puntos.length, true); // Num records
+  view.setInt16(8, headerSize, true); // Header size
+  view.setInt16(10, recordSize, true); // Record size
+
+  // Field descriptors
+  var fOffset = 32;
+  campos.forEach(function(c) {
+    writeString(uint8, fOffset, c.name, 11);
+    view.setUint8(fOffset + 11, c.type.charCodeAt(0));
+    view.setUint8(fOffset + 16, c.size);
+    fOffset += 32;
+  });
+  view.setUint8(fOffset, 0x0D); // Terminator
+
+  // Records
+  var rOffset = headerSize;
+  puntos.forEach(function(p) {
+    view.setUint8(rOffset, 0x20); // Not deleted
+    var pos = rOffset + 1;
+    var valores = [p.nombre, p.fecha, p.unidad, p.zona, p.waypoint, p.foto, p.operador];
+    campos.forEach(function(c, i) {
+      writeString(uint8, pos, valores[i] || '', c.size);
+      pos += c.size;
+    });
+    rOffset += recordSize;
+  });
+
+  return buf;
+}
+
+function writeString(uint8, offset, str, maxLen) {
+  for (var i = 0; i < maxLen; i++) {
+    uint8[offset + i] = i < str.length ? str.charCodeAt(i) & 0xFF : 0x20;
+  }
+}
+
 function descargarArchivo(contenido, nombre, mime) {
   var blob = new Blob([contenido], {type: mime});
   var a = document.createElement('a');
@@ -3309,6 +3526,7 @@ function renderPanel() {
       '<button class="btn btn-sm btn-primary" onclick="exportarExcelRegistros()">📊 Exportar Excel</button>' +
       '<button class="btn btn-sm btn-primary" onclick="exportarTodosPDF()">📄 Exportar todos PDF</button>' +
       '<button class="btn btn-sm btn-primary" onclick="descargarTodasFotosZIP()">📷 Descargar todas fotos</button>' +
+      '<button class="btn btn-sm btn-outline" onclick="abrirModalShapefile()">📍 Shapefile Comparativas</button>' +
       '<button class="btn btn-sm btn-danger" onclick="borrarTodosRegistros()">🗑️ Borrar todo</button>';
   } else {
     accionesDiv.innerHTML =
@@ -3316,6 +3534,7 @@ function renderPanel() {
       '<button class="btn btn-sm btn-primary" onclick="exportarTodosPDF()">📄 Exportar todos PDF</button>' +
       '<button class="btn btn-sm btn-primary" onclick="descargarTodasFotosZIP()">📷 Descargar fotos ZIP</button>' +
       '<button class="btn btn-sm btn-outline" onclick="exportarKMLRegistros()">🗺️ Exportar KML</button>' +
+      '<button class="btn btn-sm btn-outline" onclick="abrirModalShapefile()">📍 Shapefile Comparativas</button>' +
       '<button class="btn btn-sm btn-outline" onclick="reiniciarContadoresFotos()">🔢 Reiniciar contadores</button>' +
       '<button class="btn btn-sm btn-danger" onclick="borrarTodosRegistros()">🗑️ Borrar todo</button>';
   }
