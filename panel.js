@@ -49,13 +49,13 @@ function renderPanel() {
     var actions = '';
     if (esAdmin) {
       actions =
-        '<button class="btn btn-sm btn-outline" onclick="exportarPDFRegistro(' + r.id + ')">📄 PDF</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="abrirOpcionesPDF(' + r.id + ')">📄 PDF</button>' +
         '<button class="btn btn-sm btn-outline" onclick="descargarFotosZIP(' + r.id + ')">📷 Fotos</button>' +
         '<button class="btn btn-sm btn-danger" onclick="eliminarRegistro(' + r.id + ')">🗑️</button>';
     } else {
       actions =
         '<button class="btn btn-sm btn-outline" onclick="editarRegistro(' + r.id + ')">✏️ Editar</button>' +
-        '<button class="btn btn-sm btn-outline" onclick="exportarPDFRegistro(' + r.id + ')">📄 PDF</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="abrirOpcionesPDF(' + r.id + ')">📄 PDF</button>' +
         '<button class="btn btn-sm btn-outline" onclick="descargarFotosZIP(' + r.id + ')">📷 ZIP</button>' +
         '<button class="btn btn-sm btn-danger" onclick="eliminarRegistro(' + r.id + ')">🗑️</button>';
     }
@@ -72,7 +72,7 @@ function renderPanel() {
     accionesDiv.innerHTML =
       '<button class="btn btn-sm btn-primary" onclick="exportarExcelRegistros()">📊 Excel</button>' +
       '<button class="btn btn-sm btn-primary" onclick="exportarCSV()">📋 CSV</button>' +
-      '<button class="btn btn-sm btn-primary" onclick="exportarTodosPDF()">📄 Todos PDF</button>' +
+      '<button class="btn btn-sm btn-primary" onclick="abrirOpcionesTodosPDF()">📄 Todos PDF</button>' +
       '<button class="btn btn-sm btn-primary" onclick="descargarTodasFotosZIP()">📷 Fotos ZIP</button>' +
       '<button class="btn btn-sm btn-outline" onclick="abrirModalShapefile()">📍 Shapefile</button>' +
       '<button class="btn btn-sm btn-outline" onclick="renderDashboardCompletitud()">📊 Completitud</button>' +
@@ -83,7 +83,7 @@ function renderPanel() {
     accionesDiv.innerHTML =
       '<button class="btn btn-sm btn-primary" onclick="exportarExcelRegistros()">📊 Excel</button>' +
       '<button class="btn btn-sm btn-primary" onclick="exportarCSV()">📋 CSV</button>' +
-      '<button class="btn btn-sm btn-primary" onclick="exportarTodosPDF()">📄 Todos PDF</button>' +
+      '<button class="btn btn-sm btn-primary" onclick="abrirOpcionesTodosPDF()">📄 Todos PDF</button>' +
       '<button class="btn btn-sm btn-primary" onclick="descargarTodasFotosZIP()">📷 Fotos ZIP</button>' +
       '<button class="btn btn-sm btn-outline" onclick="exportarKMLRegistros()">🗺️ KML</button>' +
       '<button class="btn btn-sm btn-outline" onclick="abrirModalShapefile()">📍 Shapefile</button>' +
@@ -271,13 +271,94 @@ async function ejecutarBorrarTodo() {
 }
 
 // ============================================================
+// MODAL OPCIONES PDF
+// ============================================================
+var _pdfPendienteId = null;
+var _pdfPendienteTodos = false;
+
+function abrirOpcionesPDF(id) {
+  _pdfPendienteId = id;
+  _pdfPendienteTodos = false;
+  mostrarModalPDF();
+}
+
+function abrirOpcionesTodosPDF() {
+  _pdfPendienteId = null;
+  _pdfPendienteTodos = true;
+  mostrarModalPDF();
+}
+
+function mostrarModalPDF() {
+  var box = document.getElementById('modal-box');
+  box.innerHTML =
+    '<h2>📄 Opciones de Informe PDF</h2>' +
+    '<div style="margin:14px 0">' +
+      '<label style="font-weight:600;display:block;margin-bottom:8px">Fotografías:</label>' +
+      '<label style="display:block;padding:8px 12px;border:2px solid #2e7d32;border-radius:8px;margin-bottom:6px;cursor:pointer;background:#e8f5e9">' +
+        '<input type="radio" name="pdf-fotos" value="todas" checked style="margin-right:8px">Todas las fotos (comparativas + generales)' +
+      '</label>' +
+      '<label style="display:block;padding:8px 12px;border:1px solid #ddd;border-radius:8px;margin-bottom:6px;cursor:pointer">' +
+        '<input type="radio" name="pdf-fotos" value="comparativas" style="margin-right:8px">Solo fotos comparativas (W1/W2)' +
+      '</label>' +
+      '<label style="display:block;padding:8px 12px;border:1px solid #ddd;border-radius:8px;margin-bottom:6px;cursor:pointer">' +
+        '<input type="radio" name="pdf-fotos" value="ninguna" style="margin-right:8px">Sin fotos (solo datos)' +
+      '</label>' +
+    '</div>' +
+    '<div class="modal-actions">' +
+      '<button class="btn btn-sm btn-outline" onclick="cerrarModal()">Cancelar</button>' +
+      '<button class="btn btn-sm btn-primary" onclick="confirmarExportPDF()">Generar PDF</button>' +
+    '</div>';
+  document.getElementById('modal-overlay').classList.add('open');
+
+  // Highlight selected radio
+  box.querySelectorAll('input[name="pdf-fotos"]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+      box.querySelectorAll('label').forEach(function(lbl) {
+        if (lbl.querySelector('input[name="pdf-fotos"]')) {
+          lbl.style.border = '1px solid #ddd';
+          lbl.style.background = '#fff';
+        }
+      });
+      var sel = radio.closest('label');
+      sel.style.border = '2px solid #2e7d32';
+      sel.style.background = '#e8f5e9';
+    });
+  });
+}
+
+function confirmarExportPDF() {
+  var seleccion = 'todas';
+  var radios = document.querySelectorAll('input[name="pdf-fotos"]');
+  radios.forEach(function(r) { if (r.checked) seleccion = r.value; });
+  cerrarModal();
+
+  var opcionesFotos = {
+    incluirComparativas: seleccion === 'todas' || seleccion === 'comparativas',
+    incluirGenerales: seleccion === 'todas'
+  };
+
+  if (_pdfPendienteTodos) {
+    var regs = registrosFiltradosPanel();
+    if (regs.length === 0) { showToast('No hay registros', 'error'); return; }
+    regs.forEach(function(r, i) {
+      setTimeout(function() { exportarPDFRegistro(r.id, opcionesFotos); }, i * 500);
+    });
+  } else if (_pdfPendienteId) {
+    exportarPDFRegistro(_pdfPendienteId, opcionesFotos);
+  }
+}
+
+// ============================================================
 // EXPORTAR PDF
 // ============================================================
-async function exportarPDFRegistro(id) {
+async function exportarPDFRegistro(id, opcionesFotos) {
   var r = registros.find(function(r) { return r.id == id; });
   if (!r) return;
 
-  showToast('Preparando informe con fotos...', 'info');
+  if (!opcionesFotos) opcionesFotos = { incluirComparativas: true, incluirGenerales: true };
+
+  var conFotos = opcionesFotos.incluirComparativas || opcionesFotos.incluirGenerales;
+  showToast(conFotos ? 'Preparando informe con fotos...' : 'Preparando informe...', 'info');
 
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>RAPCA ' + r.tipo + ' - ' + r.unidad + '</title>';
   html += '<style>body{font-family:sans-serif;padding:20px;max-width:800px;margin:0 auto}h1{color:#1a3d2e}h2{color:#1a3d2e;margin-top:24px}table{width:100%;border-collapse:collapse;margin:10px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f0}.badge{padding:3px 8px;border-radius:12px;color:#fff;font-weight:700}img{max-width:100%}@media print{div[style*="page-break"]{page-break-before:always}img{break-inside:avoid}}</style></head><body>';
@@ -335,7 +416,7 @@ async function exportarPDFRegistro(id) {
   if (r.datos.observaciones) html += '<h3>Observaciones</h3><p>' + r.datos.observaciones + '</p>';
 
   // ---- FOTOS COMPARATIVAS (prioridad alta, más grandes) ----
-  if (r.datos.fotosComp && r.datos.fotosComp.length > 0) {
+  if (opcionesFotos.incluirComparativas && r.datos.fotosComp && r.datos.fotosComp.length > 0) {
     html += '<div style="page-break-before:always"></div>';
     html += '<h2 style="color:#1a3d2e;border-bottom:2px solid #1a3d2e;padding-bottom:4px">Fotos Comparativas</h2>';
 
@@ -373,7 +454,7 @@ async function exportarPDFRegistro(id) {
   }
 
   // ---- FOTOS GENERALES ----
-  if (r.datos.fotos) {
+  if (opcionesFotos.incluirGenerales && r.datos.fotos) {
     var codigos = r.datos.fotos.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
     if (codigos.length > 0) {
       html += '<h2 style="color:#1a3d2e;border-bottom:2px solid #1a3d2e;padding-bottom:4px;margin-top:20px">Fotos Generales</h2>';
