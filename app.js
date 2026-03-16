@@ -3357,6 +3357,59 @@ function cargarRegistroEnForm(r, prefix) {
       }
     }
   }
+  // Restaurar fotos en fotosPagina y preview
+  restaurarFotosRegistro(r, prefix);
+}
+
+function restaurarFotosRegistro(r, prefix) {
+  // Restaurar fotos generales (G)
+  if (r.datos.fotos && typeof r.datos.fotos === 'string') {
+    var codigos = r.datos.fotos.split(',').map(function(f) { return f.trim(); }).filter(function(f) { return f; });
+    if (codigos.length > 0) {
+      fotosPagina['G'] = codigos;
+    }
+  }
+  // Restaurar fotos comparativas (W1, W2)
+  if (r.datos.fotosComp && Array.isArray(r.datos.fotosComp)) {
+    r.datos.fotosComp.forEach(function(fc) {
+      var wp = fc.waypoint || 'W1';
+      if (!fotosPagina[wp]) fotosPagina[wp] = [];
+      fotosPagina[wp].push({codigo: fc.numero, lat: fc.lat || null, lon: fc.lon || null});
+    });
+  }
+  // Renderizar previews
+  var previewGrid = document.getElementById(prefix + '-fotos-preview');
+  if (!previewGrid) return;
+
+  var todasFotos = [];
+  if (fotosPagina['G']) fotosPagina['G'].forEach(function(cod) { todasFotos.push(cod); });
+  if (fotosPagina['W1']) fotosPagina['W1'].forEach(function(f) { todasFotos.push(f.codigo || f); });
+  if (fotosPagina['W2']) fotosPagina['W2'].forEach(function(f) { todasFotos.push(f.codigo || f); });
+
+  todasFotos.forEach(function(codigo) {
+    var img = document.createElement('img');
+    img.title = codigo;
+    img.alt = codigo;
+    img.style.cssText = 'width:60px;height:60px;object-fit:cover;border-radius:6px;border:2px solid #ddd';
+    img.onclick = function() { abrirLightboxFoto(this.src, codigo); };
+    // Buscar thumbnail en IndexedDB
+    buscarFotoData(codigo, r.tipo, r.unidad).then(function(data) {
+      if (data) {
+        img.src = data;
+      } else {
+        // Fallback: servidor/Cloudinary
+        var serverUrl = API_BASE + 'uploads/rapca/' + r.tipo + '/' + r.unidad + '/' + codigo + '.jpg';
+        img.onerror = function() {
+          img.onerror = null;
+          img.src = 'https://res.cloudinary.com/drnqs1jwl/image/upload/w_120,q_60/rapca/' + r.tipo + '/' + r.unidad + '/' + codigo;
+        };
+        img.src = serverUrl;
+      }
+    }).catch(function() {
+      img.alt = codigo;
+    });
+    previewGrid.appendChild(img);
+  });
 }
 
 function eliminarRegistro(id) {
