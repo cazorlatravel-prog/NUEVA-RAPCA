@@ -1159,46 +1159,40 @@ function ejecutarCargaInfraKML() {
     }
 
     var marker = null;
-    if (lat && lon) {
-      // Crear marcador
-      marker = L.marker([lat, lon], {
-        icon: L.divIcon({
-          className: '',
-          html: '<div style="width:12px;height:12px;background:#8e44ad;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>',
-          iconSize: [12, 12],
-          iconAnchor: [6, 6]
-        })
-      });
-      marker.bindPopup(popupHtml, {minWidth: 160, maxWidth: 250});
-      capaInfraKML.addLayer(marker);
-    }
 
     // También añadir geometrías de línea/polígono
     if (lineEl || polyEl) {
       var coords = parseKMLCoords(geomEl.querySelector('coordinates'));
       if (lineEl && coords.length > 1) {
-        var line = L.polyline(coords, {color: '#8e44ad', weight: 3, opacity: 0.7});
+        var line = L.polyline(coords, {color: '#8e44ad', weight: 3, opacity: 0.8});
         line.bindPopup(popupHtml, {minWidth: 160, maxWidth: 250});
         capaInfraKML.addLayer(line);
       }
       if (polyEl && coords.length > 2) {
-        var poly = L.polygon(coords, {color: '#8e44ad', fillColor: '#8e44ad', fillOpacity: 0.15, weight: 2});
+        var poly = L.polygon(coords, {color: '#8e44ad', fillColor: '#8e44ad', fillOpacity: 0.2, weight: 2});
         poly.bindPopup(popupHtml, {minWidth: 160, maxWidth: 250});
         capaInfraKML.addLayer(poly);
       }
-      // Marcador central si no hay punto
-      if (!pointEl && lat && lon && !marker) {
-        marker = L.marker([lat, lon], {
-          icon: L.divIcon({
-            className: '',
-            html: '<div style="font-size:20px;text-shadow:0 1px 4px rgba(0,0,0,0.4);line-height:1">🌳</div>',
-            iconSize: [20, 20],
-            iconAnchor: [10, 10]
-          })
-        });
-        marker.bindPopup(popupHtml, {minWidth: 160, maxWidth: 250});
-        capaInfraKML.addLayer(marker);
-      }
+    }
+
+    // Crear marcador con etiqueta
+    if (lat && lon) {
+      marker = L.marker([lat, lon], {
+        icon: L.divIcon({
+          className: 'infra-kml-marker',
+          html: '<div class="infra-kml-dot"></div>',
+          iconSize: [14, 14],
+          iconAnchor: [7, 7]
+        })
+      });
+      marker.bindPopup(popupHtml, {minWidth: 160, maxWidth: 250});
+      marker.bindTooltip(nombreInfra, {
+        permanent: true,
+        direction: 'right',
+        offset: [10, 0],
+        className: 'infra-kml-label'
+      });
+      capaInfraKML.addLayer(marker);
     }
 
     infraKMLFeatures.push({
@@ -1277,31 +1271,39 @@ function cargarInfraKMLGuardada() {
       }
 
       var marker = null;
-      if (lat && lon) {
-        marker = L.marker([lat, lon], {
-          icon: L.divIcon({
-            className: '',
-            html: '<div style="width:12px;height:12px;background:#8e44ad;border:2px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>',
-            iconSize: [12, 12], iconAnchor: [6, 6]
-          })
-        });
-        marker.bindPopup(popupHtml, {minWidth: 160, maxWidth: 250});
-        capaInfraKML.addLayer(marker);
-      }
 
       if (lineEl) {
         var coords = parseKMLCoords(geomEl.querySelector('coordinates'));
         if (coords.length > 1) {
-          var line = L.polyline(coords, {color: '#8e44ad', weight: 3, opacity: 0.7});
-          line.bindPopup(popupHtml); capaInfraKML.addLayer(line);
+          var line = L.polyline(coords, {color: '#8e44ad', weight: 3, opacity: 0.8});
+          line.bindPopup(popupHtml, {minWidth: 160, maxWidth: 250}); capaInfraKML.addLayer(line);
         }
       }
       if (polyEl) {
         var coords = parseKMLCoords(geomEl.querySelector('coordinates'));
         if (coords.length > 2) {
-          var poly = L.polygon(coords, {color: '#8e44ad', fillColor: '#8e44ad', fillOpacity: 0.15, weight: 2});
-          poly.bindPopup(popupHtml); capaInfraKML.addLayer(poly);
+          var poly = L.polygon(coords, {color: '#8e44ad', fillColor: '#8e44ad', fillOpacity: 0.2, weight: 2});
+          poly.bindPopup(popupHtml, {minWidth: 160, maxWidth: 250}); capaInfraKML.addLayer(poly);
         }
+      }
+
+      if (lat && lon) {
+        marker = L.marker([lat, lon], {
+          icon: L.divIcon({
+            className: 'infra-kml-marker',
+            html: '<div class="infra-kml-dot"></div>',
+            iconSize: [14, 14],
+            iconAnchor: [7, 7]
+          })
+        });
+        marker.bindPopup(popupHtml, {minWidth: 160, maxWidth: 250});
+        marker.bindTooltip(nombreInfra, {
+          permanent: true,
+          direction: 'right',
+          offset: [10, 0],
+          className: 'infra-kml-label'
+        });
+        capaInfraKML.addLayer(marker);
       }
 
       infraKMLFeatures.push({ nombre: nombreInfra, lat: lat, lon: lon, attrs: attrs, marker: marker });

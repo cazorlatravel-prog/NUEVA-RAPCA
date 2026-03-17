@@ -370,6 +370,12 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 .kml-layer-controls{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap}
 .kml-layer-controls input[type=range]{height:4px;cursor:pointer}
 
+/* === INFRA KML MARKERS & LABELS === */
+.infra-kml-marker{background:transparent !important;border:none !important}
+.infra-kml-dot{width:14px;height:14px;background:#8e44ad;border:2.5px solid #fff;border-radius:50%;box-shadow:0 1px 5px rgba(0,0,0,0.45)}
+.infra-kml-label{background:rgba(142,68,173,0.88) !important;color:#fff !important;border:none !important;border-radius:4px !important;padding:2px 7px !important;font-size:11px !important;font-weight:600 !important;line-height:1.3 !important;box-shadow:0 1px 4px rgba(0,0,0,0.3) !important;white-space:nowrap !important;letter-spacing:0.2px}
+.infra-kml-label::before{border-right-color:rgba(142,68,173,0.88) !important}
+
 /* === FULLSCREEN SEARCH === */
 .map-search{position:absolute;top:58px;left:10px;right:60px;z-index:1001;display:none}
 .map-search.open{display:block}
