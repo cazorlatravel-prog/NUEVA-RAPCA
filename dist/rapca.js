@@ -3154,6 +3154,7 @@ var capaWaypointsPersist = null;
 // Capa de infraestructuras KML
 var capaInfraKML = null;
 var infraKMLFeatures = []; // Array de {nombre, lat, lon, attrs}
+var gpxCapas = []; // Array de {nombre, layer}
 
 function initMapa() {
   if (mapa) { mapa.invalidateSize(); actualizarMarcadores(); return; }
@@ -3461,7 +3462,9 @@ function agregarWMS() {
   var idx = wmsCapas.length - 1;
   var div = document.createElement('div');
   div.className = 'wms-layer';
-  div.innerHTML = '<input type="checkbox" checked onchange="toggleWMSLayer(' + idx + ',this.checked)"><span style="flex:1;font-size:11px;overflow:hidden;text-overflow:ellipsis">' + url.substring(0, 40) + '...</span>';
+  div.innerHTML = '<input type="checkbox" checked onchange="toggleWMSLayer(' + idx + ',this.checked)">' +
+    '<span style="flex:1;font-size:11px;overflow:hidden;text-overflow:ellipsis">' + url.substring(0, 40) + '...</span>' +
+    '<button onclick="removeWMSLayer(' + idx + ')" style="background:none;border:none;color:#e74c3c;font-size:14px;cursor:pointer;padding:0" title="Eliminar capa">✕</button>';
   list.appendChild(div);
   document.getElementById('wms-url').value = '';
   showToast('Capa WMS añadida', 'success');
@@ -3470,6 +3473,28 @@ function agregarWMS() {
 function toggleWMSLayer(idx, visible) {
   if (visible) mapa.addLayer(wmsCapas[idx].layer);
   else mapa.removeLayer(wmsCapas[idx].layer);
+}
+
+function removeWMSLayer(idx) {
+  if (!wmsCapas[idx]) return;
+  mapa.removeLayer(wmsCapas[idx].layer);
+  wmsCapas.splice(idx, 1);
+  renderWMSList();
+  showToast('Capa WMS eliminada', 'info');
+}
+
+function renderWMSList() {
+  var list = document.getElementById('wms-layers-list');
+  if (!list) return;
+  list.innerHTML = '';
+  wmsCapas.forEach(function(capa, idx) {
+    var div = document.createElement('div');
+    div.className = 'wms-layer';
+    div.innerHTML = '<input type="checkbox" checked onchange="toggleWMSLayer(' + idx + ',this.checked)">' +
+      '<span style="flex:1;font-size:11px;overflow:hidden;text-overflow:ellipsis">' + capa.url.substring(0, 40) + '...</span>' +
+      '<button onclick="removeWMSLayer(' + idx + ')" style="background:none;border:none;color:#e74c3c;font-size:14px;cursor:pointer;padding:0" title="Eliminar capa">✕</button>';
+    list.appendChild(div);
+  });
 }
 
 function toggleAttrTable() {
@@ -3781,7 +3806,7 @@ function renderKMLPanel() {
       '<div class="kml-layer-header">' +
         '<label style="display:flex;align-items:center;gap:4px;flex:1;min-width:0">' +
           '<input type="checkbox" checked onchange="toggleKMLLayer(' + idx + ',this.checked)" style="width:16px;height:16px">' +
-          '<span style="font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + capa.nombre + '</span>' +
+          '<span style="font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📂 ' + capa.nombre + '</span>' +
         '</label>' +
         '<button onclick="removeKMLLayer(' + idx + ')" style="background:none;border:none;color:#e74c3c;font-size:14px;cursor:pointer;padding:0">✕</button>' +
       '</div>' +
@@ -3799,6 +3824,52 @@ function renderKMLPanel() {
     '';
     list.appendChild(div);
   });
+  // GPX layers
+  gpxCapas.forEach(function(capa, idx) {
+    var div = document.createElement('div');
+    div.className = 'kml-layer-item';
+    div.innerHTML =
+      '<div class="kml-layer-header">' +
+        '<label style="display:flex;align-items:center;gap:4px;flex:1;min-width:0">' +
+          '<input type="checkbox" checked onchange="toggleGPXLayer(' + idx + ',this.checked)" style="width:16px;height:16px">' +
+          '<span style="font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🗺️ ' + capa.nombre + '</span>' +
+        '</label>' +
+        '<button onclick="removeGPXLayer(' + idx + ')" style="background:none;border:none;color:#e74c3c;font-size:14px;cursor:pointer;padding:0">✕</button>' +
+      '</div>';
+    list.appendChild(div);
+  });
+  // WMS layers
+  wmsCapas.forEach(function(capa, idx) {
+    var div = document.createElement('div');
+    div.className = 'kml-layer-item';
+    div.innerHTML =
+      '<div class="kml-layer-header">' +
+        '<label style="display:flex;align-items:center;gap:4px;flex:1;min-width:0">' +
+          '<input type="checkbox" checked onchange="toggleWMSLayer(' + idx + ',this.checked)" style="width:16px;height:16px">' +
+          '<span style="font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🌐 ' + capa.url.substring(0, 35) + '</span>' +
+        '</label>' +
+        '<button onclick="removeWMSLayer(' + idx + ')" style="background:none;border:none;color:#e74c3c;font-size:14px;cursor:pointer;padding:0">✕</button>' +
+      '</div>';
+    list.appendChild(div);
+  });
+  // Empty state
+  if (kmlCapas.length === 0 && gpxCapas.length === 0 && wmsCapas.length === 0) {
+    list.innerHTML = '<div style="padding:12px;color:#888;font-size:12px;text-align:center">No hay capas cargadas</div>';
+  }
+}
+
+function toggleGPXLayer(idx, visible) {
+  if (!gpxCapas[idx]) return;
+  if (visible) mapa.addLayer(gpxCapas[idx].layer);
+  else mapa.removeLayer(gpxCapas[idx].layer);
+}
+
+function removeGPXLayer(idx) {
+  if (!gpxCapas[idx]) return;
+  mapa.removeLayer(gpxCapas[idx].layer);
+  gpxCapas.splice(idx, 1);
+  renderKMLPanel();
+  showToast('Capa GPX eliminada', 'info');
 }
 
 function toggleKMLLayer(idx, visible) {
@@ -3871,6 +3942,7 @@ function importarGPX() {
     reader.onload = function(ev) {
       var parser = new DOMParser();
       var doc = parser.parseFromString(ev.target.result, 'text/xml');
+      var gpxGroup = L.featureGroup();
       var wpts = doc.querySelectorAll('wpt');
       var count = 0;
       wpts.forEach(function(wpt) {
@@ -3878,7 +3950,7 @@ function importarGPX() {
         var lon = parseFloat(wpt.getAttribute('lon'));
         var name = wpt.querySelector('name');
         if (!isNaN(lat) && !isNaN(lon)) {
-          L.marker([lat, lon]).addTo(mapa).bindPopup(name ? name.textContent : 'Waypoint');
+          L.marker([lat, lon]).bindPopup(name ? name.textContent : 'Waypoint').addTo(gpxGroup);
           count++;
         }
       });
@@ -3889,7 +3961,12 @@ function importarGPX() {
         var lon = parseFloat(pt.getAttribute('lon'));
         if (!isNaN(lat) && !isNaN(lon)) latlngs.push([lat, lon]);
       });
-      if (latlngs.length > 1) L.polyline(latlngs, {color: '#e74c3c', weight: 3}).addTo(mapa);
+      if (latlngs.length > 1) L.polyline(latlngs, {color: '#e74c3c', weight: 3}).addTo(gpxGroup);
+      gpxGroup.addTo(mapa);
+      gpxCapas.push({nombre: file.name, layer: gpxGroup});
+      if (gpxGroup.getLayers().length > 0) {
+        try { mapa.fitBounds(gpxGroup.getBounds().pad(0.1)); } catch(e) {}
+      }
       showToast((count + latlngs.length) + ' elementos GPX cargados', 'success');
     };
     reader.readAsText(file);
