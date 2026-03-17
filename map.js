@@ -705,8 +705,25 @@ function renderKMLPanel() {
       '</div>';
     list.appendChild(div);
   });
+  // Infrastructure KML layer
+  if (infraKMLFeatures.length > 0) {
+    var infraNombre = localStorage.getItem('rapca_infra_kml_nombre') || 'Infraestructuras KML';
+    var infraVisible = mapa.hasLayer(capaInfraKML);
+    var divInfra = document.createElement('div');
+    divInfra.className = 'kml-layer-item';
+    divInfra.innerHTML =
+      '<div class="kml-layer-header">' +
+        '<label style="display:flex;align-items:center;gap:4px;flex:1;min-width:0">' +
+          '<input type="checkbox"' + (infraVisible ? ' checked' : '') + ' onchange="toggleInfraKMLLayer(this.checked)" style="width:16px;height:16px">' +
+          '<span style="font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">🌳 ' + infraNombre + ' (' + infraKMLFeatures.length + ')</span>' +
+        '</label>' +
+        '<button onclick="eliminarInfraKML();renderKMLPanel()" style="background:none;border:none;color:#e74c3c;font-size:14px;cursor:pointer;padding:0">✕</button>' +
+      '</div>';
+    list.appendChild(divInfra);
+  }
   // Empty state
-  if (kmlCapas.length === 0 && gpxCapas.length === 0 && wmsCapas.length === 0) {
+  var totalCapas = kmlCapas.length + gpxCapas.length + wmsCapas.length + (infraKMLFeatures.length > 0 ? 1 : 0);
+  if (totalCapas === 0) {
     list.innerHTML = '<div style="padding:12px;color:#888;font-size:12px;text-align:center">No hay capas cargadas</div>';
   }
 }
@@ -1296,6 +1313,11 @@ function cargarInfraKMLGuardada() {
   }).catch(function(e) { console.warn('Error cargando KML infraestructuras guardado:', e); });
 }
 
+function toggleInfraKMLLayer(visible) {
+  if (visible) mapa.addLayer(capaInfraKML);
+  else mapa.removeLayer(capaInfraKML);
+}
+
 function eliminarInfraKML() {
   if (!confirm('¿Borrar la capa de infraestructuras KML? Esta acción no se puede deshacer.')) return;
   var nombre = localStorage.getItem('rapca_infra_kml_nombre');
@@ -1307,6 +1329,7 @@ function eliminarInfraKML() {
     eliminarDeDB('kml_infraestructuras', nombre);
   }
   actualizarBuscadorInfraKML();
+  renderKMLPanel();
   showToast('Infraestructuras KML eliminadas', 'info');
 }
 
