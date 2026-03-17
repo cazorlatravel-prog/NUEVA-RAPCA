@@ -44,7 +44,6 @@ var sincronizando = false;
 var sesion = null;
 var registros = [];
 var infraestructuras = [];
-var ganaderos = [];
 var mapa = null;
 var mapaMarkers = null;
 var gpsWatchId = null;
@@ -300,7 +299,6 @@ function irPagina(id) {
   if (id === 'timeline' && typeof renderTimeline === 'function') renderTimeline();
   if (id === 'comparador' && typeof renderComparador === 'function') renderComparador();
   if (id === 'galeria' && typeof renderGaleria === 'function') renderGaleria();
-  if (id === 'ganaderos' && typeof renderGanaderos === 'function') renderGanaderos();
   if (id === 'infraestructuras' && typeof renderInfras === 'function') renderInfras();
   if (id === 'admin' && typeof renderAdmin === 'function') renderAdmin();
   if (id === 'precarga' && typeof irPrecarga === 'function') irPrecarga();
@@ -326,7 +324,6 @@ function toggleContraste() {
 function cargarDatos() {
   registros = safeParse('rapca_registros', []);
   infraestructuras = safeParse('rapca_infraestructuras', []);
-  ganaderos = safeParse('rapca_ganaderos', []);
   actualizarEstado();
   if (typeof actualizarContadorFotos === 'function') actualizarContadorFotos();
   if (typeof reconstruirContadores === 'function') reconstruirContadores();
@@ -334,7 +331,6 @@ function cargarDatos() {
 
 function guardarRegistros() { safeStore('rapca_registros', registros); }
 function guardarInfras() { safeStore('rapca_infraestructuras', infraestructuras); }
-function guardarGanaderosLS() { safeStore('rapca_ganaderos', ganaderos); }
 
 function misRegistros() {
   if (!sesion) return [];
@@ -4448,13 +4444,13 @@ function renderPanel() {
     var actions = '';
     if (esAdmin) {
       actions =
-        '<button class="btn btn-sm btn-outline" onclick="exportarPDFRegistro(' + r.id + ')">📄 PDF</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="abrirOpcionesPDF(' + r.id + ')">📄 PDF</button>' +
         '<button class="btn btn-sm btn-outline" onclick="descargarFotosZIP(' + r.id + ')">📷 Fotos</button>' +
         '<button class="btn btn-sm btn-danger" onclick="eliminarRegistro(' + r.id + ')">🗑️</button>';
     } else {
       actions =
         '<button class="btn btn-sm btn-outline" onclick="editarRegistro(' + r.id + ')">✏️ Editar</button>' +
-        '<button class="btn btn-sm btn-outline" onclick="exportarPDFRegistro(' + r.id + ')">📄 PDF</button>' +
+        '<button class="btn btn-sm btn-outline" onclick="abrirOpcionesPDF(' + r.id + ')">📄 PDF</button>' +
         '<button class="btn btn-sm btn-outline" onclick="descargarFotosZIP(' + r.id + ')">📷 ZIP</button>' +
         '<button class="btn btn-sm btn-danger" onclick="eliminarRegistro(' + r.id + ')">🗑️</button>';
     }
@@ -4471,7 +4467,7 @@ function renderPanel() {
     accionesDiv.innerHTML =
       '<button class="btn btn-sm btn-primary" onclick="exportarExcelRegistros()">📊 Excel</button>' +
       '<button class="btn btn-sm btn-primary" onclick="exportarCSV()">📋 CSV</button>' +
-      '<button class="btn btn-sm btn-primary" onclick="exportarTodosPDF()">📄 Todos PDF</button>' +
+      '<button class="btn btn-sm btn-primary" onclick="abrirOpcionesTodosPDF()">📄 Todos PDF</button>' +
       '<button class="btn btn-sm btn-primary" onclick="descargarTodasFotosZIP()">📷 Fotos ZIP</button>' +
       '<button class="btn btn-sm btn-outline" onclick="abrirModalShapefile()">📍 Shapefile</button>' +
       '<button class="btn btn-sm btn-outline" onclick="renderDashboardCompletitud()">📊 Completitud</button>' +
@@ -4482,7 +4478,7 @@ function renderPanel() {
     accionesDiv.innerHTML =
       '<button class="btn btn-sm btn-primary" onclick="exportarExcelRegistros()">📊 Excel</button>' +
       '<button class="btn btn-sm btn-primary" onclick="exportarCSV()">📋 CSV</button>' +
-      '<button class="btn btn-sm btn-primary" onclick="exportarTodosPDF()">📄 Todos PDF</button>' +
+      '<button class="btn btn-sm btn-primary" onclick="abrirOpcionesTodosPDF()">📄 Todos PDF</button>' +
       '<button class="btn btn-sm btn-primary" onclick="descargarTodasFotosZIP()">📷 Fotos ZIP</button>' +
       '<button class="btn btn-sm btn-outline" onclick="exportarKMLRegistros()">🗺️ KML</button>' +
       '<button class="btn btn-sm btn-outline" onclick="abrirModalShapefile()">📍 Shapefile</button>' +
@@ -4670,13 +4666,94 @@ async function ejecutarBorrarTodo() {
 }
 
 // ============================================================
+// MODAL OPCIONES PDF
+// ============================================================
+var _pdfPendienteId = null;
+var _pdfPendienteTodos = false;
+
+function abrirOpcionesPDF(id) {
+  _pdfPendienteId = id;
+  _pdfPendienteTodos = false;
+  mostrarModalPDF();
+}
+
+function abrirOpcionesTodosPDF() {
+  _pdfPendienteId = null;
+  _pdfPendienteTodos = true;
+  mostrarModalPDF();
+}
+
+function mostrarModalPDF() {
+  var box = document.getElementById('modal-box');
+  box.innerHTML =
+    '<h2>📄 Opciones de Informe PDF</h2>' +
+    '<div style="margin:14px 0">' +
+      '<label style="font-weight:600;display:block;margin-bottom:8px">Fotografías:</label>' +
+      '<label style="display:block;padding:8px 12px;border:2px solid #2e7d32;border-radius:8px;margin-bottom:6px;cursor:pointer;background:#e8f5e9">' +
+        '<input type="radio" name="pdf-fotos" value="todas" checked style="margin-right:8px">Todas las fotos (comparativas + generales)' +
+      '</label>' +
+      '<label style="display:block;padding:8px 12px;border:1px solid #ddd;border-radius:8px;margin-bottom:6px;cursor:pointer">' +
+        '<input type="radio" name="pdf-fotos" value="comparativas" style="margin-right:8px">Solo fotos comparativas (W1/W2)' +
+      '</label>' +
+      '<label style="display:block;padding:8px 12px;border:1px solid #ddd;border-radius:8px;margin-bottom:6px;cursor:pointer">' +
+        '<input type="radio" name="pdf-fotos" value="ninguna" style="margin-right:8px">Sin fotos (solo datos)' +
+      '</label>' +
+    '</div>' +
+    '<div class="modal-actions">' +
+      '<button class="btn btn-sm btn-outline" onclick="cerrarModal()">Cancelar</button>' +
+      '<button class="btn btn-sm btn-primary" onclick="confirmarExportPDF()">Generar PDF</button>' +
+    '</div>';
+  document.getElementById('modal-overlay').classList.add('open');
+
+  // Highlight selected radio
+  box.querySelectorAll('input[name="pdf-fotos"]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+      box.querySelectorAll('label').forEach(function(lbl) {
+        if (lbl.querySelector('input[name="pdf-fotos"]')) {
+          lbl.style.border = '1px solid #ddd';
+          lbl.style.background = '#fff';
+        }
+      });
+      var sel = radio.closest('label');
+      sel.style.border = '2px solid #2e7d32';
+      sel.style.background = '#e8f5e9';
+    });
+  });
+}
+
+function confirmarExportPDF() {
+  var seleccion = 'todas';
+  var radios = document.querySelectorAll('input[name="pdf-fotos"]');
+  radios.forEach(function(r) { if (r.checked) seleccion = r.value; });
+  cerrarModal();
+
+  var opcionesFotos = {
+    incluirComparativas: seleccion === 'todas' || seleccion === 'comparativas',
+    incluirGenerales: seleccion === 'todas'
+  };
+
+  if (_pdfPendienteTodos) {
+    var regs = registrosFiltradosPanel();
+    if (regs.length === 0) { showToast('No hay registros', 'error'); return; }
+    regs.forEach(function(r, i) {
+      setTimeout(function() { exportarPDFRegistro(r.id, opcionesFotos); }, i * 500);
+    });
+  } else if (_pdfPendienteId) {
+    exportarPDFRegistro(_pdfPendienteId, opcionesFotos);
+  }
+}
+
+// ============================================================
 // EXPORTAR PDF
 // ============================================================
-async function exportarPDFRegistro(id) {
+async function exportarPDFRegistro(id, opcionesFotos) {
   var r = registros.find(function(r) { return r.id == id; });
   if (!r) return;
 
-  showToast('Preparando informe con fotos...', 'info');
+  if (!opcionesFotos) opcionesFotos = { incluirComparativas: true, incluirGenerales: true };
+
+  var conFotos = opcionesFotos.incluirComparativas || opcionesFotos.incluirGenerales;
+  showToast(conFotos ? 'Preparando informe con fotos...' : 'Preparando informe...', 'info');
 
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>RAPCA ' + r.tipo + ' - ' + r.unidad + '</title>';
   html += '<style>body{font-family:sans-serif;padding:20px;max-width:800px;margin:0 auto}h1{color:#1a3d2e}h2{color:#1a3d2e;margin-top:24px}table{width:100%;border-collapse:collapse;margin:10px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f0}.badge{padding:3px 8px;border-radius:12px;color:#fff;font-weight:700}img{max-width:100%}@media print{div[style*="page-break"]{page-break-before:always}img{break-inside:avoid}}</style></head><body>';
@@ -4734,7 +4811,7 @@ async function exportarPDFRegistro(id) {
   if (r.datos.observaciones) html += '<h3>Observaciones</h3><p>' + r.datos.observaciones + '</p>';
 
   // ---- FOTOS COMPARATIVAS (prioridad alta, más grandes) ----
-  if (r.datos.fotosComp && r.datos.fotosComp.length > 0) {
+  if (opcionesFotos.incluirComparativas && r.datos.fotosComp && r.datos.fotosComp.length > 0) {
     html += '<div style="page-break-before:always"></div>';
     html += '<h2 style="color:#1a3d2e;border-bottom:2px solid #1a3d2e;padding-bottom:4px">Fotos Comparativas</h2>';
 
@@ -4772,7 +4849,7 @@ async function exportarPDFRegistro(id) {
   }
 
   // ---- FOTOS GENERALES ----
-  if (r.datos.fotos) {
+  if (opcionesFotos.incluirGenerales && r.datos.fotos) {
     var codigos = r.datos.fotos.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
     if (codigos.length > 0) {
       html += '<h2 style="color:#1a3d2e;border-bottom:2px solid #1a3d2e;padding-bottom:4px;margin-top:20px">Fotos Generales</h2>';
@@ -4959,150 +5036,6 @@ async function descargarTodasFotosZIP() {
     a.click();
   });
   showToast('Descargando ZIP de fotos...', 'info');
-}
-
-
-// ============================================================
-// GANADEROS
-// ============================================================
-function renderGanaderos() {
-  var lista = document.getElementById('ganaderos-lista');
-  var campos = JSON.parse(localStorage.getItem('rapca_campos_ganadero') || '["nombre","nif","telefono","email","municipio","explotacion"]');
-  if (ganaderos.length === 0) {
-    lista.innerHTML = '<div class="card" style="text-align:center;color:#888;padding:30px">No hay ganaderos registrados</div>';
-    return;
-  }
-  lista.innerHTML = ganaderos.map(function(g, i) {
-    return '<div class="card ganadero-card" onclick="editarGanadero(' + i + ')">' +
-      '<div class="gan-icon">🐄</div>' +
-      '<div class="gan-info"><h3>' + (g.nombre || 'Sin nombre') + '</h3><small>' + (g.municipio || '') + ' · ' + (g.telefono || '') + '</small></div>' +
-      '<button class="btn-icon" onclick="event.stopPropagation();eliminarGanadero(' + i + ')" style="color:#e74c3c">🗑️</button>' +
-      '</div>';
-  }).join('');
-}
-
-function filtrarGanaderos(val) {
-  var cards = document.getElementById('ganaderos-lista').querySelectorAll('.card');
-  for (var i = 0; i < cards.length; i++) {
-    cards[i].style.display = cards[i].textContent.toLowerCase().indexOf(val.toLowerCase()) >= 0 ? '' : 'none';
-  }
-}
-
-function nuevoGanadero() {
-  var campos = JSON.parse(localStorage.getItem('rapca_campos_ganadero') || '["nombre","nif","telefono","email","municipio","explotacion"]');
-  var html = '<h2>Nuevo Ganadero</h2>';
-  campos.forEach(function(c) {
-    html += '<div class="form-group"><label>' + c.charAt(0).toUpperCase() + c.slice(1) + '</label><input type="text" id="gan-' + c + '"></div>';
-  });
-  if (sesion && sesion.rol === 'admin') {
-    html += '<div class="form-group"><label>Nuevo campo personalizado</label><div style="display:flex;gap:6px"><input type="text" id="gan-nuevo-campo" placeholder="Nombre del campo"><button class="btn btn-sm btn-outline" onclick="agregarCampoGanadero()">＋</button></div></div>';
-  }
-  html += '<div class="modal-actions"><button class="btn btn-primary" onclick="guardarGanadero()">Guardar</button><button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button></div>';
-  abrirModal(html);
-}
-
-function agregarCampoGanadero() {
-  var campo = document.getElementById('gan-nuevo-campo').value.trim().toLowerCase();
-  if (!campo) return;
-  var campos = JSON.parse(localStorage.getItem('rapca_campos_ganadero') || '["nombre","nif","telefono","email","municipio","explotacion"]');
-  if (campos.indexOf(campo) < 0) { campos.push(campo); localStorage.setItem('rapca_campos_ganadero', JSON.stringify(campos)); }
-  nuevoGanadero();
-}
-
-function guardarGanadero(idx) {
-  var campos = JSON.parse(localStorage.getItem('rapca_campos_ganadero') || '["nombre","nif","telefono","email","municipio","explotacion"]');
-  var g = {};
-  campos.forEach(function(c) {
-    var el = document.getElementById('gan-' + c);
-    if (el) g[c] = el.value;
-  });
-  if (idx !== undefined) { ganaderos[idx] = g; } else { ganaderos.push(g); }
-  guardarGanaderosLS();
-  cerrarModal();
-  renderGanaderos();
-  showToast('Ganadero guardado', 'success');
-}
-
-function editarGanadero(idx) {
-  var g = ganaderos[idx];
-  var campos = JSON.parse(localStorage.getItem('rapca_campos_ganadero') || '["nombre","nif","telefono","email","municipio","explotacion"]');
-  var html = '<h2>Editar Ganadero</h2>';
-  campos.forEach(function(c) {
-    html += '<div class="form-group"><label>' + c.charAt(0).toUpperCase() + c.slice(1) + '</label><input type="text" id="gan-' + c + '" value="' + (g[c] || '') + '"></div>';
-  });
-  html += '<div class="modal-actions"><button class="btn btn-primary" onclick="guardarGanadero(' + idx + ')">Guardar</button><button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button></div>';
-  abrirModal(html);
-}
-
-function eliminarGanadero(idx) {
-  if (!confirm('¿Eliminar ganadero?')) return;
-  ganaderos.splice(idx, 1);
-  guardarGanaderosLS();
-  renderGanaderos();
-  showToast('Ganadero eliminado', 'info');
-}
-
-// --- Gestión de campos de ganaderos (solo admin) ---
-var GANADERO_CAMPOS_BASE = ['nombre','nif','telefono','email','municipio','explotacion'];
-
-function gestionarCamposGanaderos() {
-  if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
-  var campos = JSON.parse(localStorage.getItem('rapca_campos_ganadero') || '["nombre","nif","telefono","email","municipio","explotacion"]');
-  var extras = campos.filter(function(c) { return GANADERO_CAMPOS_BASE.indexOf(c) < 0; });
-
-  var html = '<h2>Gestionar Campos de Ganaderos</h2>';
-
-  // Campos base
-  html += '<div class="form-group"><label>Campos base</label>';
-  html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
-  GANADERO_CAMPOS_BASE.forEach(function(c) {
-    html += '<span style="background:#fff3e0;padding:3px 8px;border-radius:12px;font-size:12px">' + c + '</span>';
-  });
-  html += '</div></div>';
-
-  // Campos personalizados
-  html += '<div class="form-group"><label>Campos personalizados</label>';
-  if (extras.length > 0) {
-    extras.forEach(function(c, i) {
-      html += '<div style="display:flex;align-items:center;gap:6px;margin:4px 0">' +
-        '<span style="flex:1;padding:4px 8px;background:#f5f5f5;border-radius:6px;font-size:13px">' + escapeHtml(c) + '</span>' +
-        '<button class="btn btn-sm" onclick="eliminarCampoGanadero(' + i + ')" style="color:#e74c3c;border:none;padding:4px">✕</button>' +
-        '</div>';
-    });
-  } else {
-    html += '<p style="color:#888;font-size:13px">No hay campos personalizados</p>';
-  }
-  html += '</div>';
-
-  // Añadir nuevo campo
-  html += '<div class="form-group"><label>Añadir campo</label>';
-  html += '<div style="display:flex;gap:6px"><input type="text" id="gan-admin-nuevo-campo" placeholder="Nombre del campo" style="flex:1"><button class="btn btn-sm btn-outline" onclick="agregarCampoGanaderoAdmin()">＋ Añadir</button></div></div>';
-
-  html += '<div class="modal-actions"><button class="btn btn-primary" onclick="cerrarModal()">Cerrar</button></div>';
-  abrirModal(html);
-}
-
-function agregarCampoGanaderoAdmin() {
-  var campo = document.getElementById('gan-admin-nuevo-campo').value.trim().toLowerCase();
-  if (!campo) return;
-  var campos = JSON.parse(localStorage.getItem('rapca_campos_ganadero') || '["nombre","nif","telefono","email","municipio","explotacion"]');
-  if (campos.indexOf(campo) < 0) {
-    campos.push(campo);
-    localStorage.setItem('rapca_campos_ganadero', JSON.stringify(campos));
-  }
-  gestionarCamposGanaderos();
-  showToast('Campo "' + campo + '" añadido', 'success');
-}
-
-function eliminarCampoGanadero(idx) {
-  var campos = JSON.parse(localStorage.getItem('rapca_campos_ganadero') || '["nombre","nif","telefono","email","municipio","explotacion"]');
-  var extras = campos.filter(function(c) { return GANADERO_CAMPOS_BASE.indexOf(c) < 0; });
-  var campoEliminar = extras[idx];
-  if (!campoEliminar) return;
-  campos = campos.filter(function(c) { return c !== campoEliminar; });
-  localStorage.setItem('rapca_campos_ganadero', JSON.stringify(campos));
-  gestionarCamposGanaderos();
-  showToast('Campo "' + campoEliminar + '" eliminado', 'info');
 }
 
 

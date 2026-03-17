@@ -44,7 +44,6 @@ var sincronizando = false;
 var sesion = null;
 var registros = [];
 var infraestructuras = [];
-var ganaderos = [];
 var mapa = null;
 var mapaMarkers = null;
 var gpsWatchId = null;
@@ -300,7 +299,6 @@ function irPagina(id) {
   if (id === 'timeline' && typeof renderTimeline === 'function') renderTimeline();
   if (id === 'comparador' && typeof renderComparador === 'function') renderComparador();
   if (id === 'galeria' && typeof renderGaleria === 'function') renderGaleria();
-  if (id === 'ganaderos' && typeof renderGanaderos === 'function') renderGanaderos();
   if (id === 'infraestructuras' && typeof renderInfras === 'function') renderInfras();
   if (id === 'admin' && typeof renderAdmin === 'function') renderAdmin();
   if (id === 'precarga' && typeof irPrecarga === 'function') irPrecarga();
@@ -326,7 +324,6 @@ function toggleContraste() {
 function cargarDatos() {
   registros = safeParse('rapca_registros', []);
   infraestructuras = safeParse('rapca_infraestructuras', []);
-  ganaderos = safeParse('rapca_ganaderos', []);
   actualizarEstado();
   if (typeof actualizarContadorFotos === 'function') actualizarContadorFotos();
   if (typeof reconstruirContadores === 'function') reconstruirContadores();
@@ -334,7 +331,6 @@ function cargarDatos() {
 
 function guardarRegistros() { safeStore('rapca_registros', registros); }
 function guardarInfras() { safeStore('rapca_infraestructuras', infraestructuras); }
-function guardarGanaderosLS() { safeStore('rapca_ganaderos', ganaderos); }
 
 function misRegistros() {
   if (!sesion) return [];

@@ -140,7 +140,6 @@
   <li><a href="#c28">Precarga Offline</a></li>
   <li><a href="#c29">Gabinete: Informes y Estadísticas</a></li>
   <li><a href="#c30">Infraestructuras</a></li>
-  <li><a href="#c31">Ganaderos</a></li>
   <li><a href="#c32">Sincronización de Datos</a></li>
   <li><a href="#c33">Uso Offline Completo</a></li>
 </ol>
@@ -265,7 +264,7 @@
 │  │ rapca_watermark_cfg │  │ waypoints_comp  (keyPath:id)  │   │
 │  │ rapca_campos_infra  │  │ kml_infraestructuras    "     │   │
 │  │ rapca_infraestructur│  └──────────────────────────────┘   │
-│  │ rapca_ganaderos     │                                     │
+│                        │                                     │
 │  └─────────────────────┘                                     │
 └──────────────────────────────────────────────────────────────┘
           │ HTTPS              │ HTTPS            │ HTTPS
@@ -1661,7 +1660,7 @@ Ejemplos:
 <h3>29.2 Informe por Infraestructura</h3>
 <p>Genera un informe HTML por infraestructura ganadera con:</p>
 <ul>
-  <li>Datos de la infraestructura (nombre, tipo, superficie, ganadero asociado)</li>
+  <li>Datos de la infraestructura (nombre, tipo, superficie)</li>
   <li>Registros de evaluación vinculados por campo de enlace</li>
   <li>Fotografías comparativas dispuestas en 2 columnas por fila</li>
   <li>Fotografías generales en 3 columnas por fila</li>
@@ -1695,17 +1694,6 @@ Ejemplos:
 </ol>
 
 <!-- CAP 31 -->
-<h2 id="c31">31. Ganaderos</h2>
-<p>El módulo de ganaderos permite gestionar la información de los titulares de explotaciones ganaderas vinculados a la red:</p>
-<ul>
-  <li>Nombre, DNI/NIF, teléfono, email, dirección</li>
-  <li>Tipo de ganado (ovino, caprino, vacuno, mixto)</li>
-  <li>Número de cabezas UGM</li>
-  <li>Parcelas/infraestructuras asignadas</li>
-  <li>Campos personalizados configurables por el administrador</li>
-</ul>
-
-<!-- CAP 32 -->
 <h2 id="c32" class="page-break">32. Sincronización de Datos</h2>
 
 <h3>32.1 Sincronización Automática</h3>
@@ -1882,10 +1870,7 @@ Ejemplos:
   <li>El campo aparece automáticamente en formularios de infraestructuras, tablas, exportaciones e informes</li>
 </ol>
 
-<h3>36.2 Campos para Ganaderos</h3>
-<p>Mismo proceso para añadir campos personalizados a la ficha de ganaderos.</p>
-
-<h3>36.3 Almacenamiento Técnico</h3>
+<h3>36.2 Almacenamiento Técnico</h3>
 <pre><span class="cm">// localStorage: rapca_campos_infra</span>
 [
   {<span class="str">"nombre"</span>: <span class="str">"Superficie ha"</span>, <span class="str">"tipo"</span>: <span class="str">"number"</span>},
