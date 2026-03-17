@@ -286,10 +286,19 @@ window.addEventListener('offline', actualizarEstado);
 function irPagina(id) {
   vibrar();
   if (typeof detenerAutoGuardado === 'function') detenerAutoGuardado();
+  // Auto-guardar borrador al salir de un formulario
+  var prevPage = document.querySelector('.page.active');
+  if (prevPage) {
+    if (prevPage.id === 'vp-page' && typeof guardarBorrador === 'function') guardarBorrador('VP');
+    if (prevPage.id === 'el-page' && typeof guardarBorrador === 'function') guardarBorrador('EL');
+    if (prevPage.id === 'ei-page' && typeof guardarBorrador === 'function') guardarBorrador('EI');
+  }
   var pages = document.querySelectorAll('.page');
   for (var i = 0; i < pages.length; i++) pages[i].classList.remove('active');
   var target = document.getElementById(id + '-page');
   if (target) target.classList.add('active');
+  // Empujar estado al historial para proteger botón atrás
+  pushHistoryState();
 
   if (id === 'vp') initFormVP();
   if (id === 'el') initFormEL();
@@ -496,12 +505,17 @@ function limpiarFotosAntiguas() {
 // ============================================================
 // AUTO-GUARDADO al cambiar de página o cerrar
 // ============================================================
-window.addEventListener('beforeunload', function() {
+window.addEventListener('beforeunload', function(e) {
   var activePage = document.querySelector('.page.active');
   if (!activePage) return;
   if (activePage.id === 'vp-page' && typeof guardarBorrador === 'function') guardarBorrador('VP');
   if (activePage.id === 'el-page' && typeof guardarBorrador === 'function') guardarBorrador('EL');
   if (activePage.id === 'ei-page' && typeof guardarBorrador === 'function') guardarBorrador('EI');
+  // Pedir confirmación si hay formulario activo
+  if (hayFormularioActivo()) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
 });
 
 document.addEventListener('visibilitychange', function() {
@@ -515,9 +529,104 @@ document.addEventListener('visibilitychange', function() {
 });
 
 // ============================================================
+// PROTECCIÓN BOTÓN ATRÁS (móvil)
+// ============================================================
+function hayFormularioActivo() {
+  var activePage = document.querySelector('.page.active');
+  if (!activePage) return false;
+  return activePage.id === 'vp-page' || activePage.id === 'el-page' || activePage.id === 'ei-page';
+}
+
+function getTipoFormActivo() {
+  var activePage = document.querySelector('.page.active');
+  if (!activePage) return null;
+  if (activePage.id === 'vp-page') return 'VP';
+  if (activePage.id === 'el-page') return 'EL';
+  if (activePage.id === 'ei-page') return 'EI';
+  return null;
+}
+
+// Empujar estado al historial para atrapar el botón atrás
+function pushHistoryState() {
+  history.pushState({rapca: true}, '');
+}
+
+var _ignorandoPopstate = false;
+
+window.addEventListener('popstate', function(e) {
+  if (_ignorandoPopstate) { _ignorandoPopstate = false; return; }
+
+  // Si hay un modal abierto, cerrarlo en vez de salir
+  var modal = document.getElementById('modal-overlay');
+  if (modal && modal.classList.contains('open')) {
+    pushHistoryState();
+    cerrarModal();
+    return;
+  }
+
+  // Si hay formulario activo, mostrar diálogo de confirmación
+  if (hayFormularioActivo()) {
+    // Re-empujar estado para no perder la protección
+    pushHistoryState();
+    mostrarDialogoSalir();
+    return;
+  }
+
+  // Si estamos en una página que no es inicio, volver a inicio
+  var activePage = document.querySelector('.page.active');
+  if (activePage && activePage.id !== 'panel-page') {
+    pushHistoryState();
+    irPagina('panel');
+    return;
+  }
+
+  // En el panel principal: dejar salir pero re-empujar por si acaso
+  pushHistoryState();
+});
+
+function mostrarDialogoSalir() {
+  var tipo = getTipoFormActivo();
+  var nombreForm = tipo === 'VP' ? 'Vegetación Pasto' : tipo === 'EL' ? 'Evaluación Leñosa' : tipo === 'EI' ? 'Evaluación Infraestructura' : 'formulario';
+
+  var html = '<div style="text-align:center;padding:8px 0">';
+  html += '<div style="font-size:36px;margin-bottom:8px">⚠️</div>';
+  html += '<h2 style="margin:0 0 8px;font-size:17px;color:#333">¿Salir del formulario?</h2>';
+  html += '<p style="font-size:13px;color:#666;margin:0 0 16px">Tienes datos en <strong>' + nombreForm + '</strong> que no se han guardado.</p>';
+  html += '<div style="display:flex;flex-direction:column;gap:8px">';
+  html += '<button class="btn btn-primary" onclick="guardarYSalir()" style="padding:12px;font-size:14px;border-radius:8px">💾 Guardar borrador y salir</button>';
+  html += '<button class="btn btn-outline" onclick="salirSinGuardar()" style="padding:12px;font-size:14px;border-radius:8px;color:#e74c3c;border-color:#e74c3c">🚪 Salir sin guardar</button>';
+  html += '<button class="btn btn-outline" onclick="cancelarSalida()" style="padding:12px;font-size:14px;border-radius:8px">↩️ Continuar editando</button>';
+  html += '</div></div>';
+
+  abrirModal(html);
+}
+
+function guardarYSalir() {
+  var tipo = getTipoFormActivo();
+  if (tipo && typeof guardarBorrador === 'function') {
+    guardarBorrador(tipo);
+    showToast('Borrador de ' + tipo + ' guardado', 'success');
+  }
+  cerrarModal();
+  irPagina('panel');
+}
+
+function salirSinGuardar() {
+  cerrarModal();
+  irPagina('panel');
+}
+
+function cancelarSalida() {
+  cerrarModal();
+}
+
+// ============================================================
 // INIT APP
 // ============================================================
 document.addEventListener('DOMContentLoaded', function() {
+  // Inicializar protección del botón atrás
+  pushHistoryState();
+
   abrirDB().then(function() {
     console.log('IndexedDB lista');
     actualizarContadorFotos();
