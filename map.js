@@ -473,7 +473,22 @@ function extraerAtributosKML(pm) {
   var nameEl = pm.querySelector('name');
   var descEl = pm.querySelector('description');
   if (nameEl) attrs['name'] = nameEl.textContent.trim();
-  if (descEl) attrs['description'] = descEl.textContent.trim();
+  // Parsear description: si contiene HTML con tabla, extraer campos
+  if (descEl) {
+    var descText = descEl.textContent.trim();
+    if (descText.indexOf('<table') >= 0 || descText.indexOf('<TABLE') >= 0 || descText.indexOf('<html') >= 0 || descText.indexOf('<HTML') >= 0) {
+      var descAttrs = parsearHTMLDescription(descText);
+      for (var dk in descAttrs) { if (!attrs[dk]) attrs[dk] = descAttrs[dk]; }
+    } else if (descText.indexOf('<') >= 0 && descText.indexOf('>') >= 0) {
+      // HTML simple sin tabla, guardar como description limpia
+      var tmpDiv = document.createElement('div');
+      tmpDiv.innerHTML = descText;
+      var cleanText = tmpDiv.textContent.trim();
+      if (cleanText) attrs['description'] = cleanText;
+    } else {
+      if (descText) attrs['description'] = descText;
+    }
+  }
   // SimpleData / SchemaData
   var simpleData = pm.querySelectorAll('SimpleData');
   simpleData.forEach(function(sd) {
@@ -495,6 +510,35 @@ function extraerAtributosKML(pm) {
       if (el.textContent && !attrs[key]) attrs[key] = el.textContent.trim();
     }
   });
+  return attrs;
+}
+
+// Parsear HTML de description que contiene tabla de atributos (común en KML de ArcGIS/QGIS)
+function parsearHTMLDescription(htmlStr) {
+  var attrs = {};
+  try {
+    var div = document.createElement('div');
+    div.innerHTML = htmlStr;
+    // Buscar filas de tabla con 2 celdas (clave-valor)
+    var rows = div.querySelectorAll('tr');
+    for (var i = 0; i < rows.length; i++) {
+      var cells = rows[i].querySelectorAll('td');
+      if (cells.length >= 2) {
+        var key = cells[0].textContent.trim();
+        var val = cells[1].textContent.trim();
+        if (key && key !== '' && val !== '') {
+          attrs[key] = val;
+        }
+      }
+    }
+    // Si no se encontraron pares clave-valor en tabla, buscar texto limpio
+    if (Object.keys(attrs).length === 0) {
+      var text = div.textContent.trim();
+      if (text) attrs['description'] = text;
+    }
+  } catch(e) {
+    attrs['description'] = htmlStr.replace(/<[^>]+>/g, ' ').trim();
+  }
   return attrs;
 }
 
@@ -553,12 +597,16 @@ function addKMLCenterMarker(geomEl, popup, group) {
 function buildKMLPopup(attrs, popupField) {
   var keys = Object.keys(attrs);
   if (keys.length === 0) return '<i>Sin datos</i>';
-  var html = '<div style="max-height:200px;overflow-y:auto;font-size:12px">';
+  var html = '<div style="max-height:250px;overflow-y:auto;font-size:12px;line-height:1.5">';
   if (popupField && attrs[popupField]) {
-    html += '<b style="font-size:13px">' + attrs[popupField] + '</b><hr style="margin:4px 0">';
+    html += '<b style="font-size:13px;color:#1a3d2e">' + escapeHtml(String(attrs[popupField])) + '</b><hr style="margin:4px 0;border:none;border-top:1px solid #ddd">';
   }
   keys.forEach(function(k) {
-    if (k !== popupField) html += '<b>' + k + ':</b> ' + attrs[k] + '<br>';
+    if (k !== popupField) {
+      var val = String(attrs[k] || '');
+      if (val.length > 100) val = val.substring(0, 100) + '...';
+      html += '<b>' + escapeHtml(k) + ':</b> ' + escapeHtml(val) + '<br>';
+    }
   });
   html += '</div>';
   return html;
