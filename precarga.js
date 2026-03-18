@@ -43,7 +43,7 @@ function cargarZonasPrecarga() {
   var select = document.getElementById('precarga-zona');
   // Obtener zonas desde los registros locales
   var zonasMap = {};
-  registros.forEach(function(r) {
+  misRegistros().forEach(function(r) {
     var zona = r.zona || (r.unidad ? r.unidad.substring(0, 5) : '');
     if (!zona) return;
     if (!zonasMap[zona]) zonasMap[zona] = {};
@@ -154,7 +154,7 @@ function precargaListarFotos(zona) {
   var fotosEncontradas = [];
   var codigosVistos = {};
 
-  registros.forEach(function(r) {
+  misRegistros().forEach(function(r) {
     if (unidadesSeleccionadas.indexOf(r.unidad) === -1) return;
     if (!r.datos) return;
 

@@ -13,7 +13,7 @@ function renderPanel() {
   // Poblar operadores (siempre refrescar, preservando selección)
   var opSelect = document.getElementById('panel-filtro-operador');
   var ops = [];
-  registros.forEach(function(r) { if (r.operador_nombre && ops.indexOf(r.operador_nombre) < 0) ops.push(r.operador_nombre); });
+  regs.forEach(function(r) { if (r.operador_nombre && ops.indexOf(r.operador_nombre) < 0) ops.push(r.operador_nombre); });
   var opActual = opSelect.value;
   opSelect.innerHTML = '<option value="">Todos operadores</option>';
   ops.sort();
@@ -23,7 +23,7 @@ function renderPanel() {
   // Poblar unidades (siempre refrescar, preservando selección)
   var unidadSelect = document.getElementById('panel-filtro-unidad');
   var unidades = [];
-  registros.forEach(function(r) { if (r.unidad && unidades.indexOf(r.unidad) < 0) unidades.push(r.unidad); });
+  regs.forEach(function(r) { if (r.unidad && unidades.indexOf(r.unidad) < 0) unidades.push(r.unidad); });
   var unidadActual = unidadSelect.value;
   unidadSelect.innerHTML = '<option value="">Todas unidades</option>';
   unidades.sort();
@@ -97,8 +97,8 @@ function renderPanel() {
 function filtrarPanel() { renderPanel(); }
 
 function editarRegistro(id) {
-  var r = registros.find(function(r) { return r.id == id; });
-  if (!r) return;
+  var r = misRegistros().find(function(r) { return r.id == id; });
+  if (!r) { showToast('No tienes acceso a este registro', 'error'); return; }
   editandoRegistro = r;
   window._desdeEditarRegistro = true;
   if (r.tipo === 'VP') irPagina('vp');
@@ -193,6 +193,9 @@ function restaurarFotosRegistro(r, prefix) {
 }
 
 function eliminarRegistro(id) {
+  // Verificar que el operador tiene acceso a este registro
+  var r = misRegistros().find(function(r) { return r.id == id; });
+  if (!r) { showToast('No tienes acceso a este registro', 'error'); return; }
   if (!confirm('¿Eliminar registro?')) return;
   registros = registros.filter(function(r) { return r.id != id; });
   guardarRegistros();
@@ -359,7 +362,7 @@ function confirmarExportPDF() {
 // EXPORTAR PDF
 // ============================================================
 async function exportarPDFRegistro(id, opcionesFotos) {
-  var r = registros.find(function(r) { return r.id == id; });
+  var r = misRegistros().find(function(r) { return r.id == id; });
   if (!r) return;
 
   if (!opcionesFotos) opcionesFotos = { incluirComparativas: true, incluirGenerales: true };
@@ -613,7 +616,7 @@ function exportarTodosPDF() {
 }
 
 async function descargarFotosZIP(id) {
-  var r = registros.find(function(r) { return r.id == id; });
+  var r = misRegistros().find(function(r) { return r.id == id; });
   if (!r || !r.datos.fotos) { showToast('No hay fotos', 'error'); return; }
   var zip = new JSZip();
   var codigos = r.datos.fotos.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
@@ -670,7 +673,7 @@ function registrosDeInfra(inf) {
   var campoEnlace = obtenerCampoEnlace();
   var valorEnlace = inf[campoEnlace];
   if (!valorEnlace) return [];
-  return registros.filter(function(r) {
+  return misRegistros().filter(function(r) {
     return r.unidad === valorEnlace || r.zona === valorEnlace;
   });
 }

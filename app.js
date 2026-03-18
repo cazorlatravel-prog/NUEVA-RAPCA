@@ -255,7 +255,7 @@ function actualizarEstado() {
   var offlineWarn = document.getElementById('menu-offline-warning');
   var btnSync = document.getElementById('btn-sync-manual');
   var btnFotos = document.getElementById('btn-fotos-manual');
-  var pendRegs = registros.filter(function(r) { return !r.enviado; }).length;
+  var pendRegs = misRegistros().filter(function(r) { return !r.enviado; }).length;
 
   if (!online && (pendRegs > 0)) {
     if (offlineWarn) offlineWarn.style.display = '';
@@ -370,14 +370,14 @@ function busquedaGlobal(val) {
     if (match) html += '<div class="search-result" onclick="cerrarBusqueda();irPagina(\'infraestructuras\')"><strong>🏗️ ' + escapeHtml(inf.nombre || inf.idUnidad) + '</strong><small>Infraestructura · ' + escapeHtml(inf.municipio || '') + '</small></div>';
   });
 
-  registros.forEach(function(r) {
+  misRegistros().forEach(function(r) {
     if (r.unidad.toLowerCase().indexOf(lv) >= 0 || r.zona.toLowerCase().indexOf(lv) >= 0) {
       html += '<div class="search-result" onclick="cerrarBusqueda();editarRegistro(' + r.id + ')"><strong>' + escapeHtml(r.tipo) + ' ' + escapeHtml(r.unidad) + '</strong><small>' + escapeHtml(r.fecha) + ' · ' + escapeHtml(r.operador_nombre || '') + '</small></div>';
     }
   });
 
   var ops = [];
-  registros.forEach(function(r) {
+  misRegistros().forEach(function(r) {
     if (r.operador_nombre && r.operador_nombre.toLowerCase().indexOf(lv) >= 0 && ops.indexOf(r.operador_nombre) < 0) {
       ops.push(r.operador_nombre);
       html += '<div class="search-result" onclick="cerrarBusqueda()"><strong>👤 ' + r.operador_nombre + '</strong><small>Operador</small></div>';

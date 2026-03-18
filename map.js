@@ -869,12 +869,13 @@ function exportarMapaPDF() {
 }
 
 function filtrarOperadorMapa() {
+  var misRegs = misRegistros();
   var ops = [];
-  registros.forEach(function(r) { if (r.operador_nombre && ops.indexOf(r.operador_nombre) < 0) ops.push(r.operador_nombre); });
+  misRegs.forEach(function(r) { if (r.operador_nombre && ops.indexOf(r.operador_nombre) < 0) ops.push(r.operador_nombre); });
   var sel = prompt('Filtrar por operador (' + ops.join(', ') + '):');
   if (!sel) { actualizarMarcadores(); return; }
   mapaMarkers.clearLayers();
-  var regs = registros.filter(function(r) { return r.operador_nombre === sel && r.lat && r.lon; });
+  var regs = misRegs.filter(function(r) { return r.operador_nombre === sel && r.lat && r.lon; });
   var colores = {VP: '#88d8b0', EL: '#2ecc71', EI: '#fd9853'};
   regs.forEach(function(r) {
     var marker = L.circleMarker([r.lat, r.lon], {radius: 8, fillColor: colores[r.tipo], color: '#fff', weight: 2, fillOpacity: 0.9});
