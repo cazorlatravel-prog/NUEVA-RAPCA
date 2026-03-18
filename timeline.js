@@ -88,12 +88,41 @@ function filtrarTimeline() {
       h += '</div>';
     }
 
+    // Acciones
+    h += '<div class="tl-actions">';
+    h += '<button class="btn btn-sm btn-outline" onclick="editarRegistro(' + r.id + ')">✏️ Editar</button>';
+    h += '<button class="btn btn-sm btn-outline" onclick="tlEliminarRegistro(' + r.id + ')" style="color:#e74c3c;border-color:#e74c3c">🗑️ Eliminar</button>';
+    h += '</div>';
+
     h += '</div></div>';
     return h;
   }).join('');
 
   // Cargar thumbnails desde IndexedDB
   cargarThumbsTimeline(regs);
+}
+
+function tlEliminarRegistro(id) {
+  var r = misRegistros().find(function(r) { return r.id == id; });
+  if (!r) { showToast('No tienes acceso a este registro', 'error'); return; }
+  var html = '<div style="text-align:center;padding:8px 0">';
+  html += '<div style="font-size:36px;margin-bottom:8px">🗑️</div>';
+  html += '<h2 style="margin:0 0 8px;font-size:17px;color:#333">Eliminar registro</h2>';
+  html += '<p style="font-size:13px;color:#666;margin:0 0 4px"><strong>' + escapeHtml(r.tipo) + '</strong> — ' + escapeHtml(r.unidad) + '</p>';
+  html += '<p style="font-size:12px;color:#888;margin:0 0 16px">' + escapeHtml(r.fecha) + ' · ' + escapeHtml(r.operador_nombre || '') + '</p>';
+  html += '<div style="display:flex;flex-direction:column;gap:8px">';
+  html += '<button class="btn btn-primary" onclick="tlConfirmarEliminar(' + id + ')" style="background:#e74c3c;padding:12px;font-size:14px;border-radius:8px">🗑️ Eliminar definitivamente</button>';
+  html += '<button class="btn btn-outline" onclick="cerrarModal()" style="padding:12px;font-size:14px;border-radius:8px">Cancelar</button>';
+  html += '</div></div>';
+  abrirModal(html);
+}
+
+function tlConfirmarEliminar(id) {
+  cerrarModal();
+  registros = registros.filter(function(r) { return r.id != id; });
+  guardarRegistros();
+  filtrarTimeline();
+  showToast('Registro eliminado', 'success');
 }
 
 function cargarThumbsTimeline(regs) {
