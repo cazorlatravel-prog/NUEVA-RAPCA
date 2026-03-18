@@ -9,6 +9,11 @@ var capaInfraKML = null;
 var infraKMLFeatures = []; // Array de {nombre, lat, lon, attrs}
 var gpxCapas = []; // Array de {nombre, layer}
 
+// GPS tracking del operador en mapa
+var gpsMapMarker = null;
+var gpsMapCircle = null;
+var gpsMapWatchId = null;
+
 function initMapa() {
   if (mapa) { mapa.invalidateSize(); actualizarMarcadores(); return; }
   var mapDiv = document.getElementById('map-container');
@@ -46,12 +51,8 @@ function initMapa() {
   cargarWaypointsPersistentes();
   cargarInfraKMLGuardada();
 
-  // GPS tracking
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(function(pos) {
-      gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude};
-    }, function() {}, {enableHighAccuracy: true});
-  }
+  // Iniciar tracking GPS automático del operador
+  iniciarGPSMapa();
 }
 
 function actualizarMarcadores() {
@@ -154,15 +155,77 @@ function actualizarMarcadores() {
   attrData = regs.map(function(r) { return {tipo: r.tipo, unidad: r.unidad, zona: r.zona, fecha: r.fecha, operador: r.operador_nombre, coordenadas: r.lat ? formatCoordNW(r.lat, r.lon) : '—'}; });
 }
 
+function iniciarGPSMapa() {
+  if (!navigator.geolocation || !mapa) return;
+  // Limpiar watch anterior si existe
+  if (gpsMapWatchId) navigator.geolocation.clearWatch(gpsMapWatchId);
+
+  gpsMapWatchId = navigator.geolocation.watchPosition(function(pos) {
+    gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude};
+    var latlng = [pos.coords.latitude, pos.coords.longitude];
+    var accuracy = pos.coords.accuracy || 30;
+    var heading = pos.coords.heading;
+
+    if (!gpsMapMarker) {
+      // Crear marcador con punto azul pulsante
+      var icon = L.divIcon({
+        className: '',
+        html: '<div style="position:relative;width:18px;height:18px">' +
+              '<div class="gps-marker-pulse"></div>' +
+              '<div class="gps-marker-dot"></div>' +
+              '<div class="gps-marker-heading" id="gps-heading-arrow" style="display:none"></div>' +
+              '</div>',
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      });
+      gpsMapMarker = L.marker(latlng, {icon: icon, zIndexOffset: 9999}).addTo(mapa);
+      gpsMapMarker.bindPopup('Mi posición');
+      // Círculo de precisión
+      gpsMapCircle = L.circle(latlng, {radius: accuracy, color: '#3498db', fillColor: '#3498db', fillOpacity: 0.08, weight: 1, opacity: 0.3}).addTo(mapa);
+    } else {
+      gpsMapMarker.setLatLng(latlng);
+      gpsMapCircle.setLatLng(latlng);
+      gpsMapCircle.setRadius(accuracy);
+    }
+
+    // Flecha de dirección
+    var arrow = document.getElementById('gps-heading-arrow');
+    if (arrow) {
+      if (heading !== null && !isNaN(heading)) {
+        arrow.style.display = '';
+        arrow.style.transform = 'rotate(' + heading + 'deg)';
+      } else {
+        arrow.style.display = 'none';
+      }
+    }
+  }, function(err) {
+    if (err.code === 1) showToast('GPS: permiso denegado', 'error');
+  }, {enableHighAccuracy: true, maximumAge: 3000, timeout: 10000});
+}
+
+function detenerGPSMapa() {
+  if (gpsMapWatchId) {
+    navigator.geolocation.clearWatch(gpsMapWatchId);
+    gpsMapWatchId = null;
+  }
+  if (gpsMapMarker && mapa) { mapa.removeLayer(gpsMapMarker); gpsMapMarker = null; }
+  if (gpsMapCircle && mapa) { mapa.removeLayer(gpsMapCircle); gpsMapCircle = null; }
+}
+
 function miPosicion() {
   if (!navigator.geolocation) { showToast('GPS no disponible', 'error'); return; }
-  navigator.geolocation.getCurrentPosition(function(pos) {
-    gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude};
-    if (mapa) {
-      mapa.setView([gpsPos.lat, gpsPos.lon], 16);
-      L.circleMarker([gpsPos.lat, gpsPos.lon], {radius: 10, fillColor: '#3498db', color: '#fff', weight: 3, fillOpacity: 1}).addTo(mapa).bindPopup('Mi posición').openPopup();
-    }
-  }, function() { showToast('No se pudo obtener posición', 'error'); }, {enableHighAccuracy: true});
+  // Si no hay tracking activo, iniciarlo
+  if (!gpsMapWatchId) iniciarGPSMapa();
+  // Centrar en posición actual
+  if (gpsPos && mapa) {
+    mapa.setView([gpsPos.lat, gpsPos.lon], 16);
+  } else {
+    showToast('Obteniendo posición...', 'info');
+    navigator.geolocation.getCurrentPosition(function(pos) {
+      gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude};
+      if (mapa) mapa.setView([gpsPos.lat, gpsPos.lon], 16);
+    }, function() { showToast('No se pudo obtener posición', 'error'); }, {enableHighAccuracy: true});
+  }
 }
 
 function toggleGPS() {

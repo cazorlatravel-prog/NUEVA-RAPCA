@@ -190,6 +190,12 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 .gps-panel .gps-label{font-weight:700;color:#555;font-size:10px}
 .gps-panel .gps-val{color:var(--c-primary);font-weight:600;font-size:10px;text-align:right;overflow:hidden;text-overflow:ellipsis}
 
+/* === MARCADOR GPS OPERADOR === */
+.gps-marker-dot{width:18px;height:18px;background:#3498db;border:3px solid #fff;border-radius:50%;box-shadow:0 0 6px rgba(52,152,219,.6)}
+.gps-marker-pulse{position:absolute;top:50%;left:50%;width:40px;height:40px;margin:-20px 0 0 -20px;background:rgba(52,152,219,.25);border-radius:50%;animation:gpsPulse 2s ease-out infinite}
+.gps-marker-heading{position:absolute;top:-10px;left:50%;width:0;height:0;margin-left:-5px;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:10px solid #2980b9;transform-origin:center 19px;transition:transform .3s ease}
+@keyframes gpsPulse{0%{transform:scale(.5);opacity:1}100%{transform:scale(2.5);opacity:0}}
+
 /* === TABLA ATRIBUTOS === */
 .attr-table-panel{position:absolute;bottom:0;left:0;right:0;z-index:1001;background:#fff;border-top:3px solid var(--c-primary);max-height:35vh;display:none;flex-direction:column}
 .attr-table-panel.open{display:flex}

@@ -286,6 +286,8 @@ window.addEventListener('offline', actualizarEstado);
 function irPagina(id) {
   vibrar();
   if (typeof detenerAutoGuardado === 'function') detenerAutoGuardado();
+  // Detener GPS del mapa al salir de la página de mapa
+  if (id !== 'mapa' && typeof detenerGPSMapa === 'function') detenerGPSMapa();
   // Limpiar editandoRegistro si NO viene de editarRegistro()
   if (!window._desdeEditarRegistro) {
     editandoRegistro = null;
