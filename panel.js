@@ -100,6 +100,7 @@ function editarRegistro(id) {
   var r = registros.find(function(r) { return r.id == id; });
   if (!r) return;
   editandoRegistro = r;
+  window._desdeEditarRegistro = true;
   if (r.tipo === 'VP') irPagina('vp');
   else if (r.tipo === 'EL') irPagina('el');
   else if (r.tipo === 'EI') irPagina('ei');
@@ -135,6 +136,8 @@ function cargarRegistroEnForm(r, prefix) {
 }
 
 function restaurarFotosRegistro(r, prefix) {
+  // Limpiar fotosPagina para evitar duplicados al editar
+  fotosPagina = {};
   // Restaurar fotos generales (G)
   if (r.datos.fotos && typeof r.datos.fotos === 'string') {
     var codigos = r.datos.fotos.split(',').map(function(f) { return f.trim(); }).filter(function(f) { return f; });
@@ -144,11 +147,15 @@ function restaurarFotosRegistro(r, prefix) {
   }
   // Restaurar fotos comparativas (W1, W2)
   if (r.datos.fotosComp && Array.isArray(r.datos.fotosComp)) {
+    fotosPagina['W1'] = [];
+    fotosPagina['W2'] = [];
     r.datos.fotosComp.forEach(function(fc) {
       var wp = fc.waypoint || 'W1';
-      if (!fotosPagina[wp]) fotosPagina[wp] = [];
       fotosPagina[wp].push({codigo: fc.numero, lat: fc.lat || null, lon: fc.lon || null});
     });
+    // Limpiar arrays vacíos
+    if (fotosPagina['W1'].length === 0) delete fotosPagina['W1'];
+    if (fotosPagina['W2'].length === 0) delete fotosPagina['W2'];
   }
   // Renderizar previews
   var previewGrid = document.getElementById(prefix + '-fotos-preview');

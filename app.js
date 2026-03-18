@@ -286,13 +286,11 @@ window.addEventListener('offline', actualizarEstado);
 function irPagina(id) {
   vibrar();
   if (typeof detenerAutoGuardado === 'function') detenerAutoGuardado();
-  // Auto-guardar borrador al salir de un formulario
-  var prevPage = document.querySelector('.page.active');
-  if (prevPage) {
-    if (prevPage.id === 'vp-page' && typeof guardarBorrador === 'function') guardarBorrador('VP');
-    if (prevPage.id === 'el-page' && typeof guardarBorrador === 'function') guardarBorrador('EL');
-    if (prevPage.id === 'ei-page' && typeof guardarBorrador === 'function') guardarBorrador('EI');
+  // Limpiar editandoRegistro si NO viene de editarRegistro()
+  if (!window._desdeEditarRegistro) {
+    editandoRegistro = null;
   }
+  window._desdeEditarRegistro = false;
   var pages = document.querySelectorAll('.page');
   for (var i = 0; i < pages.length; i++) pages[i].classList.remove('active');
   var target = document.getElementById(id + '-page');

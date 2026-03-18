@@ -218,8 +218,14 @@ function initFormVP() {
   generarObservacion('vp-obs-container', 'vp');
   fotosPagina = {};
   document.getElementById('vp-fotos-preview').innerHTML = '';
-  cargarBorrador('VP');
-  if (editandoRegistro && editandoRegistro.tipo === 'VP') cargarRegistroEnForm(editandoRegistro, 'vp');
+  if (editandoRegistro && editandoRegistro.tipo === 'VP') {
+    // Editando registro existente: cargar sus datos (NO el borrador)
+    limpiarBorrador('VP');
+    cargarRegistroEnForm(editandoRegistro, 'vp');
+  } else {
+    // Nueva visita: cargar borrador si existe
+    cargarBorrador('VP');
+  }
   iniciarAutoGuardado('VP');
 }
 
@@ -233,8 +239,14 @@ function initFormEL() {
   generarObservacion('el-obs-container', 'el');
   fotosPagina = {};
   document.getElementById('el-fotos-preview').innerHTML = '';
-  cargarBorrador('EL');
-  if (editandoRegistro && editandoRegistro.tipo === 'EL') cargarRegistroEnForm(editandoRegistro, 'el');
+  if (editandoRegistro && editandoRegistro.tipo === 'EL') {
+    // Editando registro existente: cargar sus datos (NO el borrador)
+    limpiarBorrador('EL');
+    cargarRegistroEnForm(editandoRegistro, 'el');
+  } else {
+    // Nueva visita: cargar borrador si existe
+    cargarBorrador('EL');
+  }
   iniciarAutoGuardado('EL');
 }
 
@@ -255,14 +267,17 @@ function initFormEI() {
   transectoActual = 'T1';
   transectosDatos = {T1: null, T2: null, T3: null};
   actualizarTransectoTabs();
-  cargarBorrador('EI');
   if (editandoRegistro && editandoRegistro.tipo === 'EI') {
+    // Editando registro existente: cargar sus datos (NO el borrador)
+    limpiarBorrador('EI');
     cargarRegistroEnForm(editandoRegistro, 'ev');
-    // Restaurar datos de plantas, palatables, herbaceas y matorral
     if (editandoRegistro.datos) {
       restaurarDatosEI(editandoRegistro.datos);
       transectosDatos[transectoActual] = editandoRegistro.datos;
     }
+  } else {
+    // Nueva visita: cargar borrador si existe
+    cargarBorrador('EI');
   }
   iniciarAutoGuardado('EI');
 }
@@ -528,6 +543,7 @@ function guardarVP() {
 
   guardarRegistros();
   limpiarBorrador('VP');
+  fotosPagina = {};
   detenerAutoGuardado();
   vibrar(50);
   if (navigator.onLine) {
@@ -581,6 +597,7 @@ function guardarEL() {
 
   guardarRegistros();
   limpiarBorrador('EL');
+  fotosPagina = {};
   detenerAutoGuardado();
   vibrar(50);
   if (navigator.onLine) {
@@ -744,6 +761,7 @@ function guardarEI() {
   }
 
   guardarRegistros();
+  fotosPagina = {};
   detenerAutoGuardado();
   vibrar(50);
   if (navigator.onLine) {
@@ -757,6 +775,7 @@ function guardarEI() {
   if (transectoActual === 'T3') {
     transectosDatos = {T1: null, T2: null, T3: null};
     transectoActual = 'T1';
+    fotosPagina = {};
     document.getElementById('ev-unidad').value = '';
     document.getElementById('ev-zona').value = '';
     limpiarFormEI();
