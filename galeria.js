@@ -37,17 +37,28 @@ function renderGaleria() {
   html += '<input type="date" id="gal-f-fecha" onchange="filtrarGaleria()">';
   html += '</div>';
 
-  // Acciones globales
+  // Barra de selección (siempre visible)
+  html += '<div class="gal-select-bar">';
+  html += '<span class="gal-sel-count" id="gal-sel-count">0</span>';
+  html += '<span style="color:#666">seleccionadas</span>';
+  html += '<span style="flex:1"></span>';
+  html += '<button onclick="galSeleccionarTodas()">☑ Todas</button>';
+  html += '<button onclick="galDeseleccionar()">☐ Ninguna</button>';
+  html += '</div>';
+
+  // Pista visual
+  html += '<div style="text-align:center;margin-bottom:8px;font-size:12px;color:#999">Toca el ☑ de cada foto para seleccionarla</div>';
+
+  // Acciones (descargar siempre, resto al seleccionar)
   html += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
   html += '<button class="btn btn-sm btn-primary" onclick="galDescargarTodas()">📥 Descargar todas</button>';
   html += '</div>';
 
   // Acciones multi-selección
-  html += '<div id="gal-multi-actions" style="display:none;margin-bottom:10px;gap:6px">';
+  html += '<div id="gal-multi-actions" style="display:none;margin-bottom:10px;gap:6px;flex-wrap:wrap">';
   html += '<button class="btn btn-sm btn-primary" onclick="galDescargarSel()">📥 Descargar selección</button>';
   html += '<button class="btn btn-sm btn-outline" onclick="galCompararSel()">🔀 Comparar</button>';
-  html += '<button class="btn btn-sm btn-outline" onclick="galEliminarSel()" style="color:#e74c3c;border-color:#e74c3c">🗑️ Eliminar</button>';
-  html += '<button class="btn btn-sm btn-outline" onclick="galDeseleccionar()">✕ Deseleccionar</button>';
+  html += '<button class="btn btn-sm btn-outline" onclick="galEliminarSel()" style="color:#e74c3c;border-color:#e74c3c">🗑️ Eliminar selección</button>';
   html += '</div>';
 
   html += '<div class="gal-grid" id="gal-grid"></div>';
@@ -113,9 +124,9 @@ function filtrarGaleria() {
     html += '<div class="gal-group-title">' + unidad + ' (' + grupos[unidad].length + ')</div>';
     grupos[unidad].forEach(function(f, i) {
       var selected = galSeleccionadas.indexOf(f.codigo) >= 0;
-      html += '<div class="gal-item' + (selected ? ' selected' : '') + '" data-codigo="' + f.codigo + '" onclick="galToggleSel(\'' + f.codigo + '\',this)">';
-      html += '<img id="gal-img-' + f.codigo.replace(/[^a-zA-Z0-9]/g, '_') + '" src="" alt="' + f.codigo + '">';
-      html += '<div class="gal-check">✓</div>';
+      html += '<div class="gal-item' + (selected ? ' selected' : '') + '" data-codigo="' + f.codigo + '">';
+      html += '<img id="gal-img-' + f.codigo.replace(/[^a-zA-Z0-9]/g, '_') + '" src="" alt="' + f.codigo + '" onclick="galAbrirFoto(\'' + f.codigo + '\')">';
+      html += '<div class="gal-check" onclick="event.stopPropagation();galToggleSel(\'' + f.codigo + '\',this.parentNode)">✓</div>';
       html += '</div>';
     });
   });
@@ -139,6 +150,13 @@ function filtrarGaleria() {
       if (img) cargarFotoServidor(img, f);
     });
   });
+  galActualizarUI();
+}
+
+function galAbrirFoto(codigo) {
+  var imgId = 'gal-img-' + codigo.replace(/[^a-zA-Z0-9]/g, '_');
+  var img = document.getElementById(imgId);
+  if (img && img.src) abrirLightboxFoto(img.src, codigo);
 }
 
 function galToggleSel(codigo, el) {
@@ -151,23 +169,37 @@ function galToggleSel(codigo, el) {
     galSeleccionadas.push(codigo);
     el.classList.add('selected');
   }
+  galActualizarUI();
+}
 
-  var actions = document.getElementById('gal-multi-actions');
-  if (galSeleccionadas.length === 0) {
-    // Nada seleccionado: abrir lightbox del último tocado
-    actions.style.display = 'none';
-    var img = el.querySelector('img');
-    if (img && img.src) abrirLightboxFoto(img.src, codigo);
-  } else {
-    actions.style.display = 'flex';
+function galSeleccionarTodas() {
+  vibrar();
+  galSeleccionadas = [];
+  var items = document.querySelectorAll('.gal-item');
+  for (var i = 0; i < items.length; i++) {
+    var codigo = items[i].getAttribute('data-codigo');
+    if (codigo) {
+      galSeleccionadas.push(codigo);
+      items[i].classList.add('selected');
+    }
   }
+  galActualizarUI();
 }
 
 function galDeseleccionar() {
+  vibrar();
   galSeleccionadas = [];
   var items = document.querySelectorAll('.gal-item.selected');
   for (var i = 0; i < items.length; i++) items[i].classList.remove('selected');
-  document.getElementById('gal-multi-actions').style.display = 'none';
+  galActualizarUI();
+}
+
+function galActualizarUI() {
+  var n = galSeleccionadas.length;
+  var counter = document.getElementById('gal-sel-count');
+  if (counter) counter.textContent = n;
+  var actions = document.getElementById('gal-multi-actions');
+  if (actions) actions.style.display = n > 0 ? 'flex' : 'none';
 }
 
 async function galDescargarSel() {
