@@ -46,6 +46,7 @@ function renderGaleria() {
   html += '<div id="gal-multi-actions" style="display:none;margin-bottom:10px;gap:6px">';
   html += '<button class="btn btn-sm btn-primary" onclick="galDescargarSel()">📥 Descargar selección</button>';
   html += '<button class="btn btn-sm btn-outline" onclick="galCompararSel()">🔀 Comparar</button>';
+  html += '<button class="btn btn-sm btn-outline" onclick="galEliminarSel()" style="color:#e74c3c;border-color:#e74c3c">🗑️ Eliminar</button>';
   html += '<button class="btn btn-sm btn-outline" onclick="galDeseleccionar()">✕ Deseleccionar</button>';
   html += '</div>';
 
@@ -236,6 +237,111 @@ function galCompararSel() {
   wrap.addEventListener('click', function(e) { updateSlider(e.clientX); });
 
   galSeleccionadas = [];
+}
+
+// ============================================================
+// ELIMINAR FOTOS
+// ============================================================
+function galEliminarSel() {
+  if (galSeleccionadas.length === 0) return;
+  var n = galSeleccionadas.length;
+  var html = '<div style="text-align:center;padding:8px 0">';
+  html += '<div style="font-size:36px;margin-bottom:8px">🗑️</div>';
+  html += '<h2 style="margin:0 0 8px;font-size:17px;color:#333">Eliminar ' + n + ' foto' + (n > 1 ? 's' : '') + '</h2>';
+  html += '<p style="font-size:13px;color:#666;margin:0 0 16px">Se eliminarán de los registros y del dispositivo. Esta acción no se puede deshacer.</p>';
+  html += '<div style="display:flex;flex-direction:column;gap:8px">';
+  html += '<button class="btn btn-primary" onclick="galConfirmarEliminar()" style="background:#e74c3c;padding:12px;font-size:14px;border-radius:8px">🗑️ Eliminar definitivamente</button>';
+  html += '<button class="btn btn-outline" onclick="cerrarModal()" style="padding:12px;font-size:14px;border-radius:8px">Cancelar</button>';
+  html += '</div></div>';
+  abrirModal(html);
+}
+
+function galConfirmarEliminar() {
+  cerrarModal();
+  var codigos = galSeleccionadas.slice();
+  eliminarFotosDeCodigos(codigos);
+  galSeleccionadas = [];
+  showToast(codigos.length + ' foto(s) eliminada(s)', 'success');
+  filtrarGaleria();
+  var actions = document.getElementById('gal-multi-actions');
+  if (actions) actions.style.display = 'none';
+}
+
+function eliminarFotoLB() {
+  var foto = lightboxFotos[lightboxIdx];
+  if (!foto || !foto.info) return;
+  var codigo = foto.info;
+  var html = '<div style="text-align:center;padding:8px 0">';
+  html += '<div style="font-size:36px;margin-bottom:8px">🗑️</div>';
+  html += '<h2 style="margin:0 0 8px;font-size:17px;color:#333">Eliminar foto</h2>';
+  html += '<p style="font-size:13px;color:#666;margin:0 0 4px">' + escapeHtml(codigo) + '</p>';
+  html += '<p style="font-size:13px;color:#888;margin:0 0 16px">Se eliminará del registro y del dispositivo.</p>';
+  html += '<div style="display:flex;flex-direction:column;gap:8px">';
+  html += '<button class="btn btn-primary" onclick="galConfirmarEliminarLB(\'' + escapeHtml(codigo) + '\')" style="background:#e74c3c;padding:12px;font-size:14px;border-radius:8px">🗑️ Eliminar</button>';
+  html += '<button class="btn btn-outline" onclick="cerrarModal()" style="padding:12px;font-size:14px;border-radius:8px">Cancelar</button>';
+  html += '</div></div>';
+  abrirModal(html);
+}
+
+function galConfirmarEliminarLB(codigo) {
+  cerrarModal();
+  eliminarFotosDeCodigos([codigo]);
+  showToast('Foto eliminada', 'success');
+  cerrarLightbox();
+  // Refrescar galería si está visible
+  var galGrid = document.getElementById('gal-grid');
+  if (galGrid) filtrarGaleria();
+}
+
+function eliminarFotosDeCodigos(codigos) {
+  // 1. Eliminar de los registros
+  registros.forEach(function(r) {
+    // Fotos generales (string separado por comas)
+    if (r.datos.fotos && typeof r.datos.fotos === 'string') {
+      var lista = r.datos.fotos.split(',').map(function(f) { return f.trim(); }).filter(function(f) { return f; });
+      var nuevaLista = lista.filter(function(f) { return codigos.indexOf(f) < 0; });
+      if (nuevaLista.length !== lista.length) {
+        r.datos.fotos = nuevaLista.join(', ');
+        r.enviado = false; // Marcar para re-sincronizar
+      }
+    }
+    // Fotos comparativas (array de objetos)
+    if (r.datos.fotosComp && Array.isArray(r.datos.fotosComp)) {
+      var antes = r.datos.fotosComp.length;
+      r.datos.fotosComp = r.datos.fotosComp.filter(function(fc) {
+        return codigos.indexOf(fc.numero) < 0;
+      });
+      if (r.datos.fotosComp.length !== antes) {
+        r.enviado = false; // Marcar para re-sincronizar
+      }
+    }
+  });
+  guardarRegistros();
+
+  // 2. Eliminar de IndexedDB (thumbnails y subidas pendientes)
+  codigos.forEach(function(codigo) {
+    if (typeof eliminarDeDB === 'function') {
+      eliminarDeDB('fotos', codigo);
+      eliminarDeDB('subidas_pendientes', codigo);
+      eliminarDeDB('waypoints_comp', codigo);
+    }
+  });
+
+  // 3. Limpiar de fotosPagina actual (por si el formulario está abierto)
+  ['G', 'W1', 'W2'].forEach(function(key) {
+    if (fotosPagina[key]) {
+      if (key === 'G') {
+        fotosPagina[key] = fotosPagina[key].filter(function(f) {
+          var cod = typeof f === 'string' ? f : f.codigo;
+          return codigos.indexOf(cod) < 0;
+        });
+      } else {
+        fotosPagina[key] = fotosPagina[key].filter(function(f) {
+          return codigos.indexOf(f.codigo) < 0;
+        });
+      }
+    }
+  });
 }
 
 async function galDescargarTodas() {
