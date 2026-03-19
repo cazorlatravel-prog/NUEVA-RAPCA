@@ -645,13 +645,30 @@ document.addEventListener('DOMContentLoaded', function() {
     navigator.geolocation.getCurrentPosition(function(pos) {
       gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude, accuracy: pos.coords.accuracy};
       if (typeof mostrarPrecisionGPS === 'function') mostrarPrecisionGPS();
-    }, function() {}, {enableHighAccuracy: true});
+    }, function() {}, {enableHighAccuracy: true, timeout: 10000, maximumAge: 60000});
   }
 
-  // Service worker messages
-  if (navigator.serviceWorker) {
+  // Service worker: registrar y escuchar mensajes
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').then(function(reg) {
+      console.log('Service Worker registrado:', reg.scope);
+    }).catch(function(e) {
+      console.warn('Service Worker no registrado:', e.message);
+    });
     navigator.serviceWorker.addEventListener('message', function(e) {
       if (e.data && e.data.tipo === 'sync-registros' && typeof sincronizar === 'function') sincronizar();
     });
   }
+
+  // Cerrar modales/lightbox con Escape
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      var lb = document.getElementById('lightbox');
+      if (lb && lb.classList.contains('open')) { cerrarLightbox(); return; }
+      var mo = document.getElementById('modal-overlay');
+      if (mo && mo.classList.contains('open')) { cerrarModal(); return; }
+      var so = document.getElementById('search-overlay');
+      if (so && so.classList.contains('open')) { cerrarBusqueda(); return; }
+    }
+  });
 });

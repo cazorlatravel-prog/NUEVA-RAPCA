@@ -116,7 +116,7 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 .menu-actions .btn{justify-content:center}
 
 /* === INDICADORES === */
-.status-bar{position:fixed;bottom:0;left:0;right:0;background:var(--c-primary);color:#fff;padding:6px 12px;display:flex;align-items:center;justify-content:space-between;font-size:12px;z-index:500}
+.status-bar{position:fixed;bottom:0;left:0;right:0;background:var(--c-primary);color:#fff;padding:6px 12px;display:flex;align-items:center;justify-content:space-between;font-size:12px;z-index:1001}
 .status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
 .status-dot.online{background:#2ecc71}
 .status-dot.offline{background:#e74c3c}
@@ -495,9 +495,9 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
   </div>
   <div style="padding:12px;overflow-y:auto;flex:1">
     <div class="section-title" style="color:var(--c-vp);border-color:var(--c-vp)">Identificación</div>
-    <div class="form-group"><label>Fecha</label><input type="date" id="vp-fecha"></div>
+    <div class="form-group"><label>Fecha</label><input type="date" id="vp-fecha" required></div>
     <div class="form-row">
-      <div class="form-group"><label>ID Unidad</label><input type="text" id="vp-unidad" placeholder="Ej: 23AJE01" oninput="this.value=this.value.toUpperCase();autoZona('vp')"></div>
+      <div class="form-group"><label>ID Unidad</label><input type="text" id="vp-unidad" placeholder="Ej: 23AJE01" required oninput="this.value=this.value.toUpperCase();autoZona('vp')"></div>
       <div class="form-group"><label>ID Zona</label><input type="text" id="vp-zona" readonly></div>
     </div>
 
@@ -533,9 +533,9 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
   </div>
   <div style="padding:12px;overflow-y:auto;flex:1">
     <div class="section-title" style="color:var(--c-el);border-color:var(--c-el)">Identificación</div>
-    <div class="form-group"><label>Fecha</label><input type="date" id="el-fecha"></div>
+    <div class="form-group"><label>Fecha</label><input type="date" id="el-fecha" required></div>
     <div class="form-row">
-      <div class="form-group"><label>ID Unidad</label><input type="text" id="el-unidad" placeholder="Ej: 23AJE01" oninput="this.value=this.value.toUpperCase();autoZona('el')"></div>
+      <div class="form-group"><label>ID Unidad</label><input type="text" id="el-unidad" placeholder="Ej: 23AJE01" required oninput="this.value=this.value.toUpperCase();autoZona('el')"></div>
       <div class="form-group"><label>ID Zona</label><input type="text" id="el-zona" readonly></div>
     </div>
 
@@ -572,9 +572,9 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
   </div>
   <div style="padding:12px;overflow-y:auto;flex:1">
     <div class="section-title" style="color:var(--c-ei);border-color:var(--c-ei)">Identificación</div>
-    <div class="form-group"><label>Fecha</label><input type="date" id="ev-fecha"></div>
+    <div class="form-group"><label>Fecha</label><input type="date" id="ev-fecha" required></div>
     <div class="form-row">
-      <div class="form-group"><label>ID Unidad</label><input type="text" id="ev-unidad" placeholder="Ej: 23AJE01" oninput="this.value=this.value.toUpperCase();autoZona('ev')"></div>
+      <div class="form-group"><label>ID Unidad</label><input type="text" id="ev-unidad" placeholder="Ej: 23AJE01" required oninput="this.value=this.value.toUpperCase();autoZona('ev')"></div>
       <div class="form-group"><label>ID Zona</label><input type="text" id="ev-zona" readonly></div>
     </div>
 
