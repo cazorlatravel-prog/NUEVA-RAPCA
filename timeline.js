@@ -119,6 +119,30 @@ function tlEliminarRegistro(id) {
 
 function tlConfirmarEliminar(id) {
   cerrarModal();
+
+  // Recopilar fotos del registro para eliminarlas también
+  var r = registros.find(function(r) { return r.id == id; });
+  if (r) {
+    var codigosFotos = [];
+    if (r.datos.fotos && typeof r.datos.fotos === 'string') {
+      r.datos.fotos.split(',').map(function(f) { return f.trim(); }).filter(Boolean).forEach(function(cod) {
+        codigosFotos.push(cod);
+      });
+    }
+    if (r.datos.fotosComp && Array.isArray(r.datos.fotosComp)) {
+      r.datos.fotosComp.forEach(function(fc) {
+        if (fc.numero) codigosFotos.push(fc.numero);
+      });
+    }
+    // Eliminar fotos del servidor/Cloudinary
+    if (codigosFotos.length > 0) {
+      eliminarFotosDeCodigos(codigosFotos);
+    }
+  }
+
+  // Eliminar registro del servidor
+  eliminarRegistroServidor(id);
+
   registros = registros.filter(function(r) { return r.id != id; });
   guardarRegistros();
   filtrarTimeline();

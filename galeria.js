@@ -349,7 +349,26 @@ function galConfirmarEliminarLB(codigo) {
 }
 
 function eliminarFotosDeCodigos(codigos) {
-  // 1. Eliminar de los registros
+  // Recopilar info de tipo/unidad para cada código antes de borrar
+  var fotosInfo = [];
+  registros.forEach(function(r) {
+    if (r.datos.fotos && typeof r.datos.fotos === 'string') {
+      r.datos.fotos.split(',').map(function(f) { return f.trim(); }).filter(Boolean).forEach(function(cod) {
+        if (codigos.indexOf(cod) >= 0) {
+          fotosInfo.push({codigo: cod, tipo: r.tipo, unidad: r.unidad});
+        }
+      });
+    }
+    if (r.datos.fotosComp && Array.isArray(r.datos.fotosComp)) {
+      r.datos.fotosComp.forEach(function(fc) {
+        if (codigos.indexOf(fc.numero) >= 0) {
+          fotosInfo.push({codigo: fc.numero, tipo: r.tipo, unidad: r.unidad});
+        }
+      });
+    }
+  });
+
+  // 1. Eliminar de los registros locales
   registros.forEach(function(r) {
     // Fotos generales (string separado por comas)
     if (r.datos.fotos && typeof r.datos.fotos === 'string') {
@@ -397,6 +416,36 @@ function eliminarFotosDeCodigos(codigos) {
       }
     }
   });
+
+  // 4. Eliminar del servidor y Cloudinary
+  if (fotosInfo.length > 0 && sesion && sesion.token) {
+    // Deduplicar
+    var vistos = {};
+    var unicos = [];
+    fotosInfo.forEach(function(f) {
+      if (!vistos[f.codigo]) {
+        vistos[f.codigo] = true;
+        unicos.push(f);
+      }
+    });
+    fetch(API_BASE + 'fotos.php?accion=eliminar', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
+      body: JSON.stringify({codigos: unicos})
+    }).then(function(resp) { return resp.json(); }).then(function(data) {
+      if (data.ok) {
+        console.log('Fotos eliminadas del servidor:', data.eliminadas);
+        if (data.errores && data.errores.length > 0) console.warn('Errores al eliminar en nube:', data.errores);
+      }
+    }).catch(function(e) {
+      console.warn('No se pudo eliminar fotos del servidor:', e.message);
+    });
+  }
+
+  // 5. Re-sincronizar registros modificados al servidor
+  if (sesion && sesion.token && !sesion.token.startsWith('local_')) {
+    setTimeout(function() { sincronizar(); }, 500);
+  }
 }
 
 async function galDescargarTodas() {

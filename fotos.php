@@ -192,6 +192,79 @@ switch ($accion) {
         jsonResponse(['ok' => true, 'fotos' => $resultados]);
         break;
 
+    // Eliminar fotos del servidor y Cloudinary
+    case 'eliminar':
+        $input = json_decode(file_get_contents('php://input'), true);
+        $codigos = $input['codigos'] ?? [];
+
+        if (!is_array($codigos) || count($codigos) === 0) {
+            jsonResponse(['ok' => false, 'error' => 'Códigos requeridos'], 400);
+        }
+
+        // Limitar a 50 fotos por petición
+        if (count($codigos) > 50) {
+            $codigos = array_slice($codigos, 0, 50);
+        }
+
+        $eliminadas = 0;
+        $errores = [];
+
+        foreach ($codigos as $item) {
+            $codigo = preg_replace('/[^a-zA-Z0-9_-]/', '', $item['codigo'] ?? '');
+            $tipo = preg_replace('/[^A-Z]/', '', $item['tipo'] ?? '');
+            $unidad = preg_replace('/[^a-zA-Z0-9_-]/', '', $item['unidad'] ?? '');
+
+            if (!$codigo || !$tipo || !$unidad) continue;
+
+            // 1. Eliminar archivo local del servidor
+            $localPath = __DIR__ . '/uploads/rapca/' . $tipo . '/' . $unidad . '/' . basename($codigo) . '.jpg';
+            if (file_exists($localPath)) {
+                @unlink($localPath);
+            }
+
+            // 2. Eliminar de Cloudinary (si está configurado)
+            if (CLOUDINARY_CLOUD && CLOUDINARY_KEY && CLOUDINARY_SECRET) {
+                $publicId = "rapca/{$tipo}/{$unidad}/{$codigo}";
+                $timestamp = time();
+                $signStr = "public_id={$publicId}&timestamp={$timestamp}" . CLOUDINARY_SECRET;
+                $signature = sha1($signStr);
+
+                $ch = curl_init("https://api.cloudinary.com/v1_1/" . CLOUDINARY_CLOUD . "/image/destroy");
+                curl_setopt_array($ch, [
+                    CURLOPT_POST => true,
+                    CURLOPT_POSTFIELDS => [
+                        'public_id' => $publicId,
+                        'timestamp' => (string)$timestamp,
+                        'api_key' => CLOUDINARY_KEY,
+                        'signature' => $signature
+                    ],
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT => 15
+                ]);
+                $response = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+
+                if ($httpCode >= 200 && $httpCode < 300) {
+                    $result = json_decode($response, true);
+                    if (($result['result'] ?? '') === 'ok' || ($result['result'] ?? '') === 'not found') {
+                        $eliminadas++;
+                    } else {
+                        $errores[] = $codigo . ': ' . ($result['result'] ?? 'error desconocido');
+                        $eliminadas++; // Archivo local ya borrado
+                    }
+                } else {
+                    $errores[] = $codigo . ': HTTP ' . $httpCode;
+                    $eliminadas++; // Archivo local ya borrado
+                }
+            } else {
+                $eliminadas++;
+            }
+        }
+
+        jsonResponse(['ok' => true, 'eliminadas' => $eliminadas, 'errores' => $errores]);
+        break;
+
     default:
         jsonResponse(['error' => 'Acción no válida'], 400);
 }

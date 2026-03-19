@@ -246,10 +246,49 @@ function eliminarRegistro(id) {
   var r = misRegistros().find(function(r) { return r.id == id; });
   if (!r) { showToast('No tienes acceso a este registro', 'error'); return; }
   if (!confirm('¿Eliminar registro?')) return;
+
+  // Recopilar fotos del registro para eliminarlas también
+  var codigosFotos = [];
+  if (r.datos.fotos && typeof r.datos.fotos === 'string') {
+    r.datos.fotos.split(',').map(function(f) { return f.trim(); }).filter(Boolean).forEach(function(cod) {
+      codigosFotos.push(cod);
+    });
+  }
+  if (r.datos.fotosComp && Array.isArray(r.datos.fotosComp)) {
+    r.datos.fotosComp.forEach(function(fc) {
+      if (fc.numero) codigosFotos.push(fc.numero);
+    });
+  }
+
+  // Eliminar fotos del servidor/Cloudinary
+  if (codigosFotos.length > 0) {
+    eliminarFotosDeCodigos(codigosFotos);
+  }
+
+  // Eliminar registro del servidor
+  eliminarRegistroServidor(id);
+
   registros = registros.filter(function(r) { return r.id != id; });
   guardarRegistros();
   renderPanel();
   showToast('Registro eliminado', 'info');
+}
+
+function eliminarRegistroServidor(id) {
+  if (!sesion || !sesion.token) return;
+  fetch(API_BASE + 'datos.php', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
+    body: JSON.stringify({accion: 'eliminar', registro_id: id})
+  }).then(function(resp) { return resp.json(); }).then(function(data) {
+    if (data.ok) {
+      console.log('Registro eliminado del servidor:', id);
+    } else {
+      console.warn('Error eliminando del servidor:', data.error);
+    }
+  }).catch(function(e) {
+    console.warn('No se pudo eliminar registro del servidor:', e.message);
+  });
 }
 
 function reiniciarContadoresFotos() {

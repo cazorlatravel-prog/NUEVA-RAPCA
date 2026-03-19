@@ -63,12 +63,23 @@ switch ($accion) {
         if (!$user) jsonResponse(['ok' => false, 'error' => 'No autorizado'], 401);
 
         $id = intval($input['id'] ?? 0);
+        $registro_id = intval($input['registro_id'] ?? 0);
         $db = getDB();
 
-        if ($user['rol'] === 'admin') {
-            $db->prepare('DELETE FROM registros_sync WHERE id = ?')->execute([$id]);
-        } else {
-            $db->prepare('DELETE FROM registros_sync WHERE id = ? AND email = ?')->execute([$id, $user['email']]);
+        if ($registro_id) {
+            // Buscar por registro_id (id local del cliente)
+            if ($user['rol'] === 'admin') {
+                $db->prepare('DELETE FROM registros_sync WHERE registro_id = ?')->execute([$registro_id]);
+            } else {
+                $db->prepare('DELETE FROM registros_sync WHERE registro_id = ? AND email = ?')->execute([$registro_id, $user['email']]);
+            }
+        } elseif ($id) {
+            // Buscar por id (PK del servidor)
+            if ($user['rol'] === 'admin') {
+                $db->prepare('DELETE FROM registros_sync WHERE id = ?')->execute([$id]);
+            } else {
+                $db->prepare('DELETE FROM registros_sync WHERE id = ? AND email = ?')->execute([$id, $user['email']]);
+            }
         }
 
         jsonResponse(['ok' => true]);
