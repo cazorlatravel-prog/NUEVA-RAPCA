@@ -506,11 +506,18 @@ function sincronizarAuto() {
 
 // --- Subida automática de fotos en segundo plano (sin bloquear UI con toast excesivos) ---
 var subiendoFotosAuto = false;
+var subiendoFotosAutoTimer = null;
 async function subirFotosPendientesAuto() {
   if (!db || subiendoFotosAuto) return;
   var pendientes = await obtenerTodosDB('subidas_pendientes');
   if (pendientes.length === 0) return;
   subiendoFotosAuto = true;
+  // Safety timeout: si después de 2 min por foto sigue bloqueado, liberar el flag
+  subiendoFotosAutoTimer = setTimeout(function() {
+    console.warn('subirFotosPendientesAuto: timeout de seguridad alcanzado, liberando flag');
+    subiendoFotosAuto = false;
+    subiendoFotosAutoTimer = null;
+  }, Math.max(120000, pendientes.length * 30000)); // mín 2min, o 30s por foto
   try {
     for (var i = 0; i < pendientes.length; i++) {
       var foto = pendientes[i];
@@ -534,7 +541,10 @@ async function subirFotosPendientesAuto() {
     }
     actualizarContadorFotos();
     actualizarColaSubida();
-  } finally { subiendoFotosAuto = false; }
+  } finally {
+    subiendoFotosAuto = false;
+    if (subiendoFotosAutoTimer) { clearTimeout(subiendoFotosAutoTimer); subiendoFotosAutoTimer = null; }
+  }
 }
 
 // --- Sync automático al reconectar ---

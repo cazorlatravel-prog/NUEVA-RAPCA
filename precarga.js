@@ -36,6 +36,8 @@ function actualizarEstadoPrecarga() {
       estado.style.display = 'none';
       document.getElementById('precarga-galeria').style.display = 'none';
     }
+  }).catch(function(e) {
+    console.warn('Error al obtener fotos precargadas:', e);
   });
 }
 
@@ -229,8 +231,13 @@ function precargaListarFotos(zona) {
         if (nuevas.length < fotosEncontradas.length) {
           resumen.innerHTML += '<br><small>' + (fotosEncontradas.length - nuevas.length) + ' ya precargadas, ' + nuevas.length + ' nuevas</small>';
         }
+      }).catch(function(e) {
+        console.warn('Error verificando fotos precargadas:', e);
       });
     }
+  }).catch(function(e) {
+    console.warn('Error listando fotos para precarga:', e);
+    showToast('Error al listar fotos del servidor', 'error');
   });
 }
 

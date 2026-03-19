@@ -272,8 +272,26 @@ function initFormEI() {
     limpiarBorrador('EI');
     cargarRegistroEnForm(editandoRegistro, 'ev');
     if (editandoRegistro.datos) {
-      restaurarDatosEI(editandoRegistro.datos);
-      transectosDatos[transectoActual] = editandoRegistro.datos;
+      // Restaurar todos los transectos si existen
+      if (editandoRegistro.datos.transectos) {
+        transectosDatos.T1 = editandoRegistro.datos.transectos.T1 || null;
+        transectosDatos.T2 = editandoRegistro.datos.transectos.T2 || null;
+        transectosDatos.T3 = editandoRegistro.datos.transectos.T3 || null;
+      } else {
+        // Registro antiguo sin estructura transectos: todo es T1
+        transectosDatos.T1 = editandoRegistro.datos;
+      }
+      // Determinar en qué transecto estaba al guardar
+      if (editandoRegistro.transecto && ['T1','T2','T3'].indexOf(editandoRegistro.transecto) >= 0) {
+        transectoActual = editandoRegistro.transecto;
+      } else {
+        transectoActual = 'T1';
+      }
+      // Restaurar datos del transecto actual en el formulario
+      if (transectosDatos[transectoActual]) {
+        restaurarDatosEI(transectosDatos[transectoActual]);
+      }
+      actualizarTransectoTabs();
     }
   } else {
     // Nueva visita: cargar borrador si existe
