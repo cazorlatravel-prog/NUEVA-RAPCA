@@ -701,20 +701,28 @@ function restaurarDatosEI(datos) {
   // Restaurar plantas
   if (datos.plantas) {
     for (var p = 0; p < datos.plantas.length && p < 10; p++) {
-      document.getElementById('ev-planta' + (p+1) + '-nombre').value = datos.plantas[p].nombre || '';
-      for (var n = 0; n < datos.plantas[p].notas.length && n < 10; n++) {
-        document.getElementById('ev-planta' + (p+1) + '-n' + (n+1)).value = datos.plantas[p].notas[n] !== null ? datos.plantas[p].notas[n] : '';
+      var pl = datos.plantas[p];
+      if (!pl) continue;
+      document.getElementById('ev-planta' + (p+1) + '-nombre').value = pl.nombre || '';
+      if (pl.notas && pl.notas.length) {
+        for (var n = 0; n < pl.notas.length && n < 10; n++) {
+          document.getElementById('ev-planta' + (p+1) + '-n' + (n+1)).value = pl.notas[n] !== null ? pl.notas[n] : '';
+        }
       }
-      document.getElementById('ev-planta' + (p+1) + '-media').textContent = datos.plantas[p].media || '\u2014';
+      document.getElementById('ev-planta' + (p+1) + '-media').textContent = pl.media || '\u2014';
     }
   }
   if (datos.palatables) {
     for (var p = 0; p < datos.palatables.length && p < 3; p++) {
-      document.getElementById('ev-pal' + (p+1) + '-nombre').value = datos.palatables[p].nombre || '';
-      for (var n = 0; n < datos.palatables[p].notas.length && n < 15; n++) {
-        document.getElementById('ev-pal' + (p+1) + '-n' + (n+1)).value = datos.palatables[p].notas[n] !== null ? datos.palatables[p].notas[n] : '';
+      var pal = datos.palatables[p];
+      if (!pal) continue;
+      document.getElementById('ev-pal' + (p+1) + '-nombre').value = pal.nombre || '';
+      if (pal.notas && pal.notas.length) {
+        for (var n = 0; n < pal.notas.length && n < 15; n++) {
+          document.getElementById('ev-pal' + (p+1) + '-n' + (n+1)).value = pal.notas[n] !== null ? pal.notas[n] : '';
+        }
       }
-      document.getElementById('ev-pal' + (p+1) + '-media').textContent = datos.palatables[p].media || '\u2014';
+      document.getElementById('ev-pal' + (p+1) + '-media').textContent = pal.media || '\u2014';
     }
   }
   if (datos.herbaceas) {
@@ -723,12 +731,14 @@ function restaurarDatosEI(datos) {
     }
   }
   if (datos.matorral) {
-    document.getElementById('ev-mat1cob').value = datos.matorral.punto1.cobertura || '';
-    document.getElementById('ev-mat1alt').value = datos.matorral.punto1.altura || '';
-    document.getElementById('ev-mat1esp').value = datos.matorral.punto1.especie || '';
-    document.getElementById('ev-mat2cob').value = datos.matorral.punto2.cobertura || '';
-    document.getElementById('ev-mat2alt').value = datos.matorral.punto2.altura || '';
-    document.getElementById('ev-mat2esp').value = datos.matorral.punto2.especie || '';
+    var p1 = datos.matorral.punto1 || {};
+    var p2 = datos.matorral.punto2 || {};
+    document.getElementById('ev-mat1cob').value = p1.cobertura || '';
+    document.getElementById('ev-mat1alt').value = p1.altura || '';
+    document.getElementById('ev-mat1esp').value = p1.especie || '';
+    document.getElementById('ev-mat2cob').value = p2.cobertura || '';
+    document.getElementById('ev-mat2alt').value = p2.altura || '';
+    document.getElementById('ev-mat2esp').value = p2.especie || '';
     actualizarResumenMatorral();
   }
 }

@@ -506,9 +506,11 @@ async function exportarPDFRegistro(id, opcionesFotos) {
   }
 
   if (r.datos.matorral) {
+    var mp1 = r.datos.matorral.punto1 || {};
+    var mp2 = r.datos.matorral.punto2 || {};
     html += '<h3>Matorralización</h3><table><tr><th></th><th>Cobertura (%)</th><th>Altura (cm)</th><th>Especie</th></tr>';
-    html += '<tr><td>Punto 1</td><td>' + (r.datos.matorral.punto1.cobertura || 0) + '</td><td>' + (r.datos.matorral.punto1.altura || 0) + '</td><td style="font-style:italic">' + (r.datos.matorral.punto1.especie || '—') + '</td></tr>';
-    html += '<tr><td>Punto 2</td><td>' + (r.datos.matorral.punto2.cobertura || 0) + '</td><td>' + (r.datos.matorral.punto2.altura || 0) + '</td><td style="font-style:italic">' + (r.datos.matorral.punto2.especie || '—') + '</td></tr>';
+    html += '<tr><td>Punto 1</td><td>' + (mp1.cobertura || 0) + '</td><td>' + (mp1.altura || 0) + '</td><td style="font-style:italic">' + (mp1.especie || '—') + '</td></tr>';
+    html += '<tr><td>Punto 2</td><td>' + (mp2.cobertura || 0) + '</td><td>' + (mp2.altura || 0) + '</td><td style="font-style:italic">' + (mp2.especie || '—') + '</td></tr>';
     html += '</table><p><strong>Volumen: ' + (r.datos.matorral.volumen || '—') + ' m³/ha</strong> (Cob media: ' + (r.datos.matorral.mediaCob || '—') + '%, Alt media: ' + (r.datos.matorral.mediaAlt || '—') + ' cm)</p>';
   }
 

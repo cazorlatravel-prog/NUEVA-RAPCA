@@ -118,9 +118,15 @@ function actualizarColaSubida() {
 }
 
 // --- Sincronización principal (con reintentos y estados) ---
+var syncPendienteTrasFinalizar = false;
 async function sincronizar() {
-  if (sincronizando) return;
+  if (sincronizando) {
+    // Encolar re-sync para cuando termine el actual
+    syncPendienteTrasFinalizar = true;
+    return;
+  }
   sincronizando = true;
+  syncPendienteTrasFinalizar = false;
   try {
   var pendientes = registros.filter(function(r) { return !r.enviado; });
   if (pendientes.length === 0) { showToast('No hay registros pendientes de sincronizar', 'info'); return; }
@@ -229,7 +235,14 @@ async function sincronizar() {
   showToast(exitos + '/' + pendientes.length + ' registros sincronizados', exitos > 0 ? 'success' : 'error');
   // Recargar registros del servidor para tener datos actualizados
   if (exitos > 0) cargarRegistrosServidor();
-  } finally { sincronizando = false; }
+  } finally {
+    sincronizando = false;
+    // Si se encoló un re-sync mientras estábamos sincronizando, lanzarlo ahora
+    if (syncPendienteTrasFinalizar) {
+      syncPendienteTrasFinalizar = false;
+      setTimeout(function() { sincronizar(); }, 1000);
+    }
+  }
 }
 
 // --- Subida de fotos pendientes ---
