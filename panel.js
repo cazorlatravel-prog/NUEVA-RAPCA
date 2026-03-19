@@ -190,6 +190,55 @@ function restaurarFotosRegistro(r, prefix) {
     });
     previewGrid.appendChild(img);
   });
+  actualizarBtnEliminarFotos(prefix);
+}
+
+function actualizarBtnEliminarFotos(prefix) {
+  var previewGrid = document.getElementById(prefix + '-fotos-preview');
+  var btn = document.getElementById(prefix + '-btn-eliminar-fotos');
+  if (!btn) return;
+  btn.style.display = (previewGrid && previewGrid.children.length > 0) ? 'block' : 'none';
+}
+
+function eliminarTodasFotosForm(prefix) {
+  var previewGrid = document.getElementById(prefix + '-fotos-preview');
+  if (!previewGrid || previewGrid.children.length === 0) { showToast('No hay fotos', 'error'); return; }
+  var n = previewGrid.children.length;
+  var html = '<div style="text-align:center;padding:8px 0">';
+  html += '<div style="font-size:36px;margin-bottom:8px">🗑️</div>';
+  html += '<h2 style="margin:0 0 8px;font-size:17px;color:#333">Eliminar todas las fotos</h2>';
+  html += '<p style="font-size:13px;color:#666;margin:0 0 4px">Se eliminarán <strong>' + n + '</strong> foto' + (n > 1 ? 's' : '') + ' de este formulario.</p>';
+  html += '<p style="font-size:13px;color:#e74c3c;margin:0 0 16px">⚠️ Esta acción no se puede deshacer.</p>';
+  html += '<div style="display:flex;flex-direction:column;gap:8px">';
+  html += '<button class="btn btn-primary" onclick="confirmarEliminarTodasFotosForm(\'' + prefix + '\')" style="background:#e74c3c;padding:12px;font-size:14px;border-radius:8px">🗑️ Eliminar ' + n + ' fotos</button>';
+  html += '<button class="btn btn-outline" onclick="cerrarModal()" style="padding:12px;font-size:14px;border-radius:8px">Cancelar</button>';
+  html += '</div></div>';
+  abrirModal(html);
+}
+
+function confirmarEliminarTodasFotosForm(prefix) {
+  cerrarModal();
+  // Recopilar todos los códigos de fotos del formulario
+  var codigos = [];
+  ['G', 'W1', 'W2'].forEach(function(key) {
+    if (fotosPagina[key]) {
+      fotosPagina[key].forEach(function(f) {
+        var cod = typeof f === 'string' ? f : f.codigo;
+        if (cod) codigos.push(cod);
+      });
+    }
+  });
+  if (codigos.length > 0) {
+    eliminarFotosDeCodigos(codigos);
+  }
+  // Limpiar fotosPagina
+  fotosPagina = {};
+  // Limpiar preview
+  var previewGrid = document.getElementById(prefix + '-fotos-preview');
+  if (previewGrid) previewGrid.innerHTML = '';
+  // Ocultar botón
+  actualizarBtnEliminarFotos(prefix);
+  showToast('Todas las fotos eliminadas', 'success');
 }
 
 function eliminarRegistro(id) {

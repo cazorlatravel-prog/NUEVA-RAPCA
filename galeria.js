@@ -52,6 +52,7 @@ function renderGaleria() {
   // Acciones (descargar siempre, resto al seleccionar)
   html += '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
   html += '<button class="btn btn-sm btn-primary" onclick="galDescargarTodas()">📥 Descargar todas</button>';
+  html += '<button class="btn btn-sm btn-outline" onclick="galEliminarTodas()" style="color:#e74c3c;border-color:#e74c3c">🗑️ Eliminar todas</button>';
   html += '</div>';
 
   // Acciones multi-selección
@@ -286,6 +287,28 @@ function galEliminarSel() {
   html += '<button class="btn btn-outline" onclick="cerrarModal()" style="padding:12px;font-size:14px;border-radius:8px">Cancelar</button>';
   html += '</div></div>';
   abrirModal(html);
+}
+
+function galEliminarTodas() {
+  // Seleccionar todas las fotos visibles y pedir confirmación
+  galSeleccionarTodas();
+  if (galSeleccionadas.length === 0) { showToast('No hay fotos para eliminar', 'error'); return; }
+  var n = galSeleccionadas.length;
+  var html = '<div style="text-align:center;padding:8px 0">';
+  html += '<div style="font-size:36px;margin-bottom:8px">🗑️</div>';
+  html += '<h2 style="margin:0 0 8px;font-size:17px;color:#333">Eliminar TODAS las fotos</h2>';
+  html += '<p style="font-size:13px;color:#666;margin:0 0 4px">Se eliminarán <strong>' + n + '</strong> foto' + (n > 1 ? 's' : '') + ' visibles.</p>';
+  html += '<p style="font-size:13px;color:#e74c3c;margin:0 0 16px">⚠️ Esta acción no se puede deshacer.</p>';
+  html += '<div style="display:flex;flex-direction:column;gap:8px">';
+  html += '<button class="btn btn-primary" onclick="galConfirmarEliminar()" style="background:#e74c3c;padding:12px;font-size:14px;border-radius:8px">🗑️ Eliminar ' + n + ' fotos</button>';
+  html += '<button class="btn btn-outline" onclick="galCancelarEliminarTodas()" style="padding:12px;font-size:14px;border-radius:8px">Cancelar</button>';
+  html += '</div></div>';
+  abrirModal(html);
+}
+
+function galCancelarEliminarTodas() {
+  cerrarModal();
+  galDeseleccionar();
 }
 
 function galConfirmarEliminar() {

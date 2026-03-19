@@ -1062,6 +1062,7 @@ function aceptarFoto() {
       previewGrid.appendChild(img);
     }
 
+    actualizarBtnEliminarFotos(prefix);
     actualizarContadorFotos();
     if (navigator.onLine) {
       showToast('Foto ' + _fotoCodigo + ' guardada. Subiendo...', 'success');
