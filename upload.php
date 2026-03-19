@@ -10,6 +10,11 @@ $token = getToken();
 $user = validarToken($token);
 if (!$user) jsonResponse(['ok' => false, 'error' => 'No autorizado'], 401);
 
+// Rate limiting por usuario
+if (!checkRateLimit('upload_' . $user['id'])) {
+    jsonResponse(['ok' => false, 'error' => 'Demasiadas subidas. Espera unos minutos.'], 429);
+}
+
 $input = json_decode(file_get_contents('php://input'), true);
 $codigo = $input['codigo'] ?? '';
 $tipo = $input['tipo'] ?? 'VP';

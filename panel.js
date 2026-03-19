@@ -107,10 +107,11 @@ function editarRegistro(id) {
 }
 
 function cargarRegistroEnForm(r, prefix) {
-  document.getElementById(prefix + '-fecha').value = r.fecha;
-  document.getElementById(prefix + '-unidad').value = r.unidad;
-  document.getElementById(prefix + '-zona').value = r.zona;
-  if (r.datos.observaciones) document.getElementById(prefix + '-observaciones').value = r.datos.observaciones;
+  var el;
+  el = document.getElementById(prefix + '-fecha'); if (el) el.value = r.fecha;
+  el = document.getElementById(prefix + '-unidad'); if (el) el.value = r.unidad;
+  el = document.getElementById(prefix + '-zona'); if (el) el.value = r.zona;
+  if (r.datos.observaciones) { el = document.getElementById(prefix + '-observaciones'); if (el) el.value = r.datos.observaciones; }
   // Pastoreo
   if (r.datos.pastoreo) {
     for (var p = 0; p < r.datos.pastoreo.length; p++) {

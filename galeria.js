@@ -398,6 +398,7 @@ function eliminarFotosDeCodigos(codigos) {
       eliminarDeDB('fotos', codigo);
       eliminarDeDB('subidas_pendientes', codigo);
       eliminarDeDB('waypoints_comp', codigo);
+      eliminarDeDB('fotos_precargadas', codigo);
     }
   });
 

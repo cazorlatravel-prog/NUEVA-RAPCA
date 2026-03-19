@@ -215,6 +215,8 @@ switch ($accion) {
             $unidad = preg_replace('/[^a-zA-Z0-9_-]/', '', $item['unidad'] ?? '');
 
             if (!$codigo || !$tipo || !$unidad) continue;
+            // Validar tipo contra whitelist
+            if (!in_array($tipo, ['VP', 'EL', 'EI'], true)) continue;
 
             // 1. Eliminar archivo local del servidor
             $localPath = __DIR__ . '/uploads/rapca/' . $tipo . '/' . $unidad . '/' . basename($codigo) . '.jpg';

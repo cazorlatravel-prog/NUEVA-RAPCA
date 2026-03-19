@@ -13,7 +13,12 @@ $accion = $input['accion'] ?? $_GET['accion'] ?? '';
 
 switch ($accion) {
     case 'reset_rate_limit':
-        // Limpiar todos los archivos de rate limit
+        // Solo admin puede resetear rate limits
+        $token = getToken();
+        $admin = validarToken($token);
+        if (!$admin || $admin['rol'] !== 'admin') {
+            jsonResponse(['ok' => false, 'error' => 'No autorizado'], 403);
+        }
         if (is_dir(RATE_LIMIT_DIR)) {
             $files = glob(RATE_LIMIT_DIR . '/*.json');
             foreach ($files as $f) unlink($f);
@@ -22,11 +27,15 @@ switch ($accion) {
         break;
 
     case 'reset_admin':
-        // Resetear contraseña del admin al valor por defecto y limpiar rate limits
+        // Solo admin puede resetear contraseña admin
+        $token = getToken();
+        $admin = validarToken($token);
+        if (!$admin || $admin['rol'] !== 'admin') {
+            jsonResponse(['ok' => false, 'error' => 'No autorizado'], 403);
+        }
         $db = getDB();
         $hash = password_hash(ADMIN_PASS_DEFAULT, PASSWORD_BCRYPT, ['cost' => 12]);
         $db->prepare('UPDATE usuarios SET password = ?, activo = 1 WHERE email = ?')->execute([$hash, ADMIN_EMAIL]);
-        // Limpiar rate limits también
         if (is_dir(RATE_LIMIT_DIR)) {
             $files = glob(RATE_LIMIT_DIR . '/*.json');
             foreach ($files as $f) unlink($f);

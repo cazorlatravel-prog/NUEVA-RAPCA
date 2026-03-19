@@ -93,10 +93,14 @@ function setCORS() {
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
     if (in_array($origin, $origins)) {
         header("Access-Control-Allow-Origin: $origin");
+        header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+        header('Access-Control-Allow-Headers: Content-Type, Authorization');
+        header('Access-Control-Max-Age: 86400');
     }
-    header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Authorization');
-    header('Access-Control-Max-Age: 86400');
+
+    // Security headers
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
 
     if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
         http_response_code(204);
