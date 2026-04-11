@@ -69,7 +69,7 @@ function abrirCamara(tipo, subtipo) {
   document.getElementById('cam-code').textContent = fotoCodigo;
 
   // Abrir cámara
-  var constraints = {video: {facingMode: camaraFacing, width: {ideal: 1920}, height: {ideal: 1080}}, audio: false};
+  var constraints = {video: {facingMode: camaraFacing, width: {ideal: 3840}, height: {ideal: 2160}, frameRate: {ideal: 30}}, audio: false};
   navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
     camaraStream = stream;
     var video = document.getElementById('camera-video');
@@ -77,6 +77,11 @@ function abrirCamara(tipo, subtipo) {
     document.getElementById('camera-modal').classList.add('open');
     iniciarOverlayCamara();
     cargarGhostFoto(tipo, subtipo);
+    // Iniciar tap-to-focus y ajuste de exposición
+    iniciarTapToFocus();
+    iniciarExposureSlide();
+    // Configurar focus y exposición continuos por defecto
+    configurarCamaraInicial(stream);
   }).catch(function(err) {
     showToast('Error al acceder a la cámara: ' + err.message, 'error');
     // Decrementar contador
@@ -112,10 +117,249 @@ function switchCamara() {
   if (camaraStream) {
     camaraStream.getTracks().forEach(function(t) { t.stop(); });
   }
-  var constraints = {video: {facingMode: camaraFacing, width: {ideal: 1920}, height: {ideal: 1080}}, audio: false};
+  var constraints = {video: {facingMode: camaraFacing, width: {ideal: 3840}, height: {ideal: 2160}, frameRate: {ideal: 30}}, audio: false};
   navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
     camaraStream = stream;
     document.getElementById('camera-video').srcObject = stream;
+    configurarCamaraInicial(stream);
+    iniciarTapToFocus();
+    iniciarExposureSlide();
+  });
+}
+
+// ============================================================
+// CONFIGURACIÓN INICIAL DE CÁMARA (calidad, focus, exposición)
+// ============================================================
+
+function configurarCamaraInicial(stream) {
+  var track = stream.getVideoTracks()[0];
+  if (!track) return;
+
+  var caps;
+  try { caps = track.getCapabilities(); } catch(e) { return; }
+
+  var constraints = {};
+  var hasChanges = false;
+
+  // Focus continuo automático
+  if (caps.focusMode && caps.focusMode.indexOf('continuous') >= 0) {
+    constraints.focusMode = 'continuous';
+    hasChanges = true;
+  }
+
+  // Exposición continua automática
+  if (caps.exposureMode && caps.exposureMode.indexOf('continuous') >= 0) {
+    constraints.exposureMode = 'continuous';
+    hasChanges = true;
+  }
+
+  // Balance de blancos automático continuo
+  if (caps.whiteBalanceMode && caps.whiteBalanceMode.indexOf('continuous') >= 0) {
+    constraints.whiteBalanceMode = 'continuous';
+    hasChanges = true;
+  }
+
+  if (hasChanges) {
+    track.applyConstraints({advanced: [constraints]}).catch(function(err) {
+      console.log('Config cámara inicial:', err.message);
+    });
+  }
+}
+
+// ============================================================
+// TAP-TO-FOCUS Y AUTO-EXPOSICIÓN
+// ============================================================
+
+function iniciarTapToFocus() {
+  var video = document.getElementById('camera-video');
+  var wrap = video.parentElement;
+  if (!video || !wrap) return;
+
+  // Limpiar listener anterior si existe
+  if (video._tapFocusHandler) {
+    video.removeEventListener('touchstart', video._tapFocusHandler);
+    video.removeEventListener('click', video._tapFocusHandler);
+  }
+
+  var handler = function(e) {
+    // No interferir con ghost controls ni botones
+    if (e.target.closest('#ghost-controls') || e.target.closest('.camera-overlay') || e.target.closest('.camera-controls')) return;
+    e.preventDefault();
+
+    var touch = e.touches ? e.touches[0] : e;
+    var rect = video.getBoundingClientRect();
+
+    // Coordenadas relativas al video (0-1)
+    var x = (touch.clientX - rect.left) / rect.width;
+    var y = (touch.clientY - rect.top) / rect.height;
+
+    // Clamp
+    x = Math.max(0, Math.min(1, x));
+    y = Math.max(0, Math.min(1, y));
+
+    // Mostrar indicador visual
+    mostrarFocusIndicator(wrap, touch.clientX - rect.left, touch.clientY - rect.top);
+
+    // Aplicar focus y exposición al track de video
+    aplicarFocusExposicion(x, y);
+  };
+
+  video._tapFocusHandler = handler;
+  video.addEventListener('touchstart', handler, {passive: false});
+  video.addEventListener('click', handler);
+}
+
+function mostrarFocusIndicator(container, px, py) {
+  // Eliminar indicadores previos
+  var prevs = container.querySelectorAll('.focus-ring');
+  prevs.forEach(function(p) { p.remove(); });
+
+  var ring = document.createElement('div');
+  ring.className = 'focus-ring';
+  ring.style.left = px + 'px';
+  ring.style.top = py + 'px';
+  ring.innerHTML = '<div class="focus-ring-inner"></div><div class="focus-ring-cross-h"></div><div class="focus-ring-cross-v"></div>';
+  container.appendChild(ring);
+
+  // Limpiar después de la animación
+  setTimeout(function() {
+    if (ring.parentNode) ring.remove();
+  }, 800);
+}
+
+function aplicarFocusExposicion(x, y) {
+  if (!camaraStream) return;
+
+  var track = camaraStream.getVideoTracks()[0];
+  if (!track) return;
+
+  // Verificar capacidades del dispositivo
+  var capabilities;
+  try {
+    capabilities = track.getCapabilities();
+  } catch(e) {
+    return;
+  }
+
+  var constraints = {};
+  var hasChanges = false;
+
+  // Focus mode - intentar 'single-shot' para enfocar en el punto
+  if (capabilities.focusMode) {
+    if (capabilities.focusMode.indexOf('single-shot') >= 0) {
+      constraints.focusMode = 'single-shot';
+      hasChanges = true;
+    } else if (capabilities.focusMode.indexOf('continuous') >= 0) {
+      constraints.focusMode = 'continuous';
+      hasChanges = true;
+    }
+  }
+
+  // Point of interest (focus point)
+  if (capabilities.pointsOfInterest) {
+    constraints.pointsOfInterest = [{x: x, y: y}];
+    hasChanges = true;
+  }
+
+  // Exposure mode - 'single-shot' para ajustar al punto tocado
+  if (capabilities.exposureMode) {
+    if (capabilities.exposureMode.indexOf('single-shot') >= 0) {
+      constraints.exposureMode = 'single-shot';
+      hasChanges = true;
+    } else if (capabilities.exposureMode.indexOf('continuous') >= 0) {
+      constraints.exposureMode = 'continuous';
+      hasChanges = true;
+    }
+  }
+
+  // White balance
+  if (capabilities.whiteBalanceMode) {
+    if (capabilities.whiteBalanceMode.indexOf('single-shot') >= 0) {
+      constraints.whiteBalanceMode = 'single-shot';
+      hasChanges = true;
+    } else if (capabilities.whiteBalanceMode.indexOf('continuous') >= 0) {
+      constraints.whiteBalanceMode = 'continuous';
+      hasChanges = true;
+    }
+  }
+
+  if (!hasChanges) return;
+
+  // Aplicar constraints usando advanced
+  track.applyConstraints({advanced: [constraints]}).then(function() {
+    // Después de single-shot focus, volver a continuous para las siguientes fotos
+    setTimeout(function() {
+      if (!camaraStream) return;
+      var t = camaraStream.getVideoTracks()[0];
+      if (!t) return;
+      var caps;
+      try { caps = t.getCapabilities(); } catch(e) { return; }
+      var restore = {};
+      if (caps.focusMode && caps.focusMode.indexOf('continuous') >= 0) {
+        restore.focusMode = 'continuous';
+      }
+      if (caps.exposureMode && caps.exposureMode.indexOf('continuous') >= 0) {
+        restore.exposureMode = 'continuous';
+      }
+      if (Object.keys(restore).length > 0) {
+        t.applyConstraints({advanced: [restore]}).catch(function() {});
+      }
+    }, 3000);
+  }).catch(function(err) {
+    console.log('Tap-to-focus no soportado en este dispositivo:', err.message);
+  });
+}
+
+// Ajuste manual de exposición (deslizar verticalmente después de tocar)
+var _exposureSlideActive = false;
+var _exposureStartY = 0;
+var _exposureBaseComp = 0;
+
+function iniciarExposureSlide() {
+  var video = document.getElementById('camera-video');
+  if (!video) return;
+
+  video.addEventListener('touchmove', function(e) {
+    if (!camaraStream || e.touches.length !== 1) return;
+
+    var track = camaraStream.getVideoTracks()[0];
+    if (!track) return;
+
+    var caps;
+    try { caps = track.getCapabilities(); } catch(e2) { return; }
+
+    if (!caps.exposureCompensation) return;
+
+    var touch = e.touches[0];
+
+    if (!_exposureSlideActive) {
+      _exposureSlideActive = true;
+      _exposureStartY = touch.clientY;
+      try {
+        var settings = track.getSettings();
+        _exposureBaseComp = settings.exposureCompensation || 0;
+      } catch(e3) {
+        _exposureBaseComp = 0;
+      }
+      return;
+    }
+
+    // Deslizar hacia arriba = más brillo, hacia abajo = menos
+    var deltaY = _exposureStartY - touch.clientY;
+    var range = caps.exposureCompensation.max - caps.exposureCompensation.min;
+    var step = caps.exposureCompensation.step || 0.1;
+    // 200px de movimiento = rango completo
+    var factor = deltaY / 200;
+    var newComp = _exposureBaseComp + factor * range;
+    newComp = Math.max(caps.exposureCompensation.min, Math.min(caps.exposureCompensation.max, newComp));
+    // Ajustar a step
+    newComp = Math.round(newComp / step) * step;
+
+    track.applyConstraints({advanced: [{exposureCompensation: newComp, exposureMode: 'manual'}]}).catch(function() {});
+  }, {passive: true});
+
+  video.addEventListener('touchend', function() {
+    _exposureSlideActive = false;
   });
 }
 

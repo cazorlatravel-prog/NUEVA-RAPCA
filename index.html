@@ -310,6 +310,18 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 .camera-controls .cam-btn-capture{background:#fff}
 .camera-controls .cam-btn-cancel,.camera-controls .cam-btn-switch{width:44px;height:44px;border:none;background:rgba(255,255,255,.2);color:#fff;border-radius:50%;font-size:20px;cursor:pointer}
 
+/* === FOCUS INDICATOR (tap-to-focus) === */
+.focus-ring{position:absolute;pointer-events:none;z-index:3;width:70px;height:70px;border:2px solid #fff;border-radius:50%;transform:translate(-50%,-50%) scale(1.5);opacity:0;animation:focusRingAnim .6s ease-out forwards}
+@keyframes focusRingAnim{0%{transform:translate(-50%,-50%) scale(1.5);opacity:.8}40%{transform:translate(-50%,-50%) scale(1);opacity:1}100%{transform:translate(-50%,-50%) scale(1);opacity:0}}
+.focus-ring-inner{position:absolute;inset:8px;border:1px solid rgba(255,255,255,.6);border-radius:50%}
+.focus-ring-cross-h{position:absolute;top:50%;left:50%;width:14px;height:1px;background:rgba(255,255,255,.7);transform:translate(-50%,-50%)}
+.focus-ring-cross-v{position:absolute;top:50%;left:50%;width:1px;height:14px;background:rgba(255,255,255,.7);transform:translate(-50%,-50%)}
+.exposure-indicator{position:absolute;right:-30px;top:50%;transform:translateY(-50%);z-index:3;display:flex;flex-direction:column;align-items:center;pointer-events:none;opacity:0;transition:opacity .3s}
+.exposure-indicator.visible{opacity:1}
+.exposure-indicator .sun-icon{font-size:16px;color:#ffd700;margin-bottom:2px}
+.exposure-indicator .ev-bar{width:3px;height:60px;background:rgba(255,255,255,.3);border-radius:2px;position:relative}
+.exposure-indicator .ev-level{position:absolute;bottom:50%;left:-2px;width:7px;height:3px;background:#ffd700;border-radius:1px;transition:bottom .3s}
+
 /* === PREVIEW FOTO === */
 .preview-modal{position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:8500;display:none;flex-direction:column;align-items:center;justify-content:center}
 .preview-modal.open{display:flex}
