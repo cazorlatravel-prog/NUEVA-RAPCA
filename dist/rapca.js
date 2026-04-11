@@ -1758,7 +1758,7 @@ function abrirCamara(tipo, subtipo) {
   document.getElementById('cam-code').textContent = fotoCodigo;
 
   // Abrir cámara
-  var constraints = {video: {facingMode: camaraFacing, width: {ideal: 3840}, height: {ideal: 2160}, frameRate: {ideal: 30}}, audio: false};
+  var constraints = {video: {facingMode: camaraFacing, width: {ideal: 1920}, height: {ideal: 1080}}, audio: false};
   navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
     camaraStream = stream;
     var video = document.getElementById('camera-video');
@@ -1806,7 +1806,7 @@ function switchCamara() {
   if (camaraStream) {
     camaraStream.getTracks().forEach(function(t) { t.stop(); });
   }
-  var constraints = {video: {facingMode: camaraFacing, width: {ideal: 3840}, height: {ideal: 2160}, frameRate: {ideal: 30}}, audio: false};
+  var constraints = {video: {facingMode: camaraFacing, width: {ideal: 1920}, height: {ideal: 1080}}, audio: false};
   navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
     camaraStream = stream;
     document.getElementById('camera-video').srcObject = stream;
