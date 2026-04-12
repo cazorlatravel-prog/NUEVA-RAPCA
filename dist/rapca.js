@@ -1889,8 +1889,11 @@ function iniciarTapToFocus() {
     // Mostrar indicador visual
     mostrarFocusIndicator(wrap, touch.clientX - rect.left, touch.clientY - rect.top);
 
+    // Medir brillo real del punto tocado desde el frame del video
+    var luminancia = medirLuminancia(video, x, y);
+
     // Aplicar focus y exposición al track de video
-    aplicarFocusExposicion(x, y);
+    aplicarFocusExposicion(x, y, luminancia);
   };
 
   video._tapFocusHandler = handler;
@@ -1916,7 +1919,35 @@ function mostrarFocusIndicator(container, px, py) {
   }, 800);
 }
 
-function aplicarFocusExposicion(x, y) {
+// Mide la luminancia media (0-255) de una región alrededor del punto tocado
+function medirLuminancia(video, x, y) {
+  try {
+    if (!video.videoWidth || !video.videoHeight) return null;
+    var c = document.createElement('canvas');
+    var regionSize = 60; // muestreo de 60x60 px
+    c.width = regionSize;
+    c.height = regionSize;
+    var ctx = c.getContext('2d');
+    var sx = Math.max(0, x * video.videoWidth - regionSize / 2);
+    var sy = Math.max(0, y * video.videoHeight - regionSize / 2);
+    sx = Math.min(sx, video.videoWidth - regionSize);
+    sy = Math.min(sy, video.videoHeight - regionSize);
+    ctx.drawImage(video, sx, sy, regionSize, regionSize, 0, 0, regionSize, regionSize);
+    var data = ctx.getImageData(0, 0, regionSize, regionSize).data;
+    var sum = 0, n = 0;
+    for (var i = 0; i < data.length; i += 4) {
+      // Luminancia aprox: 0.299R + 0.587G + 0.114B
+      sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      n++;
+    }
+    return n > 0 ? sum / n : null;
+  } catch(e) {
+    console.log('No se pudo medir luminancia:', e.message);
+    return null;
+  }
+}
+
+function aplicarFocusExposicion(x, y, luminancia) {
   if (!camaraStream) return;
 
   var track = camaraStream.getVideoTracks()[0];
@@ -1930,52 +1961,70 @@ function aplicarFocusExposicion(x, y) {
     return;
   }
 
-  var constraints = {};
-  var hasChanges = false;
+  // PRIMERA PASADA: Solo enfoque (focus) + point of interest.
+  // No tocamos exposureMode para no bloquear el auto-ajuste del sistema.
+  var focusConstraints = {};
+  var focusChanges = false;
 
-  // Focus mode - 'single-shot' para enfocar al punto; luego queda fijo
   if (capabilities.focusMode) {
     if (capabilities.focusMode.indexOf('single-shot') >= 0) {
-      constraints.focusMode = 'single-shot';
-      hasChanges = true;
+      focusConstraints.focusMode = 'single-shot';
+      focusChanges = true;
     } else if (capabilities.focusMode.indexOf('continuous') >= 0) {
-      constraints.focusMode = 'continuous';
-      hasChanges = true;
+      focusConstraints.focusMode = 'continuous';
+      focusChanges = true;
     }
   }
 
-  // Point of interest: el punto tocado se usa para focus, exposición y balance
   if (capabilities.pointsOfInterest) {
-    constraints.pointsOfInterest = [{x: x, y: y}];
-    hasChanges = true;
+    focusConstraints.pointsOfInterest = [{x: x, y: y}];
+    focusChanges = true;
   }
 
-  // Exposure mode: CONTINUO para que siga midiendo la luz dinámicamente
-  // (NO usar 'single-shot' porque bloquea una medición que puede ser incorrecta,
-  // especialmente en zonas oscuras, y oscurece toda la imagen)
-  if (capabilities.exposureMode && capabilities.exposureMode.indexOf('continuous') >= 0) {
-    constraints.exposureMode = 'continuous';
-    hasChanges = true;
+  if (focusChanges) {
+    track.applyConstraints({advanced: [focusConstraints]}).catch(function(err) {
+      console.log('Focus no soportado:', err.message);
+    });
   }
 
-  // Resetear compensación de exposición a 0 por si un slide previo la dejó negativa
-  if (capabilities.exposureCompensation) {
-    constraints.exposureCompensation = 0;
-    hasChanges = true;
+  // SEGUNDA PASADA: Compensación de exposición basada en luminancia real medida
+  // Esto funciona de forma fiable en todos los Androids.
+  if (capabilities.exposureCompensation && luminancia !== null) {
+    var min = capabilities.exposureCompensation.min;
+    var max = capabilities.exposureCompensation.max;
+    var step = capabilities.exposureCompensation.step || 0.33;
+
+    // Objetivo: llevar la luminancia del punto hacia ~128 (gris medio)
+    // Cada +1 EV aproximadamente dobla el brillo (factor 2x)
+    // luminancia=60 -> +1 EV ; luminancia=30 -> +2 EV ; luminancia=200 -> -0.7 EV
+    var target = 128;
+    var ev = 0;
+    if (luminancia > 0) {
+      ev = Math.log2(target / Math.max(10, luminancia));
+    }
+    // Clamp
+    ev = Math.max(min, Math.min(max, ev));
+    // Ajustar a step
+    ev = Math.round(ev / step) * step;
+
+    var expoConstraints = {
+      exposureMode: 'continuous',
+      exposureCompensation: ev
+    };
+
+    track.applyConstraints({advanced: [expoConstraints]}).catch(function(err) {
+      // Fallback: sólo exposureCompensation sin exposureMode
+      track.applyConstraints({advanced: [{exposureCompensation: ev}]}).catch(function() {});
+    });
+  } else if (capabilities.exposureMode && capabilities.exposureMode.indexOf('continuous') >= 0) {
+    // Si no hay exposureCompensation, al menos asegurar que esté en continuo
+    track.applyConstraints({advanced: [{exposureMode: 'continuous'}]}).catch(function() {});
   }
 
-  // White balance: dejar CONTINUO para no alterar colores al tocar zonas oscuras
+  // White balance continuo (no lo bloqueamos)
   if (capabilities.whiteBalanceMode && capabilities.whiteBalanceMode.indexOf('continuous') >= 0) {
-    constraints.whiteBalanceMode = 'continuous';
-    hasChanges = true;
+    track.applyConstraints({advanced: [{whiteBalanceMode: 'continuous'}]}).catch(function() {});
   }
-
-  if (!hasChanges) return;
-
-  // Aplicar constraints usando advanced
-  track.applyConstraints({advanced: [constraints]}).catch(function(err) {
-    console.log('Tap-to-focus no soportado en este dispositivo:', err.message);
-  });
 }
 
 // Ajuste manual de exposición (deslizar verticalmente después de tocar)
@@ -2000,16 +2049,24 @@ function iniciarExposureSlide() {
 
     var touch = e.touches[0];
 
+    // Requerir un mínimo de movimiento para activar el slide
+    // (evita que un tap normal active el modo manual y oscurezca la imagen)
+    var THRESHOLD = 25;
+
     if (!_exposureSlideActive) {
-      _exposureSlideActive = true;
-      _exposureStartY = touch.clientY;
-      try {
-        var settings = track.getSettings();
-        _exposureBaseComp = settings.exposureCompensation || 0;
-      } catch(e3) {
-        _exposureBaseComp = 0;
+      if (_exposureStartY === 0) {
+        _exposureStartY = touch.clientY;
+        try {
+          var settings = track.getSettings();
+          _exposureBaseComp = settings.exposureCompensation || 0;
+        } catch(e3) {
+          _exposureBaseComp = 0;
+        }
+        return;
       }
-      return;
+      // Aún no activado: comprobar si se ha superado el umbral
+      if (Math.abs(touch.clientY - _exposureStartY) < THRESHOLD) return;
+      _exposureSlideActive = true;
     }
 
     // Deslizar hacia arriba = más brillo, hacia abajo = menos
@@ -2023,11 +2080,14 @@ function iniciarExposureSlide() {
     // Ajustar a step
     newComp = Math.round(newComp / step) * step;
 
-    track.applyConstraints({advanced: [{exposureCompensation: newComp, exposureMode: 'manual'}]}).catch(function() {});
+    // NO cambiar exposureMode a 'manual' aquí porque bloquearía el auto-ajuste.
+    // Solo ajustar exposureCompensation (que funciona con modo continuous).
+    track.applyConstraints({advanced: [{exposureCompensation: newComp}]}).catch(function() {});
   }, {passive: true});
 
   video.addEventListener('touchend', function() {
     _exposureSlideActive = false;
+    _exposureStartY = 0;
   });
 }
 
