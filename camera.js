@@ -244,7 +244,7 @@ function aplicarFocusExposicion(x, y) {
   var constraints = {};
   var hasChanges = false;
 
-  // Focus mode - intentar 'single-shot' para enfocar en el punto
+  // Focus mode - 'single-shot' para enfocar al punto; luego queda fijo
   if (capabilities.focusMode) {
     if (capabilities.focusMode.indexOf('single-shot') >= 0) {
       constraints.focusMode = 'single-shot';
@@ -255,57 +255,36 @@ function aplicarFocusExposicion(x, y) {
     }
   }
 
-  // Point of interest (focus point)
+  // Point of interest: el punto tocado se usa para focus, exposición y balance
   if (capabilities.pointsOfInterest) {
     constraints.pointsOfInterest = [{x: x, y: y}];
     hasChanges = true;
   }
 
-  // Exposure mode - 'single-shot' para ajustar al punto tocado
-  if (capabilities.exposureMode) {
-    if (capabilities.exposureMode.indexOf('single-shot') >= 0) {
-      constraints.exposureMode = 'single-shot';
-      hasChanges = true;
-    } else if (capabilities.exposureMode.indexOf('continuous') >= 0) {
-      constraints.exposureMode = 'continuous';
-      hasChanges = true;
-    }
+  // Exposure mode: CONTINUO para que siga midiendo la luz dinámicamente
+  // (NO usar 'single-shot' porque bloquea una medición que puede ser incorrecta,
+  // especialmente en zonas oscuras, y oscurece toda la imagen)
+  if (capabilities.exposureMode && capabilities.exposureMode.indexOf('continuous') >= 0) {
+    constraints.exposureMode = 'continuous';
+    hasChanges = true;
   }
 
-  // White balance
-  if (capabilities.whiteBalanceMode) {
-    if (capabilities.whiteBalanceMode.indexOf('single-shot') >= 0) {
-      constraints.whiteBalanceMode = 'single-shot';
-      hasChanges = true;
-    } else if (capabilities.whiteBalanceMode.indexOf('continuous') >= 0) {
-      constraints.whiteBalanceMode = 'continuous';
-      hasChanges = true;
-    }
+  // Resetear compensación de exposición a 0 por si un slide previo la dejó negativa
+  if (capabilities.exposureCompensation) {
+    constraints.exposureCompensation = 0;
+    hasChanges = true;
+  }
+
+  // White balance: dejar CONTINUO para no alterar colores al tocar zonas oscuras
+  if (capabilities.whiteBalanceMode && capabilities.whiteBalanceMode.indexOf('continuous') >= 0) {
+    constraints.whiteBalanceMode = 'continuous';
+    hasChanges = true;
   }
 
   if (!hasChanges) return;
 
   // Aplicar constraints usando advanced
-  track.applyConstraints({advanced: [constraints]}).then(function() {
-    // Después de single-shot focus, volver a continuous para las siguientes fotos
-    setTimeout(function() {
-      if (!camaraStream) return;
-      var t = camaraStream.getVideoTracks()[0];
-      if (!t) return;
-      var caps;
-      try { caps = t.getCapabilities(); } catch(e) { return; }
-      var restore = {};
-      if (caps.focusMode && caps.focusMode.indexOf('continuous') >= 0) {
-        restore.focusMode = 'continuous';
-      }
-      if (caps.exposureMode && caps.exposureMode.indexOf('continuous') >= 0) {
-        restore.exposureMode = 'continuous';
-      }
-      if (Object.keys(restore).length > 0) {
-        t.applyConstraints({advanced: [restore]}).catch(function() {});
-      }
-    }, 3000);
-  }).catch(function(err) {
+  track.applyConstraints({advanced: [constraints]}).catch(function(err) {
     console.log('Tap-to-focus no soportado en este dispositivo:', err.message);
   });
 }
