@@ -478,6 +478,7 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 
   <div class="menu-category">Herramientas</div>
   <div class="menu-grid">
+    <button class="menu-btn" onclick="irPagina('dashboard')"><div class="icon" style="background:var(--c-dash)">📊</div><span>Panel de Control</span></button>
     <button class="menu-btn" onclick="irPagina('timeline')"><div class="icon" style="background:var(--c-tl)">🕐</div><span>Historial</span></button>
     <button class="menu-btn" onclick="irPagina('comparador')"><div class="icon" style="background:var(--c-comp)">🔀</div><span>Comparador</span></button>
     <button class="menu-btn" onclick="irPagina('galeria')"><div class="icon" style="background:var(--c-comp)">🖼️</div><span>Galería</span></button>
@@ -782,6 +783,15 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
   <div style="padding:12px;overflow-y:auto;flex:1" id="timeline-content"></div>
 </div>
 
+<!-- ==================== DASHBOARD ==================== -->
+<div class="page" id="dashboard-page">
+  <div class="page-header" style="background:var(--c-dash)">
+    <button class="btn-back" onclick="irPagina('menu')">←</button>
+    <h1>Panel de Control</h1>
+  </div>
+  <div style="padding:12px;overflow-y:auto;flex:1" id="dashboard-content"></div>
+</div>
+
 <!-- ==================== COMPARADOR ==================== -->
 <div class="page" id="comparador-page">
   <div class="page-header" style="background:var(--c-comp)">
@@ -977,5 +987,6 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 <script src="timeline.js"></script>
 <script src="comparador.js"></script>
 <script src="galeria.js"></script>
+<script src="dashboard.js"></script>
 </body>
 </html>

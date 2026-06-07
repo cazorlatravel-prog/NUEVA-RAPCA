@@ -310,6 +310,7 @@ function irPagina(id) {
   if (id === 'mapa') initMapa();
   if (id === 'panel') renderPanel();
   if (id === 'timeline' && typeof renderTimeline === 'function') renderTimeline();
+  if (id === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
   if (id === 'comparador' && typeof renderComparador === 'function') renderComparador();
   if (id === 'galeria' && typeof renderGaleria === 'function') renderGaleria();
   if (id === 'infraestructuras' && typeof renderInfras === 'function') renderInfras();
