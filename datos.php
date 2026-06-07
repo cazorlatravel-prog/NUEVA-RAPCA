@@ -35,6 +35,16 @@ switch ($accion) {
             jsonResponse(['ok' => false, 'error' => 'Datos incompletos'], 400);
         }
 
+        // Validar tipo contra lista permitida (coherente con fotos/upload)
+        if (!in_array($tipo, ['VP', 'EL', 'EI'], true)) {
+            jsonResponse(['ok' => false, 'error' => 'Tipo no válido'], 400);
+        }
+
+        // Validar que 'datos' sea JSON bien formado (evita basura/inyección almacenada)
+        if (!is_string($datos) || json_decode($datos, true) === null) {
+            jsonResponse(['ok' => false, 'error' => 'Datos con formato inválido'], 400);
+        }
+
         $db = getDB();
         $stmt = $db->prepare('INSERT INTO registros_sync (registro_id, email, tipo, fecha, zona, unidad, transecto, datos, lat, lon)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

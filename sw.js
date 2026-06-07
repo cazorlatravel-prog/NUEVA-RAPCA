@@ -1,5 +1,5 @@
 // RAPCA Campo — Service Worker v1.0
-const CACHE_NAME = 'rapca-v6';
+const CACHE_NAME = 'rapca-v7';
 const CDN_CACHE = 'rapca-cdn-v1';
 
 const APP_FILES = [
@@ -77,7 +77,22 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Stale-while-revalidate para archivos propios
+  // Network-first para HTML y JS propios: así los cambios/fixes llegan
+  // de inmediato cuando hay conexión, con la caché como respaldo offline.
+  const esHtmlOJs = e.request.mode === 'navigate' ||
+    url.pathname.endsWith('.html') || url.pathname.endsWith('.js') || url.pathname === '/';
+  if (esHtmlOJs) {
+    e.respondWith(
+      fetch(e.request).then((resp) => {
+        const clone = resp.clone();
+        caches.open(CACHE_NAME).then((c) => c.put(e.request, clone));
+        return resp;
+      }).catch(() => caches.match(e.request).then((cached) => cached || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // Stale-while-revalidate para el resto de archivos propios (manifest, iconos)
   e.respondWith(
     caches.match(e.request).then((cached) => {
       const fetchP = fetch(e.request).then((resp) => {

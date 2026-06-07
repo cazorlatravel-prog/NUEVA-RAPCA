@@ -70,12 +70,12 @@ function filtrarTimeline() {
 
     // Thumbnails de fotos (generales + comparativas)
     var todosCodigosFotos = [];
-    if (r.datos.fotos) {
+    if (r.datos && r.datos.fotos) {
       r.datos.fotos.split(',').map(function(s) { return s.trim(); }).filter(Boolean).forEach(function(cod) {
         todosCodigosFotos.push(cod);
       });
     }
-    if (r.datos.fotosComp && Array.isArray(r.datos.fotosComp)) {
+    if (r.datos && r.datos.fotosComp && Array.isArray(r.datos.fotosComp)) {
       r.datos.fotosComp.forEach(function(fc) {
         if (fc.numero) todosCodigosFotos.push(fc.numero);
       });
@@ -122,7 +122,7 @@ function tlConfirmarEliminar(id) {
 
   // Recopilar fotos del registro para eliminarlas también
   var r = registros.find(function(r) { return r.id == id; });
-  if (r) {
+  if (r && r.datos) {
     var codigosFotos = [];
     if (r.datos.fotos && typeof r.datos.fotos === 'string') {
       r.datos.fotos.split(',').map(function(f) { return f.trim(); }).filter(Boolean).forEach(function(cod) {

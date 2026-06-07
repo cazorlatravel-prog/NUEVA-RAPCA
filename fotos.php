@@ -158,6 +158,8 @@ switch ($accion) {
             $unidad = preg_replace('/[^a-zA-Z0-9_-]/', '', $item['unidad'] ?? '');
 
             if (!$codigo || !$tipo || !$unidad) continue;
+            // Validar tipo contra lista permitida (evita rutas no previstas)
+            if (!in_array($tipo, ['VP', 'EL', 'EI'], true)) continue;
 
             $base64 = null;
 
@@ -215,6 +217,8 @@ switch ($accion) {
             $unidad = preg_replace('/[^a-zA-Z0-9_-]/', '', $item['unidad'] ?? '');
 
             if (!$codigo || !$tipo || !$unidad) continue;
+            // Validar tipo contra lista permitida (evita rutas no previstas)
+            if (!in_array($tipo, ['VP', 'EL', 'EI'], true)) continue;
             // Validar tipo contra whitelist
             if (!in_array($tipo, ['VP', 'EL', 'EI'], true)) continue;
 

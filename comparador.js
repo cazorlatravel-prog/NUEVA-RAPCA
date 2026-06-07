@@ -215,14 +215,14 @@ function compModoSlider() {
     promesas.push(buscarFotoData(foto1.codigo, foto1.tipo, unidad).then(function(data) {
       var el = document.getElementById('comp-img-before');
       if (el && data) el.src = data;
-      else if (el) display.innerHTML += '<p style="color:#e74c3c;font-size:12px;margin-top:4px">Foto "antes" no disponible</p>';
+      else if (el) display.insertAdjacentHTML('beforeend', '<p style="color:#e74c3c;font-size:12px;margin-top:4px">Foto "antes" no disponible</p>');
     }));
   }
   if (foto2) {
     promesas.push(buscarFotoData(foto2.codigo, foto2.tipo, unidad).then(function(data) {
       var el = document.getElementById('comp-img-after');
       if (el && data) el.src = data;
-      else if (el) display.innerHTML += '<p style="color:#e74c3c;font-size:12px;margin-top:4px">Foto "después" no disponible</p>';
+      else if (el) display.insertAdjacentHTML('beforeend', '<p style="color:#e74c3c;font-size:12px;margin-top:4px">Foto "después" no disponible</p>');
     }));
   }
 

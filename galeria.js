@@ -87,6 +87,7 @@ function filtrarGaleria() {
   // Recopilar fotos
   var fotos = [];
   regs.forEach(function(r) {
+    if (!r.datos) return;
     if (galTab === 'comparativas') {
       if (r.datos.fotosComp) {
         r.datos.fotosComp.forEach(function(fc) {
@@ -265,9 +266,16 @@ function galCompararSel() {
   wrap.querySelector('.comp-slider-handle').addEventListener('mousedown', function() { dragging = true; });
   wrap.addEventListener('touchmove', function(e) { if (dragging) updateSlider(e.touches[0].clientX); });
   wrap.addEventListener('mousemove', function(e) { if (dragging) updateSlider(e.clientX); });
-  document.addEventListener('touchend', function() { dragging = false; });
-  document.addEventListener('mouseup', function() { dragging = false; });
   wrap.addEventListener('click', function(e) { updateSlider(e.clientX); });
+
+  // Listeners de fin de arrastre a nivel document: limpiar el anterior para no acumular
+  if (window._galCompEndDrag) {
+    document.removeEventListener('touchend', window._galCompEndDrag);
+    document.removeEventListener('mouseup', window._galCompEndDrag);
+  }
+  window._galCompEndDrag = function() { dragging = false; };
+  document.addEventListener('touchend', window._galCompEndDrag);
+  document.addEventListener('mouseup', window._galCompEndDrag);
 
   galSeleccionadas = [];
 }
@@ -352,6 +360,7 @@ function eliminarFotosDeCodigos(codigos) {
   // Recopilar info de tipo/unidad para cada código antes de borrar
   var fotosInfo = [];
   registros.forEach(function(r) {
+    if (!r.datos) return;
     if (r.datos.fotos && typeof r.datos.fotos === 'string') {
       r.datos.fotos.split(',').map(function(f) { return f.trim(); }).filter(Boolean).forEach(function(cod) {
         if (codigos.indexOf(cod) >= 0) {
@@ -370,6 +379,7 @@ function eliminarFotosDeCodigos(codigos) {
 
   // 1. Eliminar de los registros locales
   registros.forEach(function(r) {
+    if (!r.datos) return;
     // Fotos generales (string separado por comas)
     if (r.datos.fotos && typeof r.datos.fotos === 'string') {
       var lista = r.datos.fotos.split(',').map(function(f) { return f.trim(); }).filter(function(f) { return f; });
@@ -460,6 +470,7 @@ async function galDescargarTodas() {
 
   var codigos = [];
   regs.forEach(function(r) {
+    if (!r.datos) return;
     if (r.datos.fotos) {
       r.datos.fotos.split(',').forEach(function(f) {
         var cod = f.trim();

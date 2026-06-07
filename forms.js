@@ -110,25 +110,8 @@ function cargarBorrador(tipo) {
 
 function limpiarBorrador(tipo) { localStorage.removeItem('rapca_borrador_' + tipo.toLowerCase()); }
 
-window.addEventListener('beforeunload', function() {
-  var activePage = document.querySelector('.page.active');
-  if (activePage) {
-    if (activePage.id === 'vp-page') guardarBorrador('VP');
-    if (activePage.id === 'el-page') guardarBorrador('EL');
-    if (activePage.id === 'ei-page') guardarBorrador('EI');
-  }
-});
-
-document.addEventListener('visibilitychange', function() {
-  if (document.visibilityState === 'hidden') {
-    var activePage = document.querySelector('.page.active');
-    if (activePage) {
-      if (activePage.id === 'vp-page') guardarBorrador('VP');
-      if (activePage.id === 'el-page') guardarBorrador('EL');
-      if (activePage.id === 'ei-page') guardarBorrador('EI');
-    }
-  }
-});
+// Nota: los listeners 'beforeunload' y 'visibilitychange' para auto-guardar
+// borradores están centralizados en app.js (versión más completa con guards).
 
 // ============================================================
 // FORMULARIOS VP / EL — Pastoreo + Observacion
@@ -150,6 +133,7 @@ function generarPastoreo(containerId, prefix) {
 
 function limpiarPastoreo(btn, punto, prefix) {
   var container = document.getElementById(prefix + '-pastoreo-container');
+  if (!container) return;
   var btns = container.querySelectorAll('.pastoreo-btn[data-punto="' + punto + '"]');
   btns.forEach(function(b) { b.classList.remove('selected'); });
 }
@@ -166,6 +150,7 @@ function selPastoreo(btn, prefix) {
 function obtenerPastoreo(prefix) {
   var result = [];
   var container = document.getElementById(prefix + '-pastoreo-container');
+  if (!container) return ['', '', ''];
   for (var p = 1; p <= 3; p++) {
     var sel = container.querySelector('.pastoreo-btn.selected[data-punto="' + p + '"]');
     result.push(sel ? sel.getAttribute('data-val') : '');
@@ -198,6 +183,7 @@ function selObs(btn) {
 function obtenerObservacion(prefix) {
   var result = {};
   var container = document.getElementById(prefix + '-obs-container');
+  if (!container) { OBS_CAMPOS.forEach(function(c) { result[c] = ''; }); return result; }
   for (var i = 0; i < OBS_CAMPOS.length; i++) {
     var sel = container.querySelector('.obs-btn.selected[data-campo="' + OBS_CAMPOS[i] + '"]');
     result[OBS_CAMPOS[i]] = sel ? sel.getAttribute('data-val') : '';
@@ -419,17 +405,24 @@ function calcMediaHerbaceas() {
 }
 
 function actualizarResumenMatorral() {
-  var c1 = parseFloat(document.getElementById('ev-mat1cob').value) || 0;
-  var c2 = parseFloat(document.getElementById('ev-mat2cob').value) || 0;
-  var a1 = parseFloat(document.getElementById('ev-mat1alt').value) || 0;
-  var a2 = parseFloat(document.getElementById('ev-mat2alt').value) || 0;
+  var e1 = document.getElementById('ev-mat1cob'), e2 = document.getElementById('ev-mat2cob');
+  var e3 = document.getElementById('ev-mat1alt'), e4 = document.getElementById('ev-mat2alt');
+  if (!e1 || !e2 || !e3 || !e4) return;
+  var c1 = parseFloat(e1.value) || 0;
+  var c2 = parseFloat(e2.value) || 0;
+  var a1 = parseFloat(e3.value) || 0;
+  var a2 = parseFloat(e4.value) || 0;
   var mediaCob = (c1 + c2) / 2;
   var mediaAlt = (a1 + a2) / 2;
   var volumen = (mediaCob / 100) * (mediaAlt / 100) * 10000;
-  document.getElementById('ev-mat-cob-media').textContent = mediaCob.toFixed(1);
-  document.getElementById('ev-mat-alt-media').textContent = mediaAlt.toFixed(1);
-  document.getElementById('ev-mat-volumen').textContent = volumen.toFixed(2) + ' m\u00B3/ha';
-  document.getElementById('ev-mat-resultado').style.display = 'block';
+  var elCob = document.getElementById('ev-mat-cob-media');
+  var elAlt = document.getElementById('ev-mat-alt-media');
+  var elVol = document.getElementById('ev-mat-volumen');
+  var elRes = document.getElementById('ev-mat-resultado');
+  if (elCob) elCob.textContent = mediaCob.toFixed(1);
+  if (elAlt) elAlt.textContent = mediaAlt.toFixed(1);
+  if (elVol) elVol.textContent = volumen.toFixed(2) + ' m\u00B3/ha';
+  if (elRes) elRes.style.display = 'block';
 }
 
 // --- Autocomplete especies ---
@@ -520,6 +513,7 @@ function limpiarFormEI() {
 // GUARDAR REGISTROS VP / EL / EI
 // ============================================================
 function guardarVP() {
+  if (!sesion) { showToast('Sesión no válida. Vuelve a iniciar sesión.', 'error'); return; }
   var fecha = document.getElementById('vp-fecha').value;
   var unidad = document.getElementById('vp-unidad').value.trim();
   var zona = document.getElementById('vp-zona').value;
@@ -574,6 +568,7 @@ function guardarVP() {
 }
 
 function guardarEL() {
+  if (!sesion) { showToast('Sesión no válida. Vuelve a iniciar sesión.', 'error'); return; }
   var fecha = document.getElementById('el-fecha').value;
   var unidad = document.getElementById('el-unidad').value.trim();
   var zona = document.getElementById('el-zona').value;
@@ -744,6 +739,7 @@ function restaurarDatosEI(datos) {
 }
 
 function guardarEI() {
+  if (!sesion) { showToast('Sesión no válida. Vuelve a iniciar sesión.', 'error'); return; }
   var fecha = document.getElementById('ev-fecha').value;
   var unidad = document.getElementById('ev-unidad').value.trim();
   var zona = document.getElementById('ev-zona').value;

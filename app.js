@@ -104,19 +104,27 @@ function guardarEnDB(store, data) {
 
 function obtenerDeDB(store, key) {
   return new Promise(function(resolve, reject) {
-    var tx = db.transaction(store, 'readonly');
+    var tx;
+    try { tx = db.transaction(store, 'readonly'); }
+    catch(e) { return reject(e); }
+    tx.onerror = function() { reject(tx.error); };
+    tx.onabort = function() { reject(tx.error || new Error('Transacción abortada')); };
     var req = tx.objectStore(store).get(key);
     req.onsuccess = function() { resolve(req.result); };
-    req.onerror = reject;
+    req.onerror = function() { reject(req.error); };
   });
 }
 
 function obtenerTodosDB(store) {
   return new Promise(function(resolve, reject) {
-    var tx = db.transaction(store, 'readonly');
+    var tx;
+    try { tx = db.transaction(store, 'readonly'); }
+    catch(e) { return reject(e); }
+    tx.onerror = function() { reject(tx.error); };
+    tx.onabort = function() { reject(tx.error || new Error('Transacción abortada')); };
     var req = tx.objectStore(store).getAll();
     req.onsuccess = function() { resolve(req.result); };
-    req.onerror = reject;
+    req.onerror = function() { reject(req.error); };
   });
 }
 
@@ -180,10 +188,6 @@ function autoZona(prefix) {
   var u = document.getElementById(prefix + '-unidad').value;
   var z = u.length >= 5 ? u.substring(0, 5) : '';
   document.getElementById(prefix + '-zona').value = z;
-}
-
-function formatCoordNW(lat, lon) {
-  return Math.abs(lat).toFixed(5) + (lat >= 0 ? ' N' : ' S') + ', ' + Math.abs(lon).toFixed(5) + (lon >= 0 ? ' E' : ' W');
 }
 
 function latLonToUTM(lat, lon) {
@@ -373,7 +377,7 @@ function busquedaGlobal(val) {
   });
 
   misRegistros().forEach(function(r) {
-    if (r.unidad.toLowerCase().indexOf(lv) >= 0 || r.zona.toLowerCase().indexOf(lv) >= 0) {
+    if ((r.unidad || '').toLowerCase().indexOf(lv) >= 0 || (r.zona || '').toLowerCase().indexOf(lv) >= 0) {
       html += '<div class="search-result" onclick="cerrarBusqueda();editarRegistro(' + r.id + ')"><strong>' + escapeHtml(r.tipo) + ' ' + escapeHtml(r.unidad) + '</strong><small>' + escapeHtml(r.fecha) + ' · ' + escapeHtml(r.operador_nombre || '') + '</small></div>';
     }
   });
@@ -382,7 +386,7 @@ function busquedaGlobal(val) {
   misRegistros().forEach(function(r) {
     if (r.operador_nombre && r.operador_nombre.toLowerCase().indexOf(lv) >= 0 && ops.indexOf(r.operador_nombre) < 0) {
       ops.push(r.operador_nombre);
-      html += '<div class="search-result" onclick="cerrarBusqueda()"><strong>👤 ' + r.operador_nombre + '</strong><small>Operador</small></div>';
+      html += '<div class="search-result" onclick="cerrarBusqueda()"><strong>👤 ' + escapeHtml(r.operador_nombre) + '</strong><small>Operador</small></div>';
     }
   });
 
@@ -422,10 +426,34 @@ function navLightbox(dir) {
 }
 
 function descargarFotoLB() {
-  var a = document.createElement('a');
-  a.href = lightboxFotos[lightboxIdx].src;
-  a.download = (lightboxFotos[lightboxIdx].info || 'foto') + '.jpg';
-  a.click();
+  var foto = lightboxFotos[lightboxIdx];
+  if (!foto) return;
+  var nombre = (foto.info || 'foto') + '.jpg';
+  var src = foto.src;
+  // Si es data URL o blob local, descarga directa
+  if (src.indexOf('data:') === 0 || src.indexOf('blob:') === 0) {
+    var a = document.createElement('a');
+    a.href = src;
+    a.download = nombre;
+    a.click();
+    return;
+  }
+  // URL remota (Cloudinary): el atributo download se ignora por CORS,
+  // así que descargamos el blob primero
+  fetch(src, {mode: 'cors'}).then(function(resp) {
+    if (!resp.ok) throw new Error('No disponible');
+    return resp.blob();
+  }).then(function(blob) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = nombre;
+    a.click();
+    setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+  }).catch(function() {
+    // Fallback: abrir en nueva pestaña
+    window.open(src, '_blank');
+  });
 }
 
 // ============================================================
@@ -466,7 +494,7 @@ function reconstruirContadores() {
         if (!codigo) return;
         var prefijo = subtipo === 'G' ? r.unidad + '_' + codeTipo + '_' : r.unidad + '_' + codeTipo + '_' + subtipo + '_';
         if (codigo.indexOf(prefijo) !== 0) return;
-        var num = parseInt(codigo.substring(prefijo.length));
+        var num = parseInt(codigo.substring(prefijo.length), 10);
         if (isNaN(num)) return;
         var contKey = r.unidad + '_' + codeTipo + '_' + subtipo;
         if (!contadores[contKey] || contadores[contKey] < num) {
@@ -495,11 +523,16 @@ function reconstruirContadores() {
 function limpiarFotosAntiguas() {
   if (!db) return;
   var limite = Date.now() - (5 * 24 * 60 * 60 * 1000);
-  obtenerTodosDB('fotos').then(function(fotos) {
-    fotos.forEach(function(f) {
-      if (f.fecha < limite) eliminarDeDB('fotos', f.codigo);
+  // No borrar thumbnails de fotos que aún estén pendientes de subir
+  obtenerTodosDB('subidas_pendientes').then(function(pendientes) {
+    var pendMap = {};
+    pendientes.forEach(function(p) { pendMap[p.codigo] = true; });
+    return obtenerTodosDB('fotos').then(function(fotos) {
+      fotos.forEach(function(f) {
+        if (f.fecha < limite && !pendMap[f.codigo]) eliminarDeDB('fotos', f.codigo);
+      });
     });
-  });
+  }).catch(function(e) { console.warn('limpiarFotosAntiguas:', e); });
 }
 
 // ============================================================

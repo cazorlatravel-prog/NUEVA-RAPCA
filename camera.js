@@ -114,6 +114,12 @@ function cerrarCamara() {
     camaraStream = null;
   }
   imageCaptureObj = null;
+  // Quitar listeners de orientación para evitar fugas
+  if (window._compassHandler) {
+    window.removeEventListener('deviceorientationabsolute', window._compassHandler, true);
+    window.removeEventListener('deviceorientation', window._compassHandler, true);
+    window._compassHandler = null;
+  }
   document.getElementById('camera-modal').classList.remove('open');
   if (miniMapaCamera) { miniMapaCamera.remove(); miniMapaCamera = null; }
   // Limpiar ghost
@@ -132,6 +138,7 @@ function cerrarCamara() {
 }
 
 function switchCamara() {
+  var anterior = camaraFacing;
   camaraFacing = camaraFacing === 'environment' ? 'user' : 'environment';
   if (camaraStream) {
     camaraStream.getTracks().forEach(function(t) { t.stop(); });
@@ -144,6 +151,21 @@ function switchCamara() {
     crearImageCapture(stream);
     iniciarTapToFocus();
     iniciarExposureSlide();
+  }).catch(function(err) {
+    // Restaurar la cámara anterior si el cambio falla (p.ej. solo hay una cámara)
+    camaraFacing = anterior;
+    var fallback = {video: {facingMode: camaraFacing, width: {ideal: 1920}, height: {ideal: 1080}}, audio: false};
+    navigator.mediaDevices.getUserMedia(fallback).then(function(stream) {
+      camaraStream = stream;
+      document.getElementById('camera-video').srcObject = stream;
+      configurarCamaraInicial(stream);
+      crearImageCapture(stream);
+      iniciarTapToFocus();
+      iniciarExposureSlide();
+      showToast('No se pudo cambiar de cámara', 'info');
+    }).catch(function() {
+      showToast('Error al acceder a la cámara', 'error');
+    });
   });
 }
 
@@ -464,13 +486,19 @@ function iniciarOverlayCamara() {
     tipoCoordenadas: 'utm', mostrarMunicipio: false
   };
 
-  // Brújula
+  // Brújula — limpiar handler previo para no acumular listeners
+  if (window._compassHandler) {
+    window.removeEventListener('deviceorientationabsolute', window._compassHandler, true);
+    window.removeEventListener('deviceorientation', window._compassHandler, true);
+  }
   var handler = function(e) {
     compassHeading = e.alpha ? Math.round(e.alpha) : 0;
     var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
     var dir = dirs[Math.floor((compassHeading + 22.5) / 45) % 8];
-    document.getElementById('cam-compass').textContent = dir + ' ' + compassHeading + '°';
+    var el = document.getElementById('cam-compass');
+    if (el) el.textContent = dir + ' ' + compassHeading + '°';
   };
+  window._compassHandler = handler;
   if (window.DeviceOrientationEvent) {
     window.addEventListener('deviceorientationabsolute', handler, true);
     window.addEventListener('deviceorientation', handler, true);
@@ -1001,28 +1029,21 @@ function cargarGhostFoto(tipo, subtipo) {
 
 function buscarGhostEnPrecargadas(unidad, subtipo, callback) {
   if (!db) return;
-  try {
-    var tx = db.transaction('fotos_precargadas', 'readonly');
-    var store = tx.objectStore('fotos_precargadas');
-    var index = store.index('unidad');
-    var req = index.getAll(unidad);
-    req.onsuccess = function() {
-      var fotos = req.result || [];
-      // Filtrar por waypoint (W1/W2)
-      var matches = fotos.filter(function(f) {
-        return f.waypoint === subtipo;
-      }).sort(function(a, b) {
-        // Más reciente primero
-        return (b.fecha || '').localeCompare(a.fecha || '');
-      });
+  // El store 'fotos_precargadas' no tiene índice 'unidad', así que filtramos en memoria
+  obtenerTodosDB('fotos_precargadas').then(function(fotos) {
+    var matches = (fotos || []).filter(function(f) {
+      return f.unidad === unidad && f.waypoint === subtipo;
+    }).sort(function(a, b) {
+      // Más reciente primero
+      return (b.fecha || '').localeCompare(a.fecha || '');
+    });
 
-      if (matches.length > 0 && matches[0].data) {
-        callback(matches[0].data);
-      }
-    };
-  } catch(e) {
+    if (matches.length > 0 && matches[0].data) {
+      callback(matches[0].data);
+    }
+  }).catch(function(e) {
     console.warn('Error buscando ghost en precargadas:', e);
-  }
+  });
 }
 
 function toggleGhost() {
@@ -1431,13 +1452,6 @@ function aceptarFoto() {
   }).catch(function(err) {
     console.error('Error guardando foto:', err);
     showToast('Error al guardar foto: ' + (err.message || err), 'error');
-  });
-}
-
-function actualizarContadorFotos() {
-  if (!db) return;
-  obtenerTodosDB('subidas_pendientes').then(function(items) {
-    document.getElementById('menu-pending-fotos').textContent = items.length;
   });
 }
 

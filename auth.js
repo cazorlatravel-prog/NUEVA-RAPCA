@@ -136,6 +136,9 @@ function loginExito() {
   if (sesion.token && !sesion.token.startsWith('local_') && navigator.onLine) {
     cargarRegistrosServidor().then(function() {
       actualizarEstado();
+    }).catch(function(e) {
+      console.warn('No se pudieron cargar registros del servidor:', e);
+      actualizarEstado();
     });
   }
 }
@@ -153,15 +156,19 @@ function cerrarSesion() {
   }
   localStorage.removeItem('rapca_sesion');
   sesion = null;
+  window._serverUsers = null;
   document.getElementById('login-overlay').style.display = 'flex';
   showToast('Sesión cerrada', 'info');
 }
 
 function verificarSesion() {
-  var s = localStorage.getItem('rapca_sesion');
-  if (s) {
-    sesion = JSON.parse(s);
+  var sesionGuardada = safeParse('rapca_sesion', null);
+  if (sesionGuardada && sesionGuardada.email) {
+    sesion = sesionGuardada;
     loginExito();
+  } else if (localStorage.getItem('rapca_sesion')) {
+    // Sesión corrupta: limpiar para no bloquear el arranque
+    localStorage.removeItem('rapca_sesion');
   }
 }
 

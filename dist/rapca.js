@@ -104,19 +104,27 @@ function guardarEnDB(store, data) {
 
 function obtenerDeDB(store, key) {
   return new Promise(function(resolve, reject) {
-    var tx = db.transaction(store, 'readonly');
+    var tx;
+    try { tx = db.transaction(store, 'readonly'); }
+    catch(e) { return reject(e); }
+    tx.onerror = function() { reject(tx.error); };
+    tx.onabort = function() { reject(tx.error || new Error('Transacción abortada')); };
     var req = tx.objectStore(store).get(key);
     req.onsuccess = function() { resolve(req.result); };
-    req.onerror = reject;
+    req.onerror = function() { reject(req.error); };
   });
 }
 
 function obtenerTodosDB(store) {
   return new Promise(function(resolve, reject) {
-    var tx = db.transaction(store, 'readonly');
+    var tx;
+    try { tx = db.transaction(store, 'readonly'); }
+    catch(e) { return reject(e); }
+    tx.onerror = function() { reject(tx.error); };
+    tx.onabort = function() { reject(tx.error || new Error('Transacción abortada')); };
     var req = tx.objectStore(store).getAll();
     req.onsuccess = function() { resolve(req.result); };
-    req.onerror = reject;
+    req.onerror = function() { reject(req.error); };
   });
 }
 
@@ -180,10 +188,6 @@ function autoZona(prefix) {
   var u = document.getElementById(prefix + '-unidad').value;
   var z = u.length >= 5 ? u.substring(0, 5) : '';
   document.getElementById(prefix + '-zona').value = z;
-}
-
-function formatCoordNW(lat, lon) {
-  return Math.abs(lat).toFixed(5) + (lat >= 0 ? ' N' : ' S') + ', ' + Math.abs(lon).toFixed(5) + (lon >= 0 ? ' E' : ' W');
 }
 
 function latLonToUTM(lat, lon) {
@@ -373,7 +377,7 @@ function busquedaGlobal(val) {
   });
 
   misRegistros().forEach(function(r) {
-    if (r.unidad.toLowerCase().indexOf(lv) >= 0 || r.zona.toLowerCase().indexOf(lv) >= 0) {
+    if ((r.unidad || '').toLowerCase().indexOf(lv) >= 0 || (r.zona || '').toLowerCase().indexOf(lv) >= 0) {
       html += '<div class="search-result" onclick="cerrarBusqueda();editarRegistro(' + r.id + ')"><strong>' + escapeHtml(r.tipo) + ' ' + escapeHtml(r.unidad) + '</strong><small>' + escapeHtml(r.fecha) + ' · ' + escapeHtml(r.operador_nombre || '') + '</small></div>';
     }
   });
@@ -382,7 +386,7 @@ function busquedaGlobal(val) {
   misRegistros().forEach(function(r) {
     if (r.operador_nombre && r.operador_nombre.toLowerCase().indexOf(lv) >= 0 && ops.indexOf(r.operador_nombre) < 0) {
       ops.push(r.operador_nombre);
-      html += '<div class="search-result" onclick="cerrarBusqueda()"><strong>👤 ' + r.operador_nombre + '</strong><small>Operador</small></div>';
+      html += '<div class="search-result" onclick="cerrarBusqueda()"><strong>👤 ' + escapeHtml(r.operador_nombre) + '</strong><small>Operador</small></div>';
     }
   });
 
@@ -422,10 +426,34 @@ function navLightbox(dir) {
 }
 
 function descargarFotoLB() {
-  var a = document.createElement('a');
-  a.href = lightboxFotos[lightboxIdx].src;
-  a.download = (lightboxFotos[lightboxIdx].info || 'foto') + '.jpg';
-  a.click();
+  var foto = lightboxFotos[lightboxIdx];
+  if (!foto) return;
+  var nombre = (foto.info || 'foto') + '.jpg';
+  var src = foto.src;
+  // Si es data URL o blob local, descarga directa
+  if (src.indexOf('data:') === 0 || src.indexOf('blob:') === 0) {
+    var a = document.createElement('a');
+    a.href = src;
+    a.download = nombre;
+    a.click();
+    return;
+  }
+  // URL remota (Cloudinary): el atributo download se ignora por CORS,
+  // así que descargamos el blob primero
+  fetch(src, {mode: 'cors'}).then(function(resp) {
+    if (!resp.ok) throw new Error('No disponible');
+    return resp.blob();
+  }).then(function(blob) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = nombre;
+    a.click();
+    setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+  }).catch(function() {
+    // Fallback: abrir en nueva pestaña
+    window.open(src, '_blank');
+  });
 }
 
 // ============================================================
@@ -466,7 +494,7 @@ function reconstruirContadores() {
         if (!codigo) return;
         var prefijo = subtipo === 'G' ? r.unidad + '_' + codeTipo + '_' : r.unidad + '_' + codeTipo + '_' + subtipo + '_';
         if (codigo.indexOf(prefijo) !== 0) return;
-        var num = parseInt(codigo.substring(prefijo.length));
+        var num = parseInt(codigo.substring(prefijo.length), 10);
         if (isNaN(num)) return;
         var contKey = r.unidad + '_' + codeTipo + '_' + subtipo;
         if (!contadores[contKey] || contadores[contKey] < num) {
@@ -495,11 +523,16 @@ function reconstruirContadores() {
 function limpiarFotosAntiguas() {
   if (!db) return;
   var limite = Date.now() - (5 * 24 * 60 * 60 * 1000);
-  obtenerTodosDB('fotos').then(function(fotos) {
-    fotos.forEach(function(f) {
-      if (f.fecha < limite) eliminarDeDB('fotos', f.codigo);
+  // No borrar thumbnails de fotos que aún estén pendientes de subir
+  obtenerTodosDB('subidas_pendientes').then(function(pendientes) {
+    var pendMap = {};
+    pendientes.forEach(function(p) { pendMap[p.codigo] = true; });
+    return obtenerTodosDB('fotos').then(function(fotos) {
+      fotos.forEach(function(f) {
+        if (f.fecha < limite && !pendMap[f.codigo]) eliminarDeDB('fotos', f.codigo);
+      });
     });
-  });
+  }).catch(function(e) { console.warn('limpiarFotosAntiguas:', e); });
 }
 
 // ============================================================
@@ -810,6 +843,9 @@ function loginExito() {
   if (sesion.token && !sesion.token.startsWith('local_') && navigator.onLine) {
     cargarRegistrosServidor().then(function() {
       actualizarEstado();
+    }).catch(function(e) {
+      console.warn('No se pudieron cargar registros del servidor:', e);
+      actualizarEstado();
     });
   }
 }
@@ -827,15 +863,19 @@ function cerrarSesion() {
   }
   localStorage.removeItem('rapca_sesion');
   sesion = null;
+  window._serverUsers = null;
   document.getElementById('login-overlay').style.display = 'flex';
   showToast('Sesión cerrada', 'info');
 }
 
 function verificarSesion() {
-  var s = localStorage.getItem('rapca_sesion');
-  if (s) {
-    sesion = JSON.parse(s);
+  var sesionGuardada = safeParse('rapca_sesion', null);
+  if (sesionGuardada && sesionGuardada.email) {
+    sesion = sesionGuardada;
     loginExito();
+  } else if (localStorage.getItem('rapca_sesion')) {
+    // Sesión corrupta: limpiar para no bloquear el arranque
+    localStorage.removeItem('rapca_sesion');
   }
 }
 
@@ -981,25 +1021,8 @@ function cargarBorrador(tipo) {
 
 function limpiarBorrador(tipo) { localStorage.removeItem('rapca_borrador_' + tipo.toLowerCase()); }
 
-window.addEventListener('beforeunload', function() {
-  var activePage = document.querySelector('.page.active');
-  if (activePage) {
-    if (activePage.id === 'vp-page') guardarBorrador('VP');
-    if (activePage.id === 'el-page') guardarBorrador('EL');
-    if (activePage.id === 'ei-page') guardarBorrador('EI');
-  }
-});
-
-document.addEventListener('visibilitychange', function() {
-  if (document.visibilityState === 'hidden') {
-    var activePage = document.querySelector('.page.active');
-    if (activePage) {
-      if (activePage.id === 'vp-page') guardarBorrador('VP');
-      if (activePage.id === 'el-page') guardarBorrador('EL');
-      if (activePage.id === 'ei-page') guardarBorrador('EI');
-    }
-  }
-});
+// Nota: los listeners 'beforeunload' y 'visibilitychange' para auto-guardar
+// borradores están centralizados en app.js (versión más completa con guards).
 
 // ============================================================
 // FORMULARIOS VP / EL — Pastoreo + Observacion
@@ -1021,6 +1044,7 @@ function generarPastoreo(containerId, prefix) {
 
 function limpiarPastoreo(btn, punto, prefix) {
   var container = document.getElementById(prefix + '-pastoreo-container');
+  if (!container) return;
   var btns = container.querySelectorAll('.pastoreo-btn[data-punto="' + punto + '"]');
   btns.forEach(function(b) { b.classList.remove('selected'); });
 }
@@ -1037,6 +1061,7 @@ function selPastoreo(btn, prefix) {
 function obtenerPastoreo(prefix) {
   var result = [];
   var container = document.getElementById(prefix + '-pastoreo-container');
+  if (!container) return ['', '', ''];
   for (var p = 1; p <= 3; p++) {
     var sel = container.querySelector('.pastoreo-btn.selected[data-punto="' + p + '"]');
     result.push(sel ? sel.getAttribute('data-val') : '');
@@ -1069,6 +1094,7 @@ function selObs(btn) {
 function obtenerObservacion(prefix) {
   var result = {};
   var container = document.getElementById(prefix + '-obs-container');
+  if (!container) { OBS_CAMPOS.forEach(function(c) { result[c] = ''; }); return result; }
   for (var i = 0; i < OBS_CAMPOS.length; i++) {
     var sel = container.querySelector('.obs-btn.selected[data-campo="' + OBS_CAMPOS[i] + '"]');
     result[OBS_CAMPOS[i]] = sel ? sel.getAttribute('data-val') : '';
@@ -1290,17 +1316,24 @@ function calcMediaHerbaceas() {
 }
 
 function actualizarResumenMatorral() {
-  var c1 = parseFloat(document.getElementById('ev-mat1cob').value) || 0;
-  var c2 = parseFloat(document.getElementById('ev-mat2cob').value) || 0;
-  var a1 = parseFloat(document.getElementById('ev-mat1alt').value) || 0;
-  var a2 = parseFloat(document.getElementById('ev-mat2alt').value) || 0;
+  var e1 = document.getElementById('ev-mat1cob'), e2 = document.getElementById('ev-mat2cob');
+  var e3 = document.getElementById('ev-mat1alt'), e4 = document.getElementById('ev-mat2alt');
+  if (!e1 || !e2 || !e3 || !e4) return;
+  var c1 = parseFloat(e1.value) || 0;
+  var c2 = parseFloat(e2.value) || 0;
+  var a1 = parseFloat(e3.value) || 0;
+  var a2 = parseFloat(e4.value) || 0;
   var mediaCob = (c1 + c2) / 2;
   var mediaAlt = (a1 + a2) / 2;
   var volumen = (mediaCob / 100) * (mediaAlt / 100) * 10000;
-  document.getElementById('ev-mat-cob-media').textContent = mediaCob.toFixed(1);
-  document.getElementById('ev-mat-alt-media').textContent = mediaAlt.toFixed(1);
-  document.getElementById('ev-mat-volumen').textContent = volumen.toFixed(2) + ' m\u00B3/ha';
-  document.getElementById('ev-mat-resultado').style.display = 'block';
+  var elCob = document.getElementById('ev-mat-cob-media');
+  var elAlt = document.getElementById('ev-mat-alt-media');
+  var elVol = document.getElementById('ev-mat-volumen');
+  var elRes = document.getElementById('ev-mat-resultado');
+  if (elCob) elCob.textContent = mediaCob.toFixed(1);
+  if (elAlt) elAlt.textContent = mediaAlt.toFixed(1);
+  if (elVol) elVol.textContent = volumen.toFixed(2) + ' m\u00B3/ha';
+  if (elRes) elRes.style.display = 'block';
 }
 
 // --- Autocomplete especies ---
@@ -1391,6 +1424,7 @@ function limpiarFormEI() {
 // GUARDAR REGISTROS VP / EL / EI
 // ============================================================
 function guardarVP() {
+  if (!sesion) { showToast('Sesión no válida. Vuelve a iniciar sesión.', 'error'); return; }
   var fecha = document.getElementById('vp-fecha').value;
   var unidad = document.getElementById('vp-unidad').value.trim();
   var zona = document.getElementById('vp-zona').value;
@@ -1445,6 +1479,7 @@ function guardarVP() {
 }
 
 function guardarEL() {
+  if (!sesion) { showToast('Sesión no válida. Vuelve a iniciar sesión.', 'error'); return; }
   var fecha = document.getElementById('el-fecha').value;
   var unidad = document.getElementById('el-unidad').value.trim();
   var zona = document.getElementById('el-zona').value;
@@ -1615,6 +1650,7 @@ function restaurarDatosEI(datos) {
 }
 
 function guardarEI() {
+  if (!sesion) { showToast('Sesión no válida. Vuelve a iniciar sesión.', 'error'); return; }
   var fecha = document.getElementById('ev-fecha').value;
   var unidad = document.getElementById('ev-unidad').value.trim();
   var zona = document.getElementById('ev-zona').value;
@@ -1803,6 +1839,12 @@ function cerrarCamara() {
     camaraStream = null;
   }
   imageCaptureObj = null;
+  // Quitar listeners de orientación para evitar fugas
+  if (window._compassHandler) {
+    window.removeEventListener('deviceorientationabsolute', window._compassHandler, true);
+    window.removeEventListener('deviceorientation', window._compassHandler, true);
+    window._compassHandler = null;
+  }
   document.getElementById('camera-modal').classList.remove('open');
   if (miniMapaCamera) { miniMapaCamera.remove(); miniMapaCamera = null; }
   // Limpiar ghost
@@ -1821,6 +1863,7 @@ function cerrarCamara() {
 }
 
 function switchCamara() {
+  var anterior = camaraFacing;
   camaraFacing = camaraFacing === 'environment' ? 'user' : 'environment';
   if (camaraStream) {
     camaraStream.getTracks().forEach(function(t) { t.stop(); });
@@ -1833,6 +1876,21 @@ function switchCamara() {
     crearImageCapture(stream);
     iniciarTapToFocus();
     iniciarExposureSlide();
+  }).catch(function(err) {
+    // Restaurar la cámara anterior si el cambio falla (p.ej. solo hay una cámara)
+    camaraFacing = anterior;
+    var fallback = {video: {facingMode: camaraFacing, width: {ideal: 1920}, height: {ideal: 1080}}, audio: false};
+    navigator.mediaDevices.getUserMedia(fallback).then(function(stream) {
+      camaraStream = stream;
+      document.getElementById('camera-video').srcObject = stream;
+      configurarCamaraInicial(stream);
+      crearImageCapture(stream);
+      iniciarTapToFocus();
+      iniciarExposureSlide();
+      showToast('No se pudo cambiar de cámara', 'info');
+    }).catch(function() {
+      showToast('Error al acceder a la cámara', 'error');
+    });
   });
 }
 
@@ -2153,13 +2211,19 @@ function iniciarOverlayCamara() {
     tipoCoordenadas: 'utm', mostrarMunicipio: false
   };
 
-  // Brújula
+  // Brújula — limpiar handler previo para no acumular listeners
+  if (window._compassHandler) {
+    window.removeEventListener('deviceorientationabsolute', window._compassHandler, true);
+    window.removeEventListener('deviceorientation', window._compassHandler, true);
+  }
   var handler = function(e) {
     compassHeading = e.alpha ? Math.round(e.alpha) : 0;
     var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
     var dir = dirs[Math.floor((compassHeading + 22.5) / 45) % 8];
-    document.getElementById('cam-compass').textContent = dir + ' ' + compassHeading + '°';
+    var el = document.getElementById('cam-compass');
+    if (el) el.textContent = dir + ' ' + compassHeading + '°';
   };
+  window._compassHandler = handler;
   if (window.DeviceOrientationEvent) {
     window.addEventListener('deviceorientationabsolute', handler, true);
     window.addEventListener('deviceorientation', handler, true);
@@ -2690,28 +2754,21 @@ function cargarGhostFoto(tipo, subtipo) {
 
 function buscarGhostEnPrecargadas(unidad, subtipo, callback) {
   if (!db) return;
-  try {
-    var tx = db.transaction('fotos_precargadas', 'readonly');
-    var store = tx.objectStore('fotos_precargadas');
-    var index = store.index('unidad');
-    var req = index.getAll(unidad);
-    req.onsuccess = function() {
-      var fotos = req.result || [];
-      // Filtrar por waypoint (W1/W2)
-      var matches = fotos.filter(function(f) {
-        return f.waypoint === subtipo;
-      }).sort(function(a, b) {
-        // Más reciente primero
-        return (b.fecha || '').localeCompare(a.fecha || '');
-      });
+  // El store 'fotos_precargadas' no tiene índice 'unidad', así que filtramos en memoria
+  obtenerTodosDB('fotos_precargadas').then(function(fotos) {
+    var matches = (fotos || []).filter(function(f) {
+      return f.unidad === unidad && f.waypoint === subtipo;
+    }).sort(function(a, b) {
+      // Más reciente primero
+      return (b.fecha || '').localeCompare(a.fecha || '');
+    });
 
-      if (matches.length > 0 && matches[0].data) {
-        callback(matches[0].data);
-      }
-    };
-  } catch(e) {
+    if (matches.length > 0 && matches[0].data) {
+      callback(matches[0].data);
+    }
+  }).catch(function(e) {
     console.warn('Error buscando ghost en precargadas:', e);
-  }
+  });
 }
 
 function toggleGhost() {
@@ -3120,13 +3177,6 @@ function aceptarFoto() {
   }).catch(function(err) {
     console.error('Error guardando foto:', err);
     showToast('Error al guardar foto: ' + (err.message || err), 'error');
-  });
-}
-
-function actualizarContadorFotos() {
-  if (!db) return;
-  obtenerTodosDB('subidas_pendientes').then(function(items) {
-    document.getElementById('menu-pending-fotos').textContent = items.length;
   });
 }
 
@@ -6897,8 +6947,8 @@ function renderAdmin() {
   var lista = document.getElementById('admin-users-list');
   lista.innerHTML = usuarios.map(function(u, i) {
     return '<div class="card admin-user-card">' +
-      '<div class="user-info"><h3>' + u.nombre + ' <span class="badge" style="background:' + (u.rol === 'admin' ? '#333' : 'var(--c-secondary)') + '">' + u.rol + '</span></h3>' +
-      '<small>' + u.email + ' · ' + (u.activo ? 'Activo' : 'Inactivo') + '</small></div>' +
+      '<div class="user-info"><h3>' + escapeHtml(u.nombre) + ' <span class="badge" style="background:' + (u.rol === 'admin' ? '#333' : 'var(--c-secondary)') + '">' + escapeHtml(u.rol) + '</span></h3>' +
+      '<small>' + escapeHtml(u.email) + ' · ' + (u.activo ? 'Activo' : 'Inactivo') + '</small></div>' +
       '<div class="admin-user-actions">' +
       '<button class="btn btn-sm btn-outline" onclick="toggleUsuario(' + i + ')">' + (u.activo ? '⏸' : '▶') + '</button>' +
       '<button class="btn btn-sm btn-outline" onclick="cambiarPassUsuario(' + i + ')">🔑</button>' +
@@ -6941,17 +6991,18 @@ async function cargarUsuariosServidor() {
       var lista = document.getElementById('admin-users-list');
       window._serverUsers = data.usuarios;
       if (data.usuarios.length > 0) {
-        lista.innerHTML = '<h3 style="margin:10px 0 5px;color:var(--c-primary)">Usuarios en servidor (' + data.usuarios.length + ')</h3>';
+        var html = '<h3 style="margin:10px 0 5px;color:var(--c-primary)">Usuarios en servidor (' + data.usuarios.length + ')</h3>';
         data.usuarios.forEach(function(u, idx) {
-          lista.innerHTML += '<div class="card admin-user-card">' +
-            '<div class="user-info"><h3>' + u.nombre + ' <span class="badge" style="background:' + (u.rol === 'admin' ? '#333' : 'var(--c-secondary)') + '">' + u.rol + '</span></h3>' +
-            '<small>' + u.email + ' · ' + (u.activo ? 'Activo' : 'Inactivo') + ' · Servidor</small></div>' +
+          html += '<div class="card admin-user-card">' +
+            '<div class="user-info"><h3>' + escapeHtml(u.nombre) + ' <span class="badge" style="background:' + (u.rol === 'admin' ? '#333' : 'var(--c-secondary)') + '">' + escapeHtml(u.rol) + '</span></h3>' +
+            '<small>' + escapeHtml(u.email) + ' · ' + (u.activo ? 'Activo' : 'Inactivo') + ' · Servidor</small></div>' +
             '<div class="admin-user-actions">' +
             '<button class="btn btn-sm btn-outline" onclick="editarUsuarioServidor(' + idx + ')">✏️</button>' +
             '<button class="btn btn-sm btn-outline" onclick="toggleUsuarioServidor(' + u.id + ')">' + (u.activo ? '⏸' : '▶') + '</button>' +
-            '<button class="btn btn-sm btn-danger" onclick="eliminarUsuarioServidor(' + u.id + ', \'' + u.email.replace(/'/g, "\\'") + '\')">🗑️</button>' +
+            '<button class="btn btn-sm btn-danger" onclick="eliminarUsuarioServidor(' + u.id + ', \'' + String(u.email).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')">🗑️</button>' +
             '</div></div>';
         });
+        lista.innerHTML = html;
       }
     }
   } catch(e) {
@@ -7038,8 +7089,13 @@ async function asegurarTokenServidor() {
     html += '<p style="color:#666;margin-bottom:15px">Para crear usuarios en el servidor, necesitas autenticarte con tu contraseña de admin.</p>';
     html += '<div class="form-group"><label>Email</label><input type="email" id="reauth-email" value="' + (sesion ? sesion.email : '') + '" readonly></div>';
     html += '<div class="form-group"><label>Contraseña</label><input type="password" id="reauth-pass" placeholder="Contraseña del servidor"></div>';
-    html += '<div class="modal-actions"><button class="btn btn-primary" id="reauth-btn">Autenticar</button><button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button></div>';
+    html += '<div class="modal-actions"><button class="btn btn-primary" id="reauth-btn">Autenticar</button><button class="btn btn-outline" id="reauth-cancel">Cancelar</button></div>';
     abrirModal(html);
+
+    document.getElementById('reauth-cancel').onclick = function() {
+      cerrarModal();
+      resolve(false);
+    };
 
     document.getElementById('reauth-btn').onclick = async function() {
       var passInput = document.getElementById('reauth-pass').value;
@@ -7075,6 +7131,7 @@ async function asegurarTokenServidor() {
 function toggleUsuario(idx) {
   if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
   var usuarios = safeParse('rapca_usuarios_local', []);
+  if (!usuarios[idx]) { showToast('Usuario no encontrado', 'error'); return; }
   usuarios[idx].activo = !usuarios[idx].activo;
   localStorage.setItem('rapca_usuarios_local', JSON.stringify(usuarios));
   renderAdmin();
@@ -7082,9 +7139,10 @@ function toggleUsuario(idx) {
 
 function cambiarPassUsuario(idx) {
   if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
+  var usuarios = safeParse('rapca_usuarios_local', []);
+  if (!usuarios[idx]) { showToast('Usuario no encontrado', 'error'); return; }
   var pass = prompt('Nueva contraseña (mín 8 caracteres):');
   if (!pass || pass.length < 8) { showToast('Contraseña inválida', 'error'); return; }
-  var usuarios = safeParse('rapca_usuarios_local', []);
   usuarios[idx].passHash = simpleHash(pass);
   localStorage.setItem('rapca_usuarios_local', JSON.stringify(usuarios));
   showToast('Contraseña actualizada', 'success');
@@ -7092,8 +7150,9 @@ function cambiarPassUsuario(idx) {
 
 function eliminarUsuario(idx) {
   if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
-  if (!confirm('¿Eliminar usuario?')) return;
   var usuarios = safeParse('rapca_usuarios_local', []);
+  if (!usuarios[idx]) { showToast('Usuario no encontrado', 'error'); return; }
+  if (!confirm('¿Eliminar usuario?')) return;
   usuarios.splice(idx, 1);
   localStorage.setItem('rapca_usuarios_local', JSON.stringify(usuarios));
   renderAdmin();
@@ -7107,8 +7166,8 @@ function editarUsuarioServidor(idx) {
   var u = window._serverUsers[idx];
   if (!u) return;
   var html = '<h2>Editar Usuario</h2>';
-  html += '<div class="form-group"><label>Nombre</label><input type="text" id="edit-user-nombre" value="' + (u.nombre || '') + '"></div>';
-  html += '<div class="form-group"><label>Email</label><input type="email" id="edit-user-email" value="' + (u.email || '') + '"></div>';
+  html += '<div class="form-group"><label>Nombre</label><input type="text" id="edit-user-nombre" value="' + escapeHtml(u.nombre || '') + '"></div>';
+  html += '<div class="form-group"><label>Email</label><input type="email" id="edit-user-email" value="' + escapeHtml(u.email || '') + '"></div>';
   html += '<div class="form-group"><label>Nueva contraseña (dejar vacío para no cambiar)</label><input type="password" id="edit-user-pass" placeholder="Mín. 8 caracteres"></div>';
   html += '<div class="modal-actions"><button class="btn btn-primary" onclick="guardarEdicionUsuario(' + u.id + ')">Guardar</button><button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button></div>';
   abrirModal(html);
@@ -8154,12 +8213,16 @@ function renderDashboard() {
   // Obtener zonas, provincias, municipios, PNs, operadores para filtros
   var zonas = [], provincias = [], municipios = [], pns = [], operadores = [];
   infras.forEach(function(inf) {
-    if (inf.idZona && zonas.indexOf(inf.idZona) < 0) zonas.push(inf.idZona);
     if (inf.provincia && provincias.indexOf(inf.provincia) < 0) provincias.push(inf.provincia);
     if (inf.municipio && municipios.indexOf(inf.municipio) < 0) municipios.push(inf.municipio);
     if (inf.pn && pns.indexOf(inf.pn) < 0) pns.push(inf.pn);
   });
-  regs.forEach(function(r) { if (r.operador_nombre && operadores.indexOf(r.operador_nombre) < 0) operadores.push(r.operador_nombre); });
+  // Zonas y operadores desde los registros (el filtro compara r.zona / r.operador_nombre)
+  regs.forEach(function(r) {
+    if (r.zona && zonas.indexOf(r.zona) < 0) zonas.push(r.zona);
+    if (r.operador_nombre && operadores.indexOf(r.operador_nombre) < 0) operadores.push(r.operador_nombre);
+  });
+  zonas.sort();
 
   var html = '';
 
@@ -8175,11 +8238,11 @@ function renderDashboard() {
 
   // Filtros
   html += '<div class="dash-filters">';
-  html += '<select id="dash-f-zona" onchange="filtrarDashboard()"><option value="">Zona</option>' + zonas.map(function(z) { return '<option>' + z + '</option>'; }).join('') + '</select>';
-  html += '<select id="dash-f-provincia" onchange="filtrarDashboard()"><option value="">Provincia</option>' + provincias.map(function(p) { return '<option>' + p + '</option>'; }).join('') + '</select>';
-  html += '<select id="dash-f-municipio" onchange="filtrarDashboard()"><option value="">Municipio</option>' + municipios.map(function(m) { return '<option>' + m + '</option>'; }).join('') + '</select>';
-  html += '<select id="dash-f-pn" onchange="filtrarDashboard()"><option value="">PN</option>' + pns.map(function(p) { return '<option>' + p + '</option>'; }).join('') + '</select>';
-  html += '<select id="dash-f-operador" onchange="filtrarDashboard()"><option value="">Operador</option>' + operadores.map(function(o) { return '<option>' + o + '</option>'; }).join('') + '</select>';
+  html += '<select id="dash-f-zona" onchange="filtrarDashboard()"><option value="">Zona</option>' + zonas.map(function(z) { return '<option value="' + escapeHtml(z) + '">' + escapeHtml(z) + '</option>'; }).join('') + '</select>';
+  html += '<select id="dash-f-provincia" onchange="filtrarDashboard()"><option value="">Provincia</option>' + provincias.map(function(p) { return '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>'; }).join('') + '</select>';
+  html += '<select id="dash-f-municipio" onchange="filtrarDashboard()"><option value="">Municipio</option>' + municipios.map(function(m) { return '<option value="' + escapeHtml(m) + '">' + escapeHtml(m) + '</option>'; }).join('') + '</select>';
+  html += '<select id="dash-f-pn" onchange="filtrarDashboard()"><option value="">PN</option>' + pns.map(function(p) { return '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>'; }).join('') + '</select>';
+  html += '<select id="dash-f-operador" onchange="filtrarDashboard()"><option value="">Operador</option>' + operadores.map(function(o) { return '<option value="' + escapeHtml(o) + '">' + escapeHtml(o) + '</option>'; }).join('') + '</select>';
   html += '</div>';
 
   // Charts
@@ -8212,7 +8275,8 @@ function renderDashCharts(regs) {
   for (var d = 29; d >= 0; d--) {
     var fecha = new Date(hoy);
     fecha.setDate(fecha.getDate() - d);
-    var fechaStr = fecha.toISOString().split('T')[0];
+    // Fecha en local (no UTC) para que coincida con r.fecha del <input type="date">
+    var fechaStr = fecha.getFullYear() + '-' + ('0' + (fecha.getMonth() + 1)).slice(-2) + '-' + ('0' + fecha.getDate()).slice(-2);
     labels.push(fecha.getDate() + '/' + (fecha.getMonth() + 1));
     vpData.push(regs.filter(function(r) { return r.fecha === fechaStr && r.tipo === 'VP'; }).length);
     elData.push(regs.filter(function(r) { return r.fecha === fechaStr && r.tipo === 'EL'; }).length);
@@ -8373,12 +8437,12 @@ function filtrarTimeline() {
 
     // Thumbnails de fotos (generales + comparativas)
     var todosCodigosFotos = [];
-    if (r.datos.fotos) {
+    if (r.datos && r.datos.fotos) {
       r.datos.fotos.split(',').map(function(s) { return s.trim(); }).filter(Boolean).forEach(function(cod) {
         todosCodigosFotos.push(cod);
       });
     }
-    if (r.datos.fotosComp && Array.isArray(r.datos.fotosComp)) {
+    if (r.datos && r.datos.fotosComp && Array.isArray(r.datos.fotosComp)) {
       r.datos.fotosComp.forEach(function(fc) {
         if (fc.numero) todosCodigosFotos.push(fc.numero);
       });
@@ -8425,7 +8489,7 @@ function tlConfirmarEliminar(id) {
 
   // Recopilar fotos del registro para eliminarlas también
   var r = registros.find(function(r) { return r.id == id; });
-  if (r) {
+  if (r && r.datos) {
     var codigosFotos = [];
     if (r.datos.fotos && typeof r.datos.fotos === 'string') {
       r.datos.fotos.split(',').map(function(f) { return f.trim(); }).filter(Boolean).forEach(function(cod) {
@@ -8700,14 +8764,14 @@ function compModoSlider() {
     promesas.push(buscarFotoData(foto1.codigo, foto1.tipo, unidad).then(function(data) {
       var el = document.getElementById('comp-img-before');
       if (el && data) el.src = data;
-      else if (el) display.innerHTML += '<p style="color:#e74c3c;font-size:12px;margin-top:4px">Foto "antes" no disponible</p>';
+      else if (el) display.insertAdjacentHTML('beforeend', '<p style="color:#e74c3c;font-size:12px;margin-top:4px">Foto "antes" no disponible</p>');
     }));
   }
   if (foto2) {
     promesas.push(buscarFotoData(foto2.codigo, foto2.tipo, unidad).then(function(data) {
       var el = document.getElementById('comp-img-after');
       if (el && data) el.src = data;
-      else if (el) display.innerHTML += '<p style="color:#e74c3c;font-size:12px;margin-top:4px">Foto "después" no disponible</p>';
+      else if (el) display.insertAdjacentHTML('beforeend', '<p style="color:#e74c3c;font-size:12px;margin-top:4px">Foto "después" no disponible</p>');
     }));
   }
 
@@ -8865,6 +8929,7 @@ function filtrarGaleria() {
   // Recopilar fotos
   var fotos = [];
   regs.forEach(function(r) {
+    if (!r.datos) return;
     if (galTab === 'comparativas') {
       if (r.datos.fotosComp) {
         r.datos.fotosComp.forEach(function(fc) {
@@ -9043,9 +9108,16 @@ function galCompararSel() {
   wrap.querySelector('.comp-slider-handle').addEventListener('mousedown', function() { dragging = true; });
   wrap.addEventListener('touchmove', function(e) { if (dragging) updateSlider(e.touches[0].clientX); });
   wrap.addEventListener('mousemove', function(e) { if (dragging) updateSlider(e.clientX); });
-  document.addEventListener('touchend', function() { dragging = false; });
-  document.addEventListener('mouseup', function() { dragging = false; });
   wrap.addEventListener('click', function(e) { updateSlider(e.clientX); });
+
+  // Listeners de fin de arrastre a nivel document: limpiar el anterior para no acumular
+  if (window._galCompEndDrag) {
+    document.removeEventListener('touchend', window._galCompEndDrag);
+    document.removeEventListener('mouseup', window._galCompEndDrag);
+  }
+  window._galCompEndDrag = function() { dragging = false; };
+  document.addEventListener('touchend', window._galCompEndDrag);
+  document.addEventListener('mouseup', window._galCompEndDrag);
 
   galSeleccionadas = [];
 }
@@ -9130,6 +9202,7 @@ function eliminarFotosDeCodigos(codigos) {
   // Recopilar info de tipo/unidad para cada código antes de borrar
   var fotosInfo = [];
   registros.forEach(function(r) {
+    if (!r.datos) return;
     if (r.datos.fotos && typeof r.datos.fotos === 'string') {
       r.datos.fotos.split(',').map(function(f) { return f.trim(); }).filter(Boolean).forEach(function(cod) {
         if (codigos.indexOf(cod) >= 0) {
@@ -9148,6 +9221,7 @@ function eliminarFotosDeCodigos(codigos) {
 
   // 1. Eliminar de los registros locales
   registros.forEach(function(r) {
+    if (!r.datos) return;
     // Fotos generales (string separado por comas)
     if (r.datos.fotos && typeof r.datos.fotos === 'string') {
       var lista = r.datos.fotos.split(',').map(function(f) { return f.trim(); }).filter(function(f) { return f; });
@@ -9238,6 +9312,7 @@ async function galDescargarTodas() {
 
   var codigos = [];
   regs.forEach(function(r) {
+    if (!r.datos) return;
     if (r.datos.fotos) {
       r.datos.fotos.split(',').forEach(function(f) {
         var cod = f.trim();

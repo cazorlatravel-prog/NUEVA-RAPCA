@@ -20,12 +20,16 @@ function renderDashboard() {
   // Obtener zonas, provincias, municipios, PNs, operadores para filtros
   var zonas = [], provincias = [], municipios = [], pns = [], operadores = [];
   infras.forEach(function(inf) {
-    if (inf.idZona && zonas.indexOf(inf.idZona) < 0) zonas.push(inf.idZona);
     if (inf.provincia && provincias.indexOf(inf.provincia) < 0) provincias.push(inf.provincia);
     if (inf.municipio && municipios.indexOf(inf.municipio) < 0) municipios.push(inf.municipio);
     if (inf.pn && pns.indexOf(inf.pn) < 0) pns.push(inf.pn);
   });
-  regs.forEach(function(r) { if (r.operador_nombre && operadores.indexOf(r.operador_nombre) < 0) operadores.push(r.operador_nombre); });
+  // Zonas y operadores desde los registros (el filtro compara r.zona / r.operador_nombre)
+  regs.forEach(function(r) {
+    if (r.zona && zonas.indexOf(r.zona) < 0) zonas.push(r.zona);
+    if (r.operador_nombre && operadores.indexOf(r.operador_nombre) < 0) operadores.push(r.operador_nombre);
+  });
+  zonas.sort();
 
   var html = '';
 
@@ -41,11 +45,11 @@ function renderDashboard() {
 
   // Filtros
   html += '<div class="dash-filters">';
-  html += '<select id="dash-f-zona" onchange="filtrarDashboard()"><option value="">Zona</option>' + zonas.map(function(z) { return '<option>' + z + '</option>'; }).join('') + '</select>';
-  html += '<select id="dash-f-provincia" onchange="filtrarDashboard()"><option value="">Provincia</option>' + provincias.map(function(p) { return '<option>' + p + '</option>'; }).join('') + '</select>';
-  html += '<select id="dash-f-municipio" onchange="filtrarDashboard()"><option value="">Municipio</option>' + municipios.map(function(m) { return '<option>' + m + '</option>'; }).join('') + '</select>';
-  html += '<select id="dash-f-pn" onchange="filtrarDashboard()"><option value="">PN</option>' + pns.map(function(p) { return '<option>' + p + '</option>'; }).join('') + '</select>';
-  html += '<select id="dash-f-operador" onchange="filtrarDashboard()"><option value="">Operador</option>' + operadores.map(function(o) { return '<option>' + o + '</option>'; }).join('') + '</select>';
+  html += '<select id="dash-f-zona" onchange="filtrarDashboard()"><option value="">Zona</option>' + zonas.map(function(z) { return '<option value="' + escapeHtml(z) + '">' + escapeHtml(z) + '</option>'; }).join('') + '</select>';
+  html += '<select id="dash-f-provincia" onchange="filtrarDashboard()"><option value="">Provincia</option>' + provincias.map(function(p) { return '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>'; }).join('') + '</select>';
+  html += '<select id="dash-f-municipio" onchange="filtrarDashboard()"><option value="">Municipio</option>' + municipios.map(function(m) { return '<option value="' + escapeHtml(m) + '">' + escapeHtml(m) + '</option>'; }).join('') + '</select>';
+  html += '<select id="dash-f-pn" onchange="filtrarDashboard()"><option value="">PN</option>' + pns.map(function(p) { return '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>'; }).join('') + '</select>';
+  html += '<select id="dash-f-operador" onchange="filtrarDashboard()"><option value="">Operador</option>' + operadores.map(function(o) { return '<option value="' + escapeHtml(o) + '">' + escapeHtml(o) + '</option>'; }).join('') + '</select>';
   html += '</div>';
 
   // Charts
@@ -78,7 +82,8 @@ function renderDashCharts(regs) {
   for (var d = 29; d >= 0; d--) {
     var fecha = new Date(hoy);
     fecha.setDate(fecha.getDate() - d);
-    var fechaStr = fecha.toISOString().split('T')[0];
+    // Fecha en local (no UTC) para que coincida con r.fecha del <input type="date">
+    var fechaStr = fecha.getFullYear() + '-' + ('0' + (fecha.getMonth() + 1)).slice(-2) + '-' + ('0' + fecha.getDate()).slice(-2);
     labels.push(fecha.getDate() + '/' + (fecha.getMonth() + 1));
     vpData.push(regs.filter(function(r) { return r.fecha === fechaStr && r.tipo === 'VP'; }).length);
     elData.push(regs.filter(function(r) { return r.fecha === fechaStr && r.tipo === 'EL'; }).length);

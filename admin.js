@@ -122,8 +122,8 @@ function renderAdmin() {
   var lista = document.getElementById('admin-users-list');
   lista.innerHTML = usuarios.map(function(u, i) {
     return '<div class="card admin-user-card">' +
-      '<div class="user-info"><h3>' + u.nombre + ' <span class="badge" style="background:' + (u.rol === 'admin' ? '#333' : 'var(--c-secondary)') + '">' + u.rol + '</span></h3>' +
-      '<small>' + u.email + ' · ' + (u.activo ? 'Activo' : 'Inactivo') + '</small></div>' +
+      '<div class="user-info"><h3>' + escapeHtml(u.nombre) + ' <span class="badge" style="background:' + (u.rol === 'admin' ? '#333' : 'var(--c-secondary)') + '">' + escapeHtml(u.rol) + '</span></h3>' +
+      '<small>' + escapeHtml(u.email) + ' · ' + (u.activo ? 'Activo' : 'Inactivo') + '</small></div>' +
       '<div class="admin-user-actions">' +
       '<button class="btn btn-sm btn-outline" onclick="toggleUsuario(' + i + ')">' + (u.activo ? '⏸' : '▶') + '</button>' +
       '<button class="btn btn-sm btn-outline" onclick="cambiarPassUsuario(' + i + ')">🔑</button>' +
@@ -166,17 +166,18 @@ async function cargarUsuariosServidor() {
       var lista = document.getElementById('admin-users-list');
       window._serverUsers = data.usuarios;
       if (data.usuarios.length > 0) {
-        lista.innerHTML = '<h3 style="margin:10px 0 5px;color:var(--c-primary)">Usuarios en servidor (' + data.usuarios.length + ')</h3>';
+        var html = '<h3 style="margin:10px 0 5px;color:var(--c-primary)">Usuarios en servidor (' + data.usuarios.length + ')</h3>';
         data.usuarios.forEach(function(u, idx) {
-          lista.innerHTML += '<div class="card admin-user-card">' +
-            '<div class="user-info"><h3>' + u.nombre + ' <span class="badge" style="background:' + (u.rol === 'admin' ? '#333' : 'var(--c-secondary)') + '">' + u.rol + '</span></h3>' +
-            '<small>' + u.email + ' · ' + (u.activo ? 'Activo' : 'Inactivo') + ' · Servidor</small></div>' +
+          html += '<div class="card admin-user-card">' +
+            '<div class="user-info"><h3>' + escapeHtml(u.nombre) + ' <span class="badge" style="background:' + (u.rol === 'admin' ? '#333' : 'var(--c-secondary)') + '">' + escapeHtml(u.rol) + '</span></h3>' +
+            '<small>' + escapeHtml(u.email) + ' · ' + (u.activo ? 'Activo' : 'Inactivo') + ' · Servidor</small></div>' +
             '<div class="admin-user-actions">' +
             '<button class="btn btn-sm btn-outline" onclick="editarUsuarioServidor(' + idx + ')">✏️</button>' +
             '<button class="btn btn-sm btn-outline" onclick="toggleUsuarioServidor(' + u.id + ')">' + (u.activo ? '⏸' : '▶') + '</button>' +
-            '<button class="btn btn-sm btn-danger" onclick="eliminarUsuarioServidor(' + u.id + ', \'' + u.email.replace(/'/g, "\\'") + '\')">🗑️</button>' +
+            '<button class="btn btn-sm btn-danger" onclick="eliminarUsuarioServidor(' + u.id + ', \'' + String(u.email).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')">🗑️</button>' +
             '</div></div>';
         });
+        lista.innerHTML = html;
       }
     }
   } catch(e) {
@@ -263,8 +264,13 @@ async function asegurarTokenServidor() {
     html += '<p style="color:#666;margin-bottom:15px">Para crear usuarios en el servidor, necesitas autenticarte con tu contraseña de admin.</p>';
     html += '<div class="form-group"><label>Email</label><input type="email" id="reauth-email" value="' + (sesion ? sesion.email : '') + '" readonly></div>';
     html += '<div class="form-group"><label>Contraseña</label><input type="password" id="reauth-pass" placeholder="Contraseña del servidor"></div>';
-    html += '<div class="modal-actions"><button class="btn btn-primary" id="reauth-btn">Autenticar</button><button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button></div>';
+    html += '<div class="modal-actions"><button class="btn btn-primary" id="reauth-btn">Autenticar</button><button class="btn btn-outline" id="reauth-cancel">Cancelar</button></div>';
     abrirModal(html);
+
+    document.getElementById('reauth-cancel').onclick = function() {
+      cerrarModal();
+      resolve(false);
+    };
 
     document.getElementById('reauth-btn').onclick = async function() {
       var passInput = document.getElementById('reauth-pass').value;
@@ -300,6 +306,7 @@ async function asegurarTokenServidor() {
 function toggleUsuario(idx) {
   if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
   var usuarios = safeParse('rapca_usuarios_local', []);
+  if (!usuarios[idx]) { showToast('Usuario no encontrado', 'error'); return; }
   usuarios[idx].activo = !usuarios[idx].activo;
   localStorage.setItem('rapca_usuarios_local', JSON.stringify(usuarios));
   renderAdmin();
@@ -307,9 +314,10 @@ function toggleUsuario(idx) {
 
 function cambiarPassUsuario(idx) {
   if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
+  var usuarios = safeParse('rapca_usuarios_local', []);
+  if (!usuarios[idx]) { showToast('Usuario no encontrado', 'error'); return; }
   var pass = prompt('Nueva contraseña (mín 8 caracteres):');
   if (!pass || pass.length < 8) { showToast('Contraseña inválida', 'error'); return; }
-  var usuarios = safeParse('rapca_usuarios_local', []);
   usuarios[idx].passHash = simpleHash(pass);
   localStorage.setItem('rapca_usuarios_local', JSON.stringify(usuarios));
   showToast('Contraseña actualizada', 'success');
@@ -317,8 +325,9 @@ function cambiarPassUsuario(idx) {
 
 function eliminarUsuario(idx) {
   if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
-  if (!confirm('¿Eliminar usuario?')) return;
   var usuarios = safeParse('rapca_usuarios_local', []);
+  if (!usuarios[idx]) { showToast('Usuario no encontrado', 'error'); return; }
+  if (!confirm('¿Eliminar usuario?')) return;
   usuarios.splice(idx, 1);
   localStorage.setItem('rapca_usuarios_local', JSON.stringify(usuarios));
   renderAdmin();
@@ -332,8 +341,8 @@ function editarUsuarioServidor(idx) {
   var u = window._serverUsers[idx];
   if (!u) return;
   var html = '<h2>Editar Usuario</h2>';
-  html += '<div class="form-group"><label>Nombre</label><input type="text" id="edit-user-nombre" value="' + (u.nombre || '') + '"></div>';
-  html += '<div class="form-group"><label>Email</label><input type="email" id="edit-user-email" value="' + (u.email || '') + '"></div>';
+  html += '<div class="form-group"><label>Nombre</label><input type="text" id="edit-user-nombre" value="' + escapeHtml(u.nombre || '') + '"></div>';
+  html += '<div class="form-group"><label>Email</label><input type="email" id="edit-user-email" value="' + escapeHtml(u.email || '') + '"></div>';
   html += '<div class="form-group"><label>Nueva contraseña (dejar vacío para no cambiar)</label><input type="password" id="edit-user-pass" placeholder="Mín. 8 caracteres"></div>';
   html += '<div class="modal-actions"><button class="btn btn-primary" onclick="guardarEdicionUsuario(' + u.id + ')">Guardar</button><button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button></div>';
   abrirModal(html);

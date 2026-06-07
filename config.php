@@ -91,6 +91,8 @@ function getDB() {
 function setCORS() {
     $origins = unserialize(CORS_ORIGINS);
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    // Vary: Origin para evitar que caches sirvan ACAO de un origen a otro
+    header('Vary: Origin');
     if (in_array($origin, $origins)) {
         header("Access-Control-Allow-Origin: $origin");
         header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
@@ -108,31 +110,49 @@ function setCORS() {
     }
 }
 
-// Rate limiting basado en archivos
+// Rate limiting basado en archivos (con bloqueo atómico para evitar race conditions)
 function checkRateLimit($key) {
     if (!is_dir(RATE_LIMIT_DIR)) {
         mkdir(RATE_LIMIT_DIR, 0755, true);
     }
     $file = RATE_LIMIT_DIR . '/' . md5($key) . '.json';
     $now = time();
+
+    // Abrir/crear el archivo y bloquearlo en exclusiva durante lectura+escritura
+    $fp = @fopen($file, 'c+');
+    if ($fp === false) {
+        // Si no se puede abrir, no bloquear la petición (fail-open)
+        return true;
+    }
+    if (!flock($fp, LOCK_EX)) {
+        fclose($fp);
+        return true;
+    }
+
+    $contenido = stream_get_contents($fp);
     $attempts = [];
-
-    if (file_exists($file)) {
-        $data = json_decode(file_get_contents($file), true);
-        if (is_array($data)) {
-            $attempts = array_filter($data, function($t) use ($now) {
-                return ($now - $t) < RATE_LIMIT_WINDOW;
-            });
-        }
+    $data = json_decode($contenido, true);
+    if (is_array($data)) {
+        $attempts = array_filter($data, function($t) use ($now) {
+            return is_numeric($t) && ($now - $t) < RATE_LIMIT_WINDOW;
+        });
     }
 
+    $permitido = true;
     if (count($attempts) >= RATE_LIMIT_MAX) {
-        return false;
+        $permitido = false;
+    } else {
+        $attempts[] = $now;
+        // Reescribir el archivo de forma atómica bajo el lock
+        rewind($fp);
+        ftruncate($fp, 0);
+        fwrite($fp, json_encode(array_values($attempts)));
+        fflush($fp);
     }
 
-    $attempts[] = $now;
-    file_put_contents($file, json_encode(array_values($attempts)));
-    return true;
+    flock($fp, LOCK_UN);
+    fclose($fp);
+    return $permitido;
 }
 
 // Validar token de sesión (expira en 8 horas)

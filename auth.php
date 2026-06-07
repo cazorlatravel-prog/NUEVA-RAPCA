@@ -165,6 +165,13 @@ switch ($accion) {
 
         $id = intval($input['id'] ?? 0);
         $db = getDB();
+        // Proteger la cuenta de admin raíz: solo ella misma puede desactivarse
+        $st = $db->prepare('SELECT email FROM usuarios WHERE id = ?');
+        $st->execute([$id]);
+        $objetivo = $st->fetchColumn();
+        if ($objetivo === ADMIN_EMAIL && $admin['email'] !== ADMIN_EMAIL) {
+            jsonResponse(['ok' => false, 'error' => 'No puedes desactivar al administrador principal'], 403);
+        }
         $db->prepare('UPDATE usuarios SET activo = NOT activo WHERE id = ?')->execute([$id]);
         jsonResponse(['ok' => true]);
         break;
@@ -199,6 +206,14 @@ switch ($accion) {
         if (!$id) jsonResponse(['ok' => false, 'error' => 'ID requerido'], 400);
 
         $db = getDB();
+        // Proteger la cuenta de admin raíz: solo ella misma puede editarse
+        $st = $db->prepare('SELECT email FROM usuarios WHERE id = ?');
+        $st->execute([$id]);
+        $objetivo = $st->fetchColumn();
+        if ($objetivo === ADMIN_EMAIL && $admin['email'] !== ADMIN_EMAIL) {
+            jsonResponse(['ok' => false, 'error' => 'No puedes editar al administrador principal'], 403);
+        }
+
         $campos = [];
         $valores = [];
 
