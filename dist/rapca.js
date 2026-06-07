@@ -1690,6 +1690,22 @@ function guardarEI() {
 // RAPCA Campo — camera.js — Cámara y fotos
 // ============================================================
 
+// Objeto ImageCapture para tomar fotos a resolución nativa del sensor
+var imageCaptureObj = null;
+
+// Crea el objeto ImageCapture a partir del stream actual (si el navegador lo soporta)
+function crearImageCapture(stream) {
+  imageCaptureObj = null;
+  try {
+    var vt = stream.getVideoTracks()[0];
+    if (window.ImageCapture && vt) {
+      imageCaptureObj = new ImageCapture(vt);
+    }
+  } catch(e) {
+    imageCaptureObj = null;
+  }
+}
+
 function abrirCamara(tipo, subtipo) {
   camaraTipo = tipo;
   camaraSubtipo = subtipo;
@@ -1771,6 +1787,8 @@ function abrirCamara(tipo, subtipo) {
     iniciarExposureSlide();
     // Configurar focus y exposición continuos por defecto
     configurarCamaraInicial(stream);
+    // Preparar captura a resolución nativa del sensor
+    crearImageCapture(stream);
   }).catch(function(err) {
     showToast('Error al acceder a la cámara: ' + err.message, 'error');
     // Decrementar contador
@@ -1784,6 +1802,7 @@ function cerrarCamara() {
     camaraStream.getTracks().forEach(function(t) { t.stop(); });
     camaraStream = null;
   }
+  imageCaptureObj = null;
   document.getElementById('camera-modal').classList.remove('open');
   if (miniMapaCamera) { miniMapaCamera.remove(); miniMapaCamera = null; }
   // Limpiar ghost
@@ -1811,6 +1830,7 @@ function switchCamara() {
     camaraStream = stream;
     document.getElementById('camera-video').srcObject = stream;
     configurarCamaraInicial(stream);
+    crearImageCapture(stream);
     iniciarTapToFocus();
     iniciarExposureSlide();
   });
@@ -2361,7 +2381,33 @@ function geocodificarInverso(lat, lon, callback) {
 
 function capturarFoto() {
   vibrar(30);
+  var video = document.getElementById('camera-video');
 
+  // Intentar capturar a la RESOLUCIÓN NATIVA del sensor con ImageCapture.
+  // El vídeo de previsualización es 1080p, pero takePhoto() entrega la foto
+  // a plena resolución (p.ej. 4000x3000), dando imágenes mucho más nítidas.
+  if (imageCaptureObj && typeof imageCaptureObj.takePhoto === 'function') {
+    imageCaptureObj.takePhoto().then(function(blob) {
+      var img = new Image();
+      img.onload = function() {
+        _renderizarFotoFinal(img, img.naturalWidth, img.naturalHeight);
+        try { URL.revokeObjectURL(img.src); } catch(e) {}
+      };
+      img.onerror = function() {
+        // Si falla la carga del blob, usar el frame del vídeo
+        _renderizarFotoFinal(video, video.videoWidth, video.videoHeight);
+      };
+      img.src = URL.createObjectURL(blob);
+    }).catch(function() {
+      // takePhoto no disponible/fallido: usar el frame del vídeo
+      _renderizarFotoFinal(video, video.videoWidth, video.videoHeight);
+    });
+  } else {
+    _renderizarFotoFinal(video, video.videoWidth, video.videoHeight);
+  }
+}
+
+function _renderizarFotoFinal(fuente, fw, fh) {
   var cfg = typeof obtenerConfigWatermark === 'function' ? obtenerConfigWatermark() : {
     tamanoTexto: 'mediano', mostrarCodigo: true, formatoFecha: 'fecha',
     tipoCoordenadas: 'utm', mostrarOrientacion: true, mostrarMunicipio: false,
@@ -2374,19 +2420,22 @@ function capturarFoto() {
     if (mapDiv) capturarMiniMapaDesdeDiv(mapDiv);
   }
 
-  var video = document.getElementById('camera-video');
   var canvas = document.getElementById('preview-canvas');
   var W = 3060, H = 4080;
   canvas.width = W;
   canvas.height = H;
   var ctx = canvas.getContext('2d');
 
-  // Dibujar foto del video
-  var vw = video.videoWidth, vh = video.videoHeight;
+  // Suavizado de máxima calidad al escalar la imagen
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  // Dibujar foto (recorte tipo "cover" manteniendo proporción)
+  var vw = fw || 1920, vh = fh || 1080;
   var scale = Math.max(W / vw, H / vh);
   var sw = W / scale, sh = H / scale;
   var sx = (vw - sw) / 2, sy = (vh - sh) / 2;
-  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, W, H);
+  ctx.drawImage(fuente, sx, sy, sw, sh, 0, 0, W, H);
 
   // --- Escala de texto según config ---
   var factorTexto = cfg.tamanoTexto === 'pequeno' ? 0.75 : (cfg.tamanoTexto === 'grande' ? 1.3 : 1.0);
@@ -2960,19 +3009,21 @@ function aceptarFoto() {
     return;
   }
 
-  // Guardar thumbnail en IndexedDB
+  // Guardar thumbnail en IndexedDB (mayor nitidez de previsualización)
   var thumbCanvas = document.createElement('canvas');
   thumbCanvas.width = 400;
   thumbCanvas.height = 533;
   var tCtx = thumbCanvas.getContext('2d');
+  tCtx.imageSmoothingEnabled = true;
+  tCtx.imageSmoothingQuality = 'high';
   tCtx.drawImage(canvas, 0, 0, 400, 533);
-  var thumbData = thumbCanvas.toDataURL('image/jpeg', 0.5);
+  var thumbData = thumbCanvas.toDataURL('image/jpeg', 0.7);
 
   // Capturar datos de upload antes de cerrar (evitar múltiples toDataURL)
   var uploadData;
   var downloadData;
   try {
-    uploadData = canvas.toDataURL('image/jpeg', 0.85);
+    uploadData = canvas.toDataURL('image/jpeg', 0.92);
     downloadData = canvas.toDataURL('image/jpeg', 0.95);
   } catch(e) {
     showToast('Error al procesar foto. Reintenta.', 'error');
