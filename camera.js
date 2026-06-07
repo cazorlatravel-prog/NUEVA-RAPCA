@@ -698,7 +698,8 @@ function capturarFoto() {
   // El vídeo de previsualización es 1080p, pero takePhoto() entrega la foto
   // a plena resolución (p.ej. 4000x3000), dando imágenes mucho más nítidas.
   if (imageCaptureObj && typeof imageCaptureObj.takePhoto === 'function') {
-    imageCaptureObj.takePhoto().then(function(blob) {
+
+    var procesarBlob = function(blob) {
       var img = new Image();
       img.onload = function() {
         _renderizarFotoFinal(img, img.naturalWidth, img.naturalHeight);
@@ -709,10 +710,33 @@ function capturarFoto() {
         _renderizarFotoFinal(video, video.videoWidth, video.videoHeight);
       };
       img.src = URL.createObjectURL(blob);
-    }).catch(function() {
-      // takePhoto no disponible/fallido: usar el frame del vídeo
-      _renderizarFotoFinal(video, video.videoWidth, video.videoHeight);
-    });
+    };
+
+    var tomarFoto = function(opciones) {
+      imageCaptureObj.takePhoto(opciones).then(procesarBlob).catch(function() {
+        // Reintentar sin opciones por si las opciones no son válidas
+        if (opciones && Object.keys(opciones).length > 0) {
+          imageCaptureObj.takePhoto().then(procesarBlob).catch(function() {
+            _renderizarFotoFinal(video, video.videoWidth, video.videoHeight);
+          });
+        } else {
+          _renderizarFotoFinal(video, video.videoWidth, video.videoHeight);
+        }
+      });
+    };
+
+    // Consultar capacidades para pedir la MÁXIMA resolución del sensor
+    if (typeof imageCaptureObj.getPhotoCapabilities === 'function') {
+      imageCaptureObj.getPhotoCapabilities().then(function(caps) {
+        var opts = {};
+        if (caps && caps.imageWidth && caps.imageWidth.max) opts.imageWidth = caps.imageWidth.max;
+        if (caps && caps.imageHeight && caps.imageHeight.max) opts.imageHeight = caps.imageHeight.max;
+        tomarFoto(opts);
+      }).catch(function() { tomarFoto({}); });
+    } else {
+      tomarFoto({});
+    }
+
   } else {
     _renderizarFotoFinal(video, video.videoWidth, video.videoHeight);
   }
