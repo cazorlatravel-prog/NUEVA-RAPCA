@@ -4,6 +4,9 @@
 // Objeto ImageCapture para tomar fotos a resolución nativa del sensor
 var imageCaptureObj = null;
 
+// Heading de brújula en grados (0-359, sentido horario desde el Norte geográfico)
+var compassHeading = null;
+
 // Crea el objeto ImageCapture a partir del stream actual (si el navegador lo soporta)
 function crearImageCapture(stream) {
   imageCaptureObj = null;
@@ -119,6 +122,10 @@ function cerrarCamara() {
     window.removeEventListener('deviceorientationabsolute', window._compassHandler, true);
     window.removeEventListener('deviceorientation', window._compassHandler, true);
     window._compassHandler = null;
+  }
+  if (window._compassSensor) {
+    try { window._compassSensor.stop(); } catch(e) {}
+    window._compassSensor = null;
   }
   document.getElementById('camera-modal').classList.remove('open');
   if (miniMapaCamera) { miniMapaCamera.remove(); miniMapaCamera = null; }
@@ -514,44 +521,71 @@ function iniciarOverlayCamara() {
     tipoCoordenadas: 'utm', mostrarMunicipio: false
   };
 
-  // Brújula — limpiar handler previo para no acumular listeners
+  // Brújula — limpiar handlers/sensores previos
   if (window._compassHandler) {
     window.removeEventListener('deviceorientationabsolute', window._compassHandler, true);
     window.removeEventListener('deviceorientation', window._compassHandler, true);
+    window._compassHandler = null;
   }
-  // _compassAbsolute: true cuando recibimos datos de brújula absoluta (heading real)
+  if (window._compassSensor) {
+    try { window._compassSensor.stop(); } catch(e) {}
+    window._compassSensor = null;
+  }
   window._compassAbsolute = false;
+  compassHeading = null;
 
+  function actualizarBrujulaUI(heading) {
+    compassHeading = Math.round(heading) % 360;
+    var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+    var dir = dirs[Math.floor((compassHeading + 22.5) / 45) % 8];
+    var el = document.getElementById('cam-compass');
+    if (el) el.textContent = dir + ' ' + compassHeading + '°';
+  }
+
+  // --- Método 1: AbsoluteOrientationSensor (más fiable en Android Chrome) ---
+  var sensorIniciado = false;
+  if ('AbsoluteOrientationSensor' in window) {
+    try {
+      var sensor = new AbsoluteOrientationSensor({frequency: 10});
+      sensor.addEventListener('reading', function() {
+        var q = sensor.quaternion;
+        var qx = q[0], qy = q[1], qz = q[2], qw = q[3];
+        // Dirección de la cámara (0,0,-1 en coords dispositivo) rotada al marco terrestre
+        var fx = -2 * (qw * qy + qx * qz); // componente Este
+        var fy = 2 * (qw * qx - qy * qz);  // componente Norte
+        var h = Math.atan2(fx, fy) * 180 / Math.PI;
+        if (h < 0) h += 360;
+        window._compassAbsolute = true;
+        actualizarBrujulaUI(h);
+      });
+      sensor.addEventListener('error', function(e) {
+        console.warn('Sensor brújula error:', e.error.message);
+      });
+      sensor.start();
+      window._compassSensor = sensor;
+      sensorIniciado = true;
+    } catch(e) {
+      // Sensor no disponible, continuar con fallback
+    }
+  }
+
+  // --- Método 2 (fallback): deviceorientation events ---
   var handler = function(e) {
+    if (sensorIniciado && window._compassAbsolute) return;
     var heading = null;
-
-    // iOS: webkitCompassHeading da heading real respecto al norte geográfico
     if (typeof e.webkitCompassHeading === 'number') {
       heading = e.webkitCompassHeading;
       window._compassAbsolute = true;
-    }
-    // Android con deviceorientationabsolute: e.absolute=true y alpha es heading
-    // alpha=0 → Norte, crece en sentido antihorario → invertir para heading CW
-    else if (e.absolute === true && typeof e.alpha === 'number') {
+    } else if (e.absolute === true && typeof e.alpha === 'number') {
       heading = (360 - e.alpha) % 360;
       window._compassAbsolute = true;
-    }
-    // Fallback: deviceorientation normal (puede no ser absoluto)
-    else if (typeof e.alpha === 'number' && !window._compassAbsolute) {
+    } else if (typeof e.alpha === 'number' && !window._compassAbsolute) {
       heading = (360 - e.alpha) % 360;
     }
-
-    if (heading !== null) {
-      compassHeading = Math.round(heading);
-      var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
-      var dir = dirs[Math.floor((compassHeading + 22.5) / 45) % 8];
-      var el = document.getElementById('cam-compass');
-      if (el) el.textContent = dir + ' ' + compassHeading + '°';
-    }
+    if (heading !== null) actualizarBrujulaUI(heading);
   };
   window._compassHandler = handler;
 
-  // iOS 13+ requiere permiso explícito para acceder a la orientación
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
     DeviceOrientationEvent.requestPermission().then(function(state) {
       if (state === 'granted') {
@@ -559,7 +593,6 @@ function iniciarOverlayCamara() {
         window.addEventListener('deviceorientation', handler, true);
       }
     }).catch(function() {
-      // Permiso denegado o error: registrar igualmente por si funciona
       window.addEventListener('deviceorientation', handler, true);
     });
   } else if (window.DeviceOrientationEvent) {
@@ -664,7 +697,7 @@ function dibujarRosaVientos(ctx, cx, cy, size) {
   // izquierda del usuario → rotamos la rosa -90° para que la flecha N apunte
   // hacia la izquierda en la imagen.
   var headingRad = 0;
-  if (typeof compassHeading !== 'undefined' && compassHeading !== null) {
+  if (compassHeading !== null) {
     headingRad = -(compassHeading * Math.PI / 180);
   }
 
@@ -1032,7 +1065,7 @@ function _renderizarFotoFinal(fuente, fw, fh) {
   }
 
   var orientStr = '';
-  if (cfg.mostrarOrientacion && typeof compassHeading !== 'undefined') {
+  if (cfg.mostrarOrientacion && compassHeading !== null) {
     var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
     var dir = dirs[Math.floor((compassHeading + 22.5) / 45) % 8];
     orientStr = dir + ' ' + compassHeading + '°';
