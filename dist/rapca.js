@@ -3405,27 +3405,109 @@ function descargarBlob(blob, nombre) {
   setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
 }
 
-// Guarda la foto en el dispositivo. En móvil usa la Web Share API para
-// permitir "Guardar en Fotos/Galería" (única vía que tiene una PWA para
-// llegar al carrete del teléfono). En escritorio o sin soporte, descarga.
-function guardarFotoEnDispositivo(blob, codigo) {
-  var nombre = codigo + '.jpg';
-  try {
-    if (navigator.share && navigator.canShare && typeof File === 'function') {
-      var file = new File([blob], nombre, {type: 'image/jpeg'});
-      if (navigator.canShare({files: [file]})) {
-        navigator.share({files: [file], title: codigo}).then(function() {
-          showToast('Foto guardada en el dispositivo', 'success');
-        }).catch(function(err) {
-          // Cancelado por el usuario: no hacer nada. Otro error: descargar.
-          if (!err || err.name !== 'AbortError') descargarBlob(blob, nombre);
-        });
-        return;
-      }
-    }
-  } catch(e) {}
-  // Escritorio o navegador sin Web Share de archivos
-  descargarBlob(blob, nombre);
+// ============================================================
+// EXIF GPS: inyecta la posición en los metadatos del JPEG
+// ============================================================
+// Construye un segmento APP1 (Exif) con un IFD0 que apunta a un IFD GPS
+// con latitud/longitud (y altitud si está disponible). Big-endian (MM).
+// Autónomo, sin librerías externas (la app funciona offline).
+function _construirEXIFGPS(lat, lon, alt) {
+  function dms(v) {
+    v = Math.abs(v);
+    var d = Math.floor(v);
+    var mf = (v - d) * 60;
+    var m = Math.floor(mf);
+    var s = (mf - m) * 60;
+    return {d: d, m: m, sNum: Math.round(s * 100), sDen: 100};
+  }
+
+  var hasAlt = (typeof alt === 'number' && isFinite(alt));
+  var latR = dms(lat), lonR = dms(lon);
+  var latRef = lat >= 0 ? 'N' : 'S';
+  var lonRef = lon >= 0 ? 'E' : 'W';
+  var altRef = (hasAlt && alt < 0) ? 1 : 0;
+
+  var nEntries = hasAlt ? 7 : 5;
+  // Offsets relativos al inicio del bloque TIFF
+  var GPS_IFD = 26;                              // tras IFD0 (8 + 18)
+  var dataRel = GPS_IFD + 2 + nEntries * 12 + 4; // inicio del área de datos
+  var tiffSize = dataRel + (hasAlt ? 56 : 48);
+
+  var totalApp1 = 2 /*FFE1*/ + 2 /*len*/ + 6 /*Exif\0\0*/ + tiffSize;
+  var buf = new ArrayBuffer(totalApp1);
+  var dv = new DataView(buf);
+  var u8 = new Uint8Array(buf);
+
+  u8[0] = 0xFF; u8[1] = 0xE1;
+  dv.setUint16(2, 2 + 6 + tiffSize);            // longitud del segmento
+  u8[4] = 0x45; u8[5] = 0x78; u8[6] = 0x69; u8[7] = 0x66; u8[8] = 0; u8[9] = 0; // "Exif\0\0"
+
+  var T = 10;                                    // inicio del bloque TIFF
+  dv.setUint16(T + 0, 0x4D4D);                   // "MM" big-endian
+  dv.setUint16(T + 2, 0x002A);                   // 42
+  dv.setUint32(T + 4, 8);                        // offset a IFD0
+
+  // IFD0: una sola entrada → puntero al IFD GPS
+  var ifd0 = T + 8;
+  dv.setUint16(ifd0, 1);
+  dv.setUint16(ifd0 + 2, 0x8825);                // GPSInfoIFDPointer
+  dv.setUint16(ifd0 + 4, 4);                     // tipo LONG
+  dv.setUint32(ifd0 + 6, 1);                     // count
+  dv.setUint32(ifd0 + 10, GPS_IFD);              // offset al IFD GPS
+  dv.setUint32(ifd0 + 14, 0);                    // siguiente IFD = 0
+
+  // IFD GPS
+  var gps = T + GPS_IFD;
+  dv.setUint16(gps, nEntries);
+  var e = gps + 2;
+  function entry(tag, type, count, val) {
+    dv.setUint16(e, tag); dv.setUint16(e + 2, type);
+    dv.setUint32(e + 4, count); dv.setUint32(e + 8, val);
+    e += 12;
+  }
+  entry(0x0000, 1, 4, 0x02030000);                       // GPSVersionID 2.3.0.0
+  entry(0x0001, 2, 2, latRef.charCodeAt(0) << 24);       // LatitudeRef
+  entry(0x0002, 5, 3, dataRel);                          // Latitude (offset)
+  entry(0x0003, 2, 2, lonRef.charCodeAt(0) << 24);       // LongitudeRef
+  entry(0x0004, 5, 3, dataRel + 24);                     // Longitude (offset)
+  if (hasAlt) {
+    entry(0x0005, 1, 1, altRef << 24);                   // AltitudeRef
+    entry(0x0006, 5, 1, dataRel + 48);                   // Altitude (offset)
+  }
+  dv.setUint32(e, 0);                                     // siguiente IFD = 0
+
+  // Área de datos: racionales (numerador, denominador)
+  var dataAbs = T + dataRel;
+  function rat(p, num, den) { dv.setUint32(p, num); dv.setUint32(p + 4, den); }
+  rat(dataAbs, latR.d, 1); rat(dataAbs + 8, latR.m, 1); rat(dataAbs + 16, latR.sNum, latR.sDen);
+  rat(dataAbs + 24, lonR.d, 1); rat(dataAbs + 32, lonR.m, 1); rat(dataAbs + 40, lonR.sNum, lonR.sDen);
+  if (hasAlt) rat(dataAbs + 48, Math.round(Math.abs(alt) * 100), 100);
+
+  return u8;
+}
+
+// Inserta el segmento Exif-GPS justo tras el SOI del JPEG. Devuelve un
+// Blob nuevo; si algo falla o no hay GPS, devuelve el blob original.
+function inyectarGPSenJPEG(blob, lat, lon, alt) {
+  if (typeof lat !== 'number' || typeof lon !== 'number' || !isFinite(lat) || !isFinite(lon)) {
+    return Promise.resolve(blob);
+  }
+  var leer = blob.arrayBuffer ? blob.arrayBuffer() : new Promise(function(res, rej) {
+    var r = new FileReader();
+    r.onload = function() { res(r.result); };
+    r.onerror = function() { rej(r.error); };
+    r.readAsArrayBuffer(blob);
+  });
+  return leer.then(function(ab) {
+    var bytes = new Uint8Array(ab);
+    if (bytes.length < 2 || bytes[0] !== 0xFF || bytes[1] !== 0xD8) return blob; // no es JPEG
+    var app1 = _construirEXIFGPS(lat, lon, alt);
+    var out = new Uint8Array(bytes.length + app1.length);
+    out.set(bytes.subarray(0, 2), 0);             // SOI (FFD8)
+    out.set(app1, 2);                             // APP1 Exif
+    out.set(bytes.subarray(2), 2 + app1.length);  // resto del JPEG
+    return new Blob([out], {type: 'image/jpeg'});
+  }).catch(function() { return blob; });
 }
 
 function aceptarFoto() {
@@ -3448,6 +3530,7 @@ function aceptarFoto() {
   var _camaraTipo = camaraTipo;
   var _gpsLat = gpsPos ? gpsPos.lat : null;
   var _gpsLon = gpsPos ? gpsPos.lon : null;
+  var _gpsAlt = (gpsPos && typeof gpsPos.alt === 'number') ? gpsPos.alt : null;
 
   // Thumbnail proporcional al canvas real
   var thumbW = 400;
@@ -3465,15 +3548,14 @@ function aceptarFoto() {
   limpiarAnotaciones();
   document.getElementById('preview-modal').classList.remove('open');
 
-  // Codificar la foto de plena calidad PRIMERO y guardarla en el dispositivo
-  // de inmediato, mientras sigue válido el gesto del toque "Aceptar"
-  // (navigator.share exige activación reciente del usuario). Después se
-  // codifican thumbnail y versión de subida.
+  // Codificar la foto de plena calidad PRIMERO, inyectar el GPS en el EXIF
+  // y descargarla. Después se codifican thumbnail y versión de subida.
   var thumbData, uploadData;
   _canvasABlob(canvas, 0.97).then(function(downloadBlob) {
-    // En móvil abre el menú nativo para "Guardar en Fotos/Galería";
-    // en escritorio descarga el archivo.
-    guardarFotoEnDispositivo(downloadBlob, _fotoCodigo);
+    // Insertar coordenadas GPS en los metadatos EXIF del archivo descargado
+    return inyectarGPSenJPEG(downloadBlob, _gpsLat, _gpsLon, _gpsAlt);
+  }).then(function(blobFinal) {
+    descargarBlob(blobFinal, _fotoCodigo + '.jpg');
     return _canvasAJpeg(thumbCanvas, 0.8);
   }).then(function(thumb) {
     thumbData = thumb.dataUrl;
