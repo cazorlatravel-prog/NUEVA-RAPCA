@@ -859,73 +859,111 @@ function _renderizarFotoFinal(fuente, fw, fh) {
   }
 
   var canvas = document.getElementById('preview-canvas');
-  var W = 3060, H = 4080;
+  var vw = fw || 1920, vh = fh || 1080;
+
+  // --- CANVAS ADAPTATIVO: dimensiones basadas en la fuente real ---
+  // Antes era fijo 3060×4080, lo que forzaba un upscale de hasta 3.8×
+  // en video (1920×1080), destruyendo la nitidez.
+  // Ahora el canvas se adapta para NO escalar hacia arriba.
+  var W, H;
+  var srcShort = Math.min(vw, vh);
+  var srcLong = Math.max(vw, vh);
+
+  // Orientación portrait: H > W, ratio ~3:4
+  H = srcLong;
+  W = Math.round(H * 3 / 4);
+
+  // Si fuente es portrait y W calculado excede su ancho, usar dims reales
+  if (W > srcShort && vh > vw) {
+    W = srcShort;
+    H = Math.round(W * 4 / 3);
+    if (H > srcLong) H = srcLong;
+  }
+
+  // Mínimo 1200px de ancho para watermarks legibles
+  if (W < 1200) {
+    var minScale = 1200 / W;
+    W = 1200;
+    H = Math.round(H * minScale);
+  }
+  // Máximo 5000px de alto por memoria
+  if (H > 5000) {
+    var maxScale = 5000 / H;
+    H = 5000;
+    W = Math.round(W * maxScale);
+  }
+
   canvas.width = W;
   canvas.height = H;
   var ctx = canvas.getContext('2d');
 
-  // Suavizado de máxima calidad al escalar la imagen
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
-  // Dibujar foto (recorte tipo "cover" manteniendo proporción)
-  var vw = fw || 1920, vh = fh || 1080;
+  // Dibujar foto (recorte "cover")
   var scale = Math.max(W / vw, H / vh);
   var sw = W / scale, sh = H / scale;
   var sx = (vw - sw) / 2, sy = (vh - sh) / 2;
   ctx.drawImage(fuente, sx, sy, sw, sh, 0, 0, W, H);
 
-  // --- Escala de texto según config ---
+  // Micro-nitidez: realce sutil de bordes (unsharp mask ligero)
+  _aplicarNitidezSutil(ctx, W, H);
+
+  // --- Factor de escala proporcional para watermarks ---
+  // Todos los tamaños estaban diseñados para 3060×4080.
+  var refScale = W / 3060;
   var factorTexto = cfg.tamanoTexto === 'pequeno' ? 0.75 : (cfg.tamanoTexto === 'grande' ? 1.3 : 1.0);
 
-  // --- ROSA DE LOS VIENTOS (esquina superior izquierda) ---
+  // --- ROSA DE LOS VIENTOS ---
   if (cfg.mostrarBrujula) {
-    dibujarRosaVientos(ctx, 120, 120, 95);
+    var rPos = Math.round(120 * refScale);
+    dibujarRosaVientos(ctx, rPos, rPos, Math.round(95 * refScale));
   }
 
-  // --- MINI MAPA (esquina inferior izquierda) ---
+  // --- MINI MAPA ---
   if (cfg.tipoMiniMapa !== 'ninguno') {
-    var mapSize = 500;
-    var mapX = 30, mapY = H - mapSize - 30;
+    var mapSize = Math.round(500 * refScale);
+    var mapMargin = Math.round(30 * refScale);
+    var mapX = mapMargin, mapY = H - mapSize - mapMargin;
+    var mapRadius = Math.round(16 * refScale);
     if (miniMapaImg) {
       ctx.save();
       ctx.beginPath();
-      ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
+      ctx.roundRect(mapX, mapY, mapSize, mapSize, mapRadius);
       ctx.clip();
       ctx.drawImage(miniMapaImg, mapX, mapY, mapSize, mapSize);
       ctx.restore();
       ctx.beginPath();
-      ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
+      ctx.roundRect(mapX, mapY, mapSize, mapSize, mapRadius);
       ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-      ctx.lineWidth = 4;
+      ctx.lineWidth = Math.round(4 * refScale);
       ctx.stroke();
     } else if (gpsPos) {
       ctx.save();
       ctx.beginPath();
-      ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
+      ctx.roundRect(mapX, mapY, mapSize, mapSize, mapRadius);
       ctx.fillStyle = 'rgba(200,220,200,0.7)';
       ctx.fill();
       ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-      ctx.lineWidth = 4;
+      ctx.lineWidth = Math.round(4 * refScale);
       ctx.stroke();
       ctx.restore();
       ctx.beginPath();
-      ctx.arc(mapX + mapSize / 2, mapY + mapSize / 2, 16, 0, Math.PI * 2);
+      ctx.arc(mapX + mapSize / 2, mapY + mapSize / 2, Math.round(16 * refScale), 0, Math.PI * 2);
       ctx.fillStyle = '#e74c3c';
       ctx.fill();
       ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 5;
+      ctx.lineWidth = Math.round(5 * refScale);
       ctx.stroke();
       ctx.fillStyle = '#333';
-      ctx.font = '22px sans-serif';
+      ctx.font = Math.round(22 * refScale) + 'px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Zoom ' + cfg.escalaMiniMapa, mapX + mapSize / 2, mapY + mapSize - 20);
+      ctx.fillText('Zoom ' + cfg.escalaMiniMapa, mapX + mapSize / 2, mapY + mapSize - Math.round(20 * refScale));
       ctx.textAlign = 'start';
     }
   }
 
   // --- INFO PANEL (esquina inferior derecha) ---
-  // Construir coordenadas según config
   var coordStr = 'Sin GPS';
   if (gpsPos) {
     if (cfg.tipoCoordenadas === 'geograficas') {
@@ -935,14 +973,12 @@ function _renderizarFotoFinal(fuente, fw, fh) {
     }
   }
 
-  // Construir fecha según config
   var fechaFoto = new Date();
   var dd = ('0' + fechaFoto.getDate()).slice(-2);
   var mm = ('0' + (fechaFoto.getMonth() + 1)).slice(-2);
   var yyyy = fechaFoto.getFullYear();
   var fechaStr = dd + '/' + mm + '/' + yyyy;
   if (cfg.formatoFecha === 'fechahora') {
-    // Hora de Madrid (Europe/Madrid)
     try {
       var horaM = fechaFoto.toLocaleTimeString('es-ES', {timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', hour12: false});
       fechaStr += ' ' + horaM;
@@ -953,7 +989,6 @@ function _renderizarFotoFinal(fuente, fw, fh) {
     }
   }
 
-  // Orientación
   var orientStr = '';
   if (cfg.mostrarOrientacion && typeof compassHeading !== 'undefined') {
     var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
@@ -961,62 +996,54 @@ function _renderizarFotoFinal(fuente, fw, fh) {
     orientStr = dir + ' ' + compassHeading + '°';
   }
 
-  // Sombra para legibilidad
   ctx.shadowColor = 'rgba(0,0,0,0.8)';
-  ctx.shadowBlur = 8;
-  ctx.shadowOffsetX = 2;
-  ctx.shadowOffsetY = 2;
+  ctx.shadowBlur = Math.round(8 * refScale);
+  ctx.shadowOffsetX = Math.round(2 * refScale);
+  ctx.shadowOffsetY = Math.round(2 * refScale);
   ctx.textAlign = 'right';
 
-  // Calcular líneas de texto de abajo hacia arriba
-  var lineY = H - 40;
-  var lineSpacing = Math.round(65 * factorTexto);
-  var fontBase = Math.round(42 * factorTexto);
+  var textRight = W - Math.round(50 * refScale);
+  var lineY = H - Math.round(40 * refScale);
+  var lineSpacing = Math.round(65 * refScale * factorTexto);
+  var fontBase = Math.round(42 * refScale * factorTexto);
 
-  // Municipio/Provincia/CP (si hay datos geocodificados disponibles)
   if (cfg.mostrarMunicipio && gpsPos && gpsPos._geo) {
     var geo = gpsPos._geo;
     var geoStr = [geo.municipio, geo.provincia, geo.cp].filter(Boolean).join(', ');
     if (geoStr) {
       ctx.fillStyle = '#ffffff';
-      ctx.font = Math.round(34 * factorTexto) + 'px sans-serif';
-      ctx.fillText(geoStr, W - 50, lineY);
+      ctx.font = Math.round(34 * refScale * factorTexto) + 'px sans-serif';
+      ctx.fillText(geoStr, textRight, lineY);
       lineY -= lineSpacing;
     }
   }
 
-  // Coordenadas
   ctx.fillStyle = '#ffffff';
-  ctx.font = Math.round(38 * factorTexto) + 'px sans-serif';
-  ctx.fillText(coordStr, W - 50, lineY);
+  ctx.font = Math.round(38 * refScale * factorTexto) + 'px sans-serif';
+  ctx.fillText(coordStr, textRight, lineY);
   lineY -= lineSpacing;
 
-  // Orientación
   if (orientStr) {
     ctx.fillStyle = '#ffffff';
-    ctx.font = Math.round(38 * factorTexto) + 'px sans-serif';
-    ctx.fillText(orientStr, W - 50, lineY);
+    ctx.font = Math.round(38 * refScale * factorTexto) + 'px sans-serif';
+    ctx.fillText(orientStr, textRight, lineY);
     lineY -= lineSpacing;
   }
 
-  // Fecha
   ctx.fillStyle = '#ffffff';
   ctx.font = fontBase + 'px sans-serif';
-  ctx.fillText(fechaStr, W - 50, lineY);
+  ctx.fillText(fechaStr, textRight, lineY);
   lineY -= lineSpacing;
 
-  // Código foto
   ctx.fillStyle = '#ffd700';
-  ctx.font = 'bold ' + Math.round(48 * factorTexto) + 'px sans-serif';
-  ctx.fillText(fotoCodigo, W - 50, lineY);
+  ctx.font = 'bold ' + Math.round(48 * refScale * factorTexto) + 'px sans-serif';
+  ctx.fillText(fotoCodigo, textRight, lineY);
   lineY -= lineSpacing;
 
-  // RAPCA EMA
   ctx.fillStyle = '#ffd700';
-  ctx.font = 'bold ' + Math.round(56 * factorTexto) + 'px sans-serif';
-  ctx.fillText('RAPCA EMA', W - 50, lineY);
+  ctx.font = 'bold ' + Math.round(56 * refScale * factorTexto) + 'px sans-serif';
+  ctx.fillText('RAPCA EMA', textRight, lineY);
 
-  // Resetear sombra y alineación
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
   ctx.shadowOffsetX = 0;
@@ -1026,13 +1053,36 @@ function _renderizarFotoFinal(fuente, fw, fh) {
   fotoCapturada = canvas;
   anotaciones = [];
 
-  // Cerrar cámara, mostrar preview
   if (camaraStream) {
     camaraStream.getTracks().forEach(function(t) { t.stop(); });
     camaraStream = null;
   }
   document.getElementById('camera-modal').classList.remove('open');
   document.getElementById('preview-modal').classList.add('open');
+}
+
+// Realce sutil de bordes (unsharp mask 3×3, amount=0.3)
+function _aplicarNitidezSutil(ctx, w, h) {
+  if (w * h > 20000000) return;
+  try {
+    var imgData = ctx.getImageData(0, 0, w, h);
+    var d = imgData.data;
+    var src = new Uint8ClampedArray(d);
+    var stride = w * 4;
+    var amount = 0.3;
+    for (var y = 1; y < h - 1; y++) {
+      var row = y * stride;
+      for (var x = 1; x < w - 1; x++) {
+        var i = row + x * 4;
+        for (var c = 0; c < 3; c++) {
+          var center = src[i + c];
+          var avg = (src[i - stride + c] + src[i + stride + c] + src[i - 4 + c] + src[i + 4 + c]) * 0.25;
+          d[i + c] = center + (center - avg) * amount;
+        }
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+  } catch(e) {}
 }
 
 // --- SISTEMA DE GHOSTING PARA FOTOS COMPARATIVAS ---
@@ -1440,22 +1490,23 @@ function aceptarFoto() {
     return;
   }
 
-  // Guardar thumbnail en IndexedDB (mayor nitidez de previsualización)
+  // Guardar thumbnail proporcional al canvas real
+  var thumbW = 400;
+  var thumbH = Math.round(thumbW * canvas.height / canvas.width);
   var thumbCanvas = document.createElement('canvas');
-  thumbCanvas.width = 400;
-  thumbCanvas.height = 533;
+  thumbCanvas.width = thumbW;
+  thumbCanvas.height = thumbH;
   var tCtx = thumbCanvas.getContext('2d');
   tCtx.imageSmoothingEnabled = true;
   tCtx.imageSmoothingQuality = 'high';
-  tCtx.drawImage(canvas, 0, 0, 400, 533);
+  tCtx.drawImage(canvas, 0, 0, thumbW, thumbH);
   var thumbData = thumbCanvas.toDataURL('image/jpeg', 0.7);
 
-  // Capturar datos de upload antes de cerrar (evitar múltiples toDataURL)
   var uploadData;
   var downloadData;
   try {
-    uploadData = canvas.toDataURL('image/jpeg', 0.92);
-    downloadData = canvas.toDataURL('image/jpeg', 0.95);
+    uploadData = canvas.toDataURL('image/jpeg', 0.94);
+    downloadData = canvas.toDataURL('image/jpeg', 0.97);
   } catch(e) {
     showToast('Error al procesar foto. Reintenta.', 'error');
     return;
