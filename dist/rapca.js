@@ -3393,6 +3393,41 @@ function _canvasABlob(canvas, quality) {
   });
 }
 
+// Descarga un Blob como archivo (escritorio o respaldo en móvil)
+function descargarBlob(blob, nombre) {
+  var url = URL.createObjectURL(blob);
+  var link = document.createElement('a');
+  link.href = url;
+  link.download = nombre;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+}
+
+// Guarda la foto en el dispositivo. En móvil usa la Web Share API para
+// permitir "Guardar en Fotos/Galería" (única vía que tiene una PWA para
+// llegar al carrete del teléfono). En escritorio o sin soporte, descarga.
+function guardarFotoEnDispositivo(blob, codigo) {
+  var nombre = codigo + '.jpg';
+  try {
+    if (navigator.share && navigator.canShare && typeof File === 'function') {
+      var file = new File([blob], nombre, {type: 'image/jpeg'});
+      if (navigator.canShare({files: [file]})) {
+        navigator.share({files: [file], title: codigo}).then(function() {
+          showToast('Foto guardada en el dispositivo', 'success');
+        }).catch(function(err) {
+          // Cancelado por el usuario: no hacer nada. Otro error: descargar.
+          if (!err || err.name !== 'AbortError') descargarBlob(blob, nombre);
+        });
+        return;
+      }
+    }
+  } catch(e) {}
+  // Escritorio o navegador sin Web Share de archivos
+  descargarBlob(blob, nombre);
+}
+
 function aceptarFoto() {
   vibrar(30);
 
@@ -3430,28 +3465,25 @@ function aceptarFoto() {
   limpiarAnotaciones();
   document.getElementById('preview-modal').classList.remove('open');
 
-  // Codificar en secuencia para limitar el pico de memoria en móvil:
-  //   thumbnail (q0.80) → upload (q0.94, dataURL) → download (q0.97, blob)
+  // Codificar la foto de plena calidad PRIMERO y guardarla en el dispositivo
+  // de inmediato, mientras sigue válido el gesto del toque "Aceptar"
+  // (navigator.share exige activación reciente del usuario). Después se
+  // codifican thumbnail y versión de subida.
   var thumbData, uploadData;
-  _canvasAJpeg(thumbCanvas, 0.8).then(function(thumb) {
+  _canvasABlob(canvas, 0.97).then(function(downloadBlob) {
+    // En móvil abre el menú nativo para "Guardar en Fotos/Galería";
+    // en escritorio descarga el archivo.
+    guardarFotoEnDispositivo(downloadBlob, _fotoCodigo);
+    return _canvasAJpeg(thumbCanvas, 0.8);
+  }).then(function(thumb) {
     thumbData = thumb.dataUrl;
     return _canvasAJpeg(canvas, 0.94);
   }).then(function(up) {
     uploadData = up.dataUrl;
-    return _canvasABlob(canvas, 0.97);
-  }).then(function(downloadBlob) {
 
   return guardarEnDB('fotos', {codigo: _fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
     return guardarEnDB('subidas_pendientes', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
   }).then(function() {
-    // Auto-descarga full-res desde Blob (más fiable que data URL en móvil)
-    var blobUrl = URL.createObjectURL(downloadBlob);
-    var link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = _fotoCodigo + '.jpg';
-    link.click();
-    setTimeout(function() { URL.revokeObjectURL(blobUrl); }, 2000);
-
     // Añadir preview a la página
     if (!fotosPagina[_camaraSubtipo]) fotosPagina[_camaraSubtipo] = [];
     if (_camaraSubtipo === 'W1' || _camaraSubtipo === 'W2') {
