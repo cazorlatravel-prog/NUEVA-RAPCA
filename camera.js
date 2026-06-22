@@ -1570,6 +1570,16 @@ function _canvasAJpeg(canvas, quality) {
   });
 }
 
+// Convierte un Blob a data URL (base64).
+function _blobADataURL(blob) {
+  return new Promise(function(resolve, reject) {
+    var r = new FileReader();
+    r.onload = function() { resolve(r.result); };
+    r.onerror = function() { reject(r.error || new Error('FileReader')); };
+    r.readAsDataURL(blob);
+  });
+}
+
 // Codifica un canvas a Blob JPEG (para descarga directa, sin base64).
 function _canvasABlob(canvas, quality) {
   return new Promise(function(resolve, reject) {
@@ -1756,9 +1766,16 @@ function aceptarFoto() {
     return _canvasAJpeg(thumbCanvas, 0.8);
   }).then(function(thumb) {
     thumbData = thumb.dataUrl;
-    return _canvasAJpeg(canvas, 0.94);
-  }).then(function(up) {
-    uploadData = up.dataUrl;
+    // Versión de subida: codificar a blob, inyectar GPS en EXIF y
+    // reconvertir a data URL (formato que espera sync.js/upload.php),
+    // para que la copia de Cloudinary también quede geolocalizada.
+    return _canvasABlob(canvas, 0.94);
+  }).then(function(upBlob) {
+    return inyectarGPSenJPEG(upBlob, _gpsLat, _gpsLon, _gpsAlt);
+  }).then(function(upBlobExif) {
+    return _blobADataURL(upBlobExif);
+  }).then(function(upDataUrl) {
+    uploadData = upDataUrl;
 
   return guardarEnDB('fotos', {codigo: _fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
     return guardarEnDB('subidas_pendientes', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
