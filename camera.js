@@ -480,6 +480,34 @@ function capturarMiniMapaDesdeDiv(mapDiv) {
   } catch(e) { console.warn('No se pudo capturar mini mapa:', e); }
 }
 
+// Espera a que TODAS las tiles del mini-mapa estén cargadas y luego captura.
+// Reintenta hasta maxRetries veces si quedan tiles pendientes.
+function esperarTilesYCapturar(mapDiv, maxRetries) {
+  if (!mapDiv) return;
+  var retries = maxRetries || 20;
+
+  function intentar(n) {
+    var tiles = mapDiv.querySelectorAll('.leaflet-tile');
+    if (tiles.length === 0) {
+      if (n > 0) setTimeout(function() { intentar(n - 1); }, 500);
+      return;
+    }
+    var pendientes = 0;
+    tiles.forEach(function(tile) {
+      if (!tile.complete || tile.naturalWidth === 0) pendientes++;
+    });
+    if (pendientes === 0) {
+      capturarMiniMapaDesdeDiv(mapDiv);
+    } else if (n > 0) {
+      setTimeout(function() { intentar(n - 1); }, 500);
+    } else {
+      capturarMiniMapaDesdeDiv(mapDiv);
+    }
+  }
+
+  intentar(retries);
+}
+
 function iniciarOverlayCamara() {
   var cfg = typeof obtenerConfigWatermark === 'function' ? obtenerConfigWatermark() : {
     mostrarBrujula: true, tipoMiniMapa: 'topografico', escalaMiniMapa: 14,
@@ -491,15 +519,50 @@ function iniciarOverlayCamara() {
     window.removeEventListener('deviceorientationabsolute', window._compassHandler, true);
     window.removeEventListener('deviceorientation', window._compassHandler, true);
   }
+  // _compassAbsolute: true cuando recibimos datos de brújula absoluta (heading real)
+  window._compassAbsolute = false;
+
   var handler = function(e) {
-    compassHeading = e.alpha ? Math.round(e.alpha) : 0;
-    var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
-    var dir = dirs[Math.floor((compassHeading + 22.5) / 45) % 8];
-    var el = document.getElementById('cam-compass');
-    if (el) el.textContent = dir + ' ' + compassHeading + '°';
+    var heading = null;
+
+    // iOS: webkitCompassHeading da heading real respecto al norte geográfico
+    if (typeof e.webkitCompassHeading === 'number') {
+      heading = e.webkitCompassHeading;
+      window._compassAbsolute = true;
+    }
+    // Android con deviceorientationabsolute: e.absolute=true y alpha es heading
+    // alpha=0 → Norte, crece en sentido antihorario → invertir para heading CW
+    else if (e.absolute === true && typeof e.alpha === 'number') {
+      heading = (360 - e.alpha) % 360;
+      window._compassAbsolute = true;
+    }
+    // Fallback: deviceorientation normal (puede no ser absoluto)
+    else if (typeof e.alpha === 'number' && !window._compassAbsolute) {
+      heading = (360 - e.alpha) % 360;
+    }
+
+    if (heading !== null) {
+      compassHeading = Math.round(heading);
+      var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+      var dir = dirs[Math.floor((compassHeading + 22.5) / 45) % 8];
+      var el = document.getElementById('cam-compass');
+      if (el) el.textContent = dir + ' ' + compassHeading + '°';
+    }
   };
   window._compassHandler = handler;
-  if (window.DeviceOrientationEvent) {
+
+  // iOS 13+ requiere permiso explícito para acceder a la orientación
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission().then(function(state) {
+      if (state === 'granted') {
+        window.addEventListener('deviceorientationabsolute', handler, true);
+        window.addEventListener('deviceorientation', handler, true);
+      }
+    }).catch(function() {
+      // Permiso denegado o error: registrar igualmente por si funciona
+      window.addEventListener('deviceorientation', handler, true);
+    });
+  } else if (window.DeviceOrientationEvent) {
     window.addEventListener('deviceorientationabsolute', handler, true);
     window.addEventListener('deviceorientation', handler, true);
   }
@@ -561,22 +624,26 @@ function iniciarOverlayCamara() {
             icon: L.divIcon({className: '', html: '<div style="width:14px;height:14px;background:#e74c3c;border:3px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>', iconSize: [14,14], iconAnchor: [7,7]})
           }).addTo(miniMapaCamera);
 
+          // Esperar a que las tiles se carguen realmente antes de capturar.
+          // 'load' de Leaflet salta cuando todas las tiles visibles están listas.
           miniMapaCamera.on('load', function() {
-            setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 300);
+            setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 200);
           });
-          setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 3000);
-          setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 6000);
-          setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 10000);
+
+          // Además, polling robusto: comprueba cada 500ms si todas las tiles
+          // <img> del DOM tienen .complete=true (hasta 20 intentos = 10s).
+          esperarTilesYCapturar(mapDiv, 20);
         } catch(e) {}
       }
     }, function() {}, {enableHighAccuracy: true});
   }
 }
 
-// Dibujar rosa de los vientos en canvas
+// Dibujar rosa de los vientos en canvas, rotada según heading del dispositivo
 function dibujarRosaVientos(ctx, cx, cy, size) {
   ctx.save();
-  // Fondo circular semitransparente
+
+  // Fondo circular semitransparente (no rota)
   ctx.beginPath();
   ctx.arc(cx, cy, size, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(80,80,80,0.7)';
@@ -585,97 +652,105 @@ function dibujarRosaVientos(ctx, cx, cy, size) {
   ctx.lineWidth = 3;
   ctx.stroke();
 
-  // Circulo interior
   ctx.beginPath();
   ctx.arc(cx, cy, size * 0.85, 0, Math.PI * 2);
   ctx.strokeStyle = 'rgba(255,255,255,0.2)';
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  var r = size * 0.7; // radio de las puntas
+  // Rotar todo el contenido interior según el heading del dispositivo.
+  // compassHeading = grados desde el Norte geográfico en sentido horario.
+  // Si el dispositivo apunta al Este (heading=90), el Norte real queda a la
+  // izquierda del usuario → rotamos la rosa -90° para que la flecha N apunte
+  // hacia la izquierda en la imagen.
+  var headingRad = 0;
+  if (typeof compassHeading !== 'undefined' && compassHeading !== null) {
+    headingRad = -(compassHeading * Math.PI / 180);
+  }
 
-  // Flecha Norte (cian/turquesa como en la imagen)
+  ctx.translate(cx, cy);
+  ctx.rotate(headingRad);
+
+  var r = size * 0.7;
+
+  // Flecha Norte (cian)
   ctx.beginPath();
-  ctx.moveTo(cx, cy - r);           // punta norte
-  ctx.lineTo(cx - r * 0.18, cy);    // base izq
-  ctx.lineTo(cx, cy - r * 0.15);    // muesca central
+  ctx.moveTo(0, -r);
+  ctx.lineTo(-r * 0.18, 0);
+  ctx.lineTo(0, -r * 0.15);
   ctx.closePath();
   ctx.fillStyle = '#00e5ff';
   ctx.fill();
 
   ctx.beginPath();
-  ctx.moveTo(cx, cy - r);
-  ctx.lineTo(cx + r * 0.18, cy);
-  ctx.lineTo(cx, cy - r * 0.15);
+  ctx.moveTo(0, -r);
+  ctx.lineTo(r * 0.18, 0);
+  ctx.lineTo(0, -r * 0.15);
   ctx.closePath();
   ctx.fillStyle = '#00b8d4';
   ctx.fill();
 
-  // Flecha Sur (gris oscuro)
+  // Flecha Sur
   ctx.beginPath();
-  ctx.moveTo(cx, cy + r);
-  ctx.lineTo(cx - r * 0.18, cy);
-  ctx.lineTo(cx, cy + r * 0.15);
+  ctx.moveTo(0, r);
+  ctx.lineTo(-r * 0.18, 0);
+  ctx.lineTo(0, r * 0.15);
   ctx.closePath();
   ctx.fillStyle = 'rgba(255,255,255,0.4)';
   ctx.fill();
 
   ctx.beginPath();
-  ctx.moveTo(cx, cy + r);
-  ctx.lineTo(cx + r * 0.18, cy);
-  ctx.lineTo(cx, cy + r * 0.15);
+  ctx.moveTo(0, r);
+  ctx.lineTo(r * 0.18, 0);
+  ctx.lineTo(0, r * 0.15);
   ctx.closePath();
   ctx.fillStyle = 'rgba(255,255,255,0.25)';
   ctx.fill();
 
   // Flecha Este
   ctx.beginPath();
-  ctx.moveTo(cx + r * 0.6, cy);
-  ctx.lineTo(cx, cy - r * 0.12);
-  ctx.lineTo(cx + r * 0.1, cy);
+  ctx.moveTo(r * 0.6, 0);
+  ctx.lineTo(0, -r * 0.12);
+  ctx.lineTo(r * 0.1, 0);
   ctx.closePath();
   ctx.fillStyle = 'rgba(255,255,255,0.3)';
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(cx + r * 0.6, cy);
-  ctx.lineTo(cx, cy + r * 0.12);
-  ctx.lineTo(cx + r * 0.1, cy);
+  ctx.moveTo(r * 0.6, 0);
+  ctx.lineTo(0, r * 0.12);
+  ctx.lineTo(r * 0.1, 0);
   ctx.closePath();
   ctx.fillStyle = 'rgba(255,255,255,0.2)';
   ctx.fill();
 
   // Flecha Oeste
   ctx.beginPath();
-  ctx.moveTo(cx - r * 0.6, cy);
-  ctx.lineTo(cx, cy - r * 0.12);
-  ctx.lineTo(cx - r * 0.1, cy);
+  ctx.moveTo(-r * 0.6, 0);
+  ctx.lineTo(0, -r * 0.12);
+  ctx.lineTo(-r * 0.1, 0);
   ctx.closePath();
   ctx.fillStyle = 'rgba(255,255,255,0.3)';
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(cx - r * 0.6, cy);
-  ctx.lineTo(cx, cy + r * 0.12);
-  ctx.lineTo(cx - r * 0.1, cy);
+  ctx.moveTo(-r * 0.6, 0);
+  ctx.lineTo(0, r * 0.12);
+  ctx.lineTo(-r * 0.1, 0);
   ctx.closePath();
   ctx.fillStyle = 'rgba(255,255,255,0.2)';
   ctx.fill();
 
-  // Letras cardinales
+  // Letras cardinales (también rotan con la rosa)
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   var fs = size * 0.28;
   ctx.font = 'bold ' + fs + 'px sans-serif';
 
-  // N (en cian)
   ctx.fillStyle = '#00e5ff';
-  ctx.fillText('N', cx, cy - size * 0.88);
-  // S
+  ctx.fillText('N', 0, -size * 0.88);
   ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.fillText('S', cx, cy + size * 0.90);
-  // E
-  ctx.fillText('E', cx + size * 0.88, cy);
-  // W
-  ctx.fillText('W', cx - size * 0.88, cy);
+  ctx.fillText('S', 0, size * 0.90);
+  ctx.fillText('E', size * 0.88, 0);
+  ctx.fillText('W', -size * 0.88, 0);
 
   ctx.restore();
 }
