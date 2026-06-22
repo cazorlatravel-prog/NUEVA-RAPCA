@@ -154,7 +154,9 @@ function buscarFotoData(codigo, tipo, unidad) {
 
     // Último recurso: Cloudinary (si online y tenemos tipo/unidad)
     if (!navigator.onLine || !tipo || !unidad) return null;
-    var cloudUrl = 'https://res.cloudinary.com/drnqs1jwl/image/upload/w_800,q_75/rapca/' + tipo + '/' + unidad + '/' + codigo + '.jpg';
+    // q_auto + f_auto: calidad adaptativa alta y formato óptimo (WebP/AVIF).
+    // w_1600 da buena resolución para rejillas/popups sin descargar el original completo.
+    var cloudUrl = 'https://res.cloudinary.com/drnqs1jwl/image/upload/w_1600,q_auto:good,f_auto/rapca/' + tipo + '/' + unidad + '/' + codigo + '.jpg';
     return fetch(cloudUrl, {mode: 'cors'}).then(function(resp) {
       if (!resp.ok) return null;
       return resp.blob();
@@ -167,6 +169,47 @@ function buscarFotoData(codigo, tipo, unidad) {
       });
     }).catch(function() { return null; });
   });
+}
+
+// Reconstruye {tipo, unidad} de un código de foto buscándolo en los registros.
+function fotoInfoDesdeCodigo(codigo) {
+  if (!codigo || typeof registros === 'undefined' || !registros) return null;
+  for (var i = 0; i < registros.length; i++) {
+    var r = registros[i];
+    if (!r || !r.datos) continue;
+    if (r.datos.fotos && typeof r.datos.fotos === 'string') {
+      var lista = r.datos.fotos.split(',');
+      for (var j = 0; j < lista.length; j++) {
+        if (lista[j].trim() === codigo) return {tipo: r.tipo, unidad: r.unidad};
+      }
+    }
+    if (r.datos.fotosComp && Array.isArray(r.datos.fotosComp)) {
+      for (var k = 0; k < r.datos.fotosComp.length; k++) {
+        var fc = r.datos.fotosComp[k];
+        if (fc && (fc.numero === codigo || fc.codigo === codigo)) return {tipo: r.tipo, unidad: r.unidad};
+      }
+    }
+  }
+  return null;
+}
+
+// Carga la MEJOR versión disponible de una foto (alta resolución) para el visor.
+// Prioriza: full-res local aún sin subir → Cloudinary en alta calidad.
+// Devuelve Promise<string|null> (data URL o URL remota).
+function cargarFotoHD(codigo, tipo, unidad) {
+  if (!codigo || !db) return Promise.resolve(null);
+  return obtenerDeDB('subidas_pendientes', codigo).then(function(f) {
+    if (f && f.data) return f.data; // full-res local (antes de subir)
+    if (!tipo || !unidad) {
+      var info = fotoInfoDesdeCodigo(codigo);
+      if (info) { tipo = tipo || info.tipo; unidad = unidad || info.unidad; }
+    }
+    if (navigator.onLine && tipo && unidad) {
+      // q_auto:best + f_auto: máxima calidad con formato óptimo (WebP/AVIF)
+      return 'https://res.cloudinary.com/drnqs1jwl/image/upload/q_auto:best,f_auto/rapca/' + tipo + '/' + unidad + '/' + codigo + '.jpg';
+    }
+    return null;
+  }).catch(function() { return null; });
 }
 
 // --- UI: Toast, Vibrar, Utilidades ---
@@ -409,21 +452,55 @@ function abrirLightboxMultiple(fotos, idx) {
   mostrarLightbox();
 }
 
+var _lbHDToken = 0;
+
+// Muestra la foto actual del visor: primero el thumbnail (instantáneo) y
+// luego, en segundo plano, sustituye por la versión en alta resolución.
+function _aplicarFotoLightbox() {
+  var foto = lightboxFotos[lightboxIdx];
+  if (!foto) return;
+  var imgEl = document.getElementById('lb-img');
+  imgEl.src = foto.src; // placeholder instantáneo (normalmente el thumbnail)
+  document.getElementById('lb-info').textContent = foto.info || '';
+
+  // Si ya tenemos la versión HD cargada para esta foto, no repetir
+  if (foto._hd) return;
+
+  var token = ++_lbHDToken;
+  var codigo = foto.info;
+  // Solo intentar mejora si 'info' parece un código de foto RAPCA
+  if (!codigo || !/_(VP|EV)_/.test(codigo)) return;
+
+  cargarFotoHD(codigo, foto.tipo, foto.unidad).then(function(hd) {
+    if (!hd || token !== _lbHDToken) return; // el usuario ya cambió de imagen
+    // Precargar para evitar parpadeo; solo intercambiar si carga bien
+    var pre = new Image();
+    pre.onload = function() {
+      if (token !== _lbHDToken) return;
+      imgEl.src = hd;
+      foto.src = hd;   // para que la descarga use también la HD
+      foto._hd = true;
+    };
+    pre.onerror = function() {};
+    if (hd.indexOf('data:') !== 0) pre.crossOrigin = 'anonymous';
+    pre.src = hd;
+  });
+}
+
 function mostrarLightbox() {
   var lb = document.getElementById('lightbox');
   lb.classList.add('open');
-  document.getElementById('lb-img').src = lightboxFotos[lightboxIdx].src;
-  document.getElementById('lb-info').textContent = lightboxFotos[lightboxIdx].info || '';
+  _aplicarFotoLightbox();
 }
 
 function cerrarLightbox() {
+  _lbHDToken++; // invalida cualquier carga HD en curso
   document.getElementById('lightbox').classList.remove('open');
 }
 
 function navLightbox(dir) {
   lightboxIdx = (lightboxIdx + dir + lightboxFotos.length) % lightboxFotos.length;
-  document.getElementById('lb-img').src = lightboxFotos[lightboxIdx].src;
-  document.getElementById('lb-info').textContent = lightboxFotos[lightboxIdx].info || '';
+  _aplicarFotoLightbox();
 }
 
 function descargarFotoLB() {
@@ -2206,6 +2283,34 @@ function capturarMiniMapaDesdeDiv(mapDiv) {
   } catch(e) { console.warn('No se pudo capturar mini mapa:', e); }
 }
 
+// Espera a que TODAS las tiles del mini-mapa estén cargadas y luego captura.
+// Reintenta hasta maxRetries veces si quedan tiles pendientes.
+function esperarTilesYCapturar(mapDiv, maxRetries) {
+  if (!mapDiv) return;
+  var retries = maxRetries || 20;
+
+  function intentar(n) {
+    var tiles = mapDiv.querySelectorAll('.leaflet-tile');
+    if (tiles.length === 0) {
+      if (n > 0) setTimeout(function() { intentar(n - 1); }, 500);
+      return;
+    }
+    var pendientes = 0;
+    tiles.forEach(function(tile) {
+      if (!tile.complete || tile.naturalWidth === 0) pendientes++;
+    });
+    if (pendientes === 0) {
+      capturarMiniMapaDesdeDiv(mapDiv);
+    } else if (n > 0) {
+      setTimeout(function() { intentar(n - 1); }, 500);
+    } else {
+      capturarMiniMapaDesdeDiv(mapDiv);
+    }
+  }
+
+  intentar(retries);
+}
+
 function iniciarOverlayCamara() {
   var cfg = typeof obtenerConfigWatermark === 'function' ? obtenerConfigWatermark() : {
     mostrarBrujula: true, tipoMiniMapa: 'topografico', escalaMiniMapa: 14,
@@ -2217,15 +2322,50 @@ function iniciarOverlayCamara() {
     window.removeEventListener('deviceorientationabsolute', window._compassHandler, true);
     window.removeEventListener('deviceorientation', window._compassHandler, true);
   }
+  // _compassAbsolute: true cuando recibimos datos de brújula absoluta (heading real)
+  window._compassAbsolute = false;
+
   var handler = function(e) {
-    compassHeading = e.alpha ? Math.round(e.alpha) : 0;
-    var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
-    var dir = dirs[Math.floor((compassHeading + 22.5) / 45) % 8];
-    var el = document.getElementById('cam-compass');
-    if (el) el.textContent = dir + ' ' + compassHeading + '°';
+    var heading = null;
+
+    // iOS: webkitCompassHeading da heading real respecto al norte geográfico
+    if (typeof e.webkitCompassHeading === 'number') {
+      heading = e.webkitCompassHeading;
+      window._compassAbsolute = true;
+    }
+    // Android con deviceorientationabsolute: e.absolute=true y alpha es heading
+    // alpha=0 → Norte, crece en sentido antihorario → invertir para heading CW
+    else if (e.absolute === true && typeof e.alpha === 'number') {
+      heading = (360 - e.alpha) % 360;
+      window._compassAbsolute = true;
+    }
+    // Fallback: deviceorientation normal (puede no ser absoluto)
+    else if (typeof e.alpha === 'number' && !window._compassAbsolute) {
+      heading = (360 - e.alpha) % 360;
+    }
+
+    if (heading !== null) {
+      compassHeading = Math.round(heading);
+      var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+      var dir = dirs[Math.floor((compassHeading + 22.5) / 45) % 8];
+      var el = document.getElementById('cam-compass');
+      if (el) el.textContent = dir + ' ' + compassHeading + '°';
+    }
   };
   window._compassHandler = handler;
-  if (window.DeviceOrientationEvent) {
+
+  // iOS 13+ requiere permiso explícito para acceder a la orientación
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission().then(function(state) {
+      if (state === 'granted') {
+        window.addEventListener('deviceorientationabsolute', handler, true);
+        window.addEventListener('deviceorientation', handler, true);
+      }
+    }).catch(function() {
+      // Permiso denegado o error: registrar igualmente por si funciona
+      window.addEventListener('deviceorientation', handler, true);
+    });
+  } else if (window.DeviceOrientationEvent) {
     window.addEventListener('deviceorientationabsolute', handler, true);
     window.addEventListener('deviceorientation', handler, true);
   }
@@ -2287,22 +2427,26 @@ function iniciarOverlayCamara() {
             icon: L.divIcon({className: '', html: '<div style="width:14px;height:14px;background:#e74c3c;border:3px solid #fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>', iconSize: [14,14], iconAnchor: [7,7]})
           }).addTo(miniMapaCamera);
 
+          // Esperar a que las tiles se carguen realmente antes de capturar.
+          // 'load' de Leaflet salta cuando todas las tiles visibles están listas.
           miniMapaCamera.on('load', function() {
-            setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 300);
+            setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 200);
           });
-          setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 3000);
-          setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 6000);
-          setTimeout(function() { capturarMiniMapaDesdeDiv(mapDiv); }, 10000);
+
+          // Además, polling robusto: comprueba cada 500ms si todas las tiles
+          // <img> del DOM tienen .complete=true (hasta 20 intentos = 10s).
+          esperarTilesYCapturar(mapDiv, 20);
         } catch(e) {}
       }
     }, function() {}, {enableHighAccuracy: true});
   }
 }
 
-// Dibujar rosa de los vientos en canvas
+// Dibujar rosa de los vientos en canvas, rotada según heading del dispositivo
 function dibujarRosaVientos(ctx, cx, cy, size) {
   ctx.save();
-  // Fondo circular semitransparente
+
+  // Fondo circular semitransparente (no rota)
   ctx.beginPath();
   ctx.arc(cx, cy, size, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(80,80,80,0.7)';
@@ -2311,97 +2455,105 @@ function dibujarRosaVientos(ctx, cx, cy, size) {
   ctx.lineWidth = 3;
   ctx.stroke();
 
-  // Circulo interior
   ctx.beginPath();
   ctx.arc(cx, cy, size * 0.85, 0, Math.PI * 2);
   ctx.strokeStyle = 'rgba(255,255,255,0.2)';
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  var r = size * 0.7; // radio de las puntas
+  // Rotar todo el contenido interior según el heading del dispositivo.
+  // compassHeading = grados desde el Norte geográfico en sentido horario.
+  // Si el dispositivo apunta al Este (heading=90), el Norte real queda a la
+  // izquierda del usuario → rotamos la rosa -90° para que la flecha N apunte
+  // hacia la izquierda en la imagen.
+  var headingRad = 0;
+  if (typeof compassHeading !== 'undefined' && compassHeading !== null) {
+    headingRad = -(compassHeading * Math.PI / 180);
+  }
 
-  // Flecha Norte (cian/turquesa como en la imagen)
+  ctx.translate(cx, cy);
+  ctx.rotate(headingRad);
+
+  var r = size * 0.7;
+
+  // Flecha Norte (cian)
   ctx.beginPath();
-  ctx.moveTo(cx, cy - r);           // punta norte
-  ctx.lineTo(cx - r * 0.18, cy);    // base izq
-  ctx.lineTo(cx, cy - r * 0.15);    // muesca central
+  ctx.moveTo(0, -r);
+  ctx.lineTo(-r * 0.18, 0);
+  ctx.lineTo(0, -r * 0.15);
   ctx.closePath();
   ctx.fillStyle = '#00e5ff';
   ctx.fill();
 
   ctx.beginPath();
-  ctx.moveTo(cx, cy - r);
-  ctx.lineTo(cx + r * 0.18, cy);
-  ctx.lineTo(cx, cy - r * 0.15);
+  ctx.moveTo(0, -r);
+  ctx.lineTo(r * 0.18, 0);
+  ctx.lineTo(0, -r * 0.15);
   ctx.closePath();
   ctx.fillStyle = '#00b8d4';
   ctx.fill();
 
-  // Flecha Sur (gris oscuro)
+  // Flecha Sur
   ctx.beginPath();
-  ctx.moveTo(cx, cy + r);
-  ctx.lineTo(cx - r * 0.18, cy);
-  ctx.lineTo(cx, cy + r * 0.15);
+  ctx.moveTo(0, r);
+  ctx.lineTo(-r * 0.18, 0);
+  ctx.lineTo(0, r * 0.15);
   ctx.closePath();
   ctx.fillStyle = 'rgba(255,255,255,0.4)';
   ctx.fill();
 
   ctx.beginPath();
-  ctx.moveTo(cx, cy + r);
-  ctx.lineTo(cx + r * 0.18, cy);
-  ctx.lineTo(cx, cy + r * 0.15);
+  ctx.moveTo(0, r);
+  ctx.lineTo(r * 0.18, 0);
+  ctx.lineTo(0, r * 0.15);
   ctx.closePath();
   ctx.fillStyle = 'rgba(255,255,255,0.25)';
   ctx.fill();
 
   // Flecha Este
   ctx.beginPath();
-  ctx.moveTo(cx + r * 0.6, cy);
-  ctx.lineTo(cx, cy - r * 0.12);
-  ctx.lineTo(cx + r * 0.1, cy);
+  ctx.moveTo(r * 0.6, 0);
+  ctx.lineTo(0, -r * 0.12);
+  ctx.lineTo(r * 0.1, 0);
   ctx.closePath();
   ctx.fillStyle = 'rgba(255,255,255,0.3)';
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(cx + r * 0.6, cy);
-  ctx.lineTo(cx, cy + r * 0.12);
-  ctx.lineTo(cx + r * 0.1, cy);
+  ctx.moveTo(r * 0.6, 0);
+  ctx.lineTo(0, r * 0.12);
+  ctx.lineTo(r * 0.1, 0);
   ctx.closePath();
   ctx.fillStyle = 'rgba(255,255,255,0.2)';
   ctx.fill();
 
   // Flecha Oeste
   ctx.beginPath();
-  ctx.moveTo(cx - r * 0.6, cy);
-  ctx.lineTo(cx, cy - r * 0.12);
-  ctx.lineTo(cx - r * 0.1, cy);
+  ctx.moveTo(-r * 0.6, 0);
+  ctx.lineTo(0, -r * 0.12);
+  ctx.lineTo(-r * 0.1, 0);
   ctx.closePath();
   ctx.fillStyle = 'rgba(255,255,255,0.3)';
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(cx - r * 0.6, cy);
-  ctx.lineTo(cx, cy + r * 0.12);
-  ctx.lineTo(cx - r * 0.1, cy);
+  ctx.moveTo(-r * 0.6, 0);
+  ctx.lineTo(0, r * 0.12);
+  ctx.lineTo(-r * 0.1, 0);
   ctx.closePath();
   ctx.fillStyle = 'rgba(255,255,255,0.2)';
   ctx.fill();
 
-  // Letras cardinales
+  // Letras cardinales (también rotan con la rosa)
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   var fs = size * 0.28;
   ctx.font = 'bold ' + fs + 'px sans-serif';
 
-  // N (en cian)
   ctx.fillStyle = '#00e5ff';
-  ctx.fillText('N', cx, cy - size * 0.88);
-  // S
+  ctx.fillText('N', 0, -size * 0.88);
   ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.fillText('S', cx, cy + size * 0.90);
-  // E
-  ctx.fillText('E', cx + size * 0.88, cy);
-  // W
-  ctx.fillText('W', cx - size * 0.88, cy);
+  ctx.fillText('S', 0, size * 0.90);
+  ctx.fillText('E', size * 0.88, 0);
+  ctx.fillText('W', -size * 0.88, 0);
 
   ctx.restore();
 }
@@ -2454,6 +2606,22 @@ function capturarFoto() {
   if (imageCaptureObj && typeof imageCaptureObj.takePhoto === 'function') {
 
     var procesarBlob = function(blob) {
+      // createImageBitmap con orientación EXIF garantiza que la foto se
+      // dibuje siempre derecha, independientemente de cómo el navegador
+      // interprete la rotación del sensor (evita fotos giradas 90°).
+      if (typeof createImageBitmap === 'function') {
+        createImageBitmap(blob, {imageOrientation: 'from-image'}).then(function(bmp) {
+          _renderizarFotoFinal(bmp, bmp.width, bmp.height);
+          try { bmp.close(); } catch(e) {}
+        }).catch(function() {
+          procesarBlobConImagen(blob);
+        });
+      } else {
+        procesarBlobConImagen(blob);
+      }
+    };
+
+    var procesarBlobConImagen = function(blob) {
       var img = new Image();
       img.onload = function() {
         _renderizarFotoFinal(img, img.naturalWidth, img.naturalHeight);
@@ -2485,6 +2653,10 @@ function capturarFoto() {
         var opts = {};
         if (caps && caps.imageWidth && caps.imageWidth.max) opts.imageWidth = caps.imageWidth.max;
         if (caps && caps.imageHeight && caps.imageHeight.max) opts.imageHeight = caps.imageHeight.max;
+        // Desactivar flash en campo (rara vez útil, puede falsear color de vegetación)
+        if (caps && caps.fillLightMode && caps.fillLightMode.indexOf('off') >= 0) {
+          opts.fillLightMode = 'off';
+        }
         tomarFoto(opts);
       }).catch(function() { tomarFoto({}); });
     } else {
@@ -2510,73 +2682,133 @@ function _renderizarFotoFinal(fuente, fw, fh) {
   }
 
   var canvas = document.getElementById('preview-canvas');
-  var W = 3060, H = 4080;
+  var vw = fw || 1920, vh = fh || 1080;
+
+  // --- CANVAS ADAPTATIVO: respeta la ORIENTACIÓN real de la fuente ---
+  // Antes se forzaba SIEMPRE retrato (H=srcLong), lo que en fuentes
+  // landscape (vídeo 1080p, fotos sin EXIF) provocaba un upscale del
+  // 33–122% y recortaba más de la mitad de la escena.
+  // Ahora: si la fuente es horizontal → lienzo horizontal (4:3); si es
+  // vertical → lienzo vertical (3:4). En ambos casos escala ≤ 1 (sin
+  // ampliar) y recorte mínimo.
+  var W, H;
+  var srcShort = Math.min(vw, vh);
+  var srcLong = Math.max(vw, vh);
+  var esLandscape = vw > vh;
+
+  if (esLandscape) {
+    // Lienzo horizontal 4:3
+    W = srcLong;
+    H = Math.round(W * 3 / 4);
+    if (H > srcShort) {
+      H = srcShort;
+      W = Math.round(H * 4 / 3);
+      if (W > srcLong) W = srcLong;
+    }
+  } else {
+    // Lienzo vertical 3:4 (caso típico: teléfono en vertical)
+    H = srcLong;
+    W = Math.round(H * 3 / 4);
+    if (W > srcShort) {
+      W = srcShort;
+      H = Math.round(W * 4 / 3);
+      if (H > srcLong) H = srcLong;
+    }
+  }
+
+  // Mínimo de tamaño para watermarks legibles, SIN ampliar por encima
+  // de la resolución nativa de la fuente (evita pixelado de vídeo 720p).
+  var ladoCorto = Math.min(W, H);
+  if (ladoCorto < 1200) {
+    var objetivo = Math.min(1200, srcShort);
+    if (objetivo > ladoCorto) {
+      var minScale = objetivo / ladoCorto;
+      W = Math.round(W * minScale);
+      H = Math.round(H * minScale);
+    }
+  }
+  // Máximo 5000px en el lado largo por memoria
+  var ladoLargo = Math.max(W, H);
+  if (ladoLargo > 5000) {
+    var maxScale = 5000 / ladoLargo;
+    W = Math.round(W * maxScale);
+    H = Math.round(H * maxScale);
+  }
+
   canvas.width = W;
   canvas.height = H;
   var ctx = canvas.getContext('2d');
 
-  // Suavizado de máxima calidad al escalar la imagen
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
-  // Dibujar foto (recorte tipo "cover" manteniendo proporción)
-  var vw = fw || 1920, vh = fh || 1080;
+  // Dibujar foto (recorte "cover")
   var scale = Math.max(W / vw, H / vh);
   var sw = W / scale, sh = H / scale;
   var sx = (vw - sw) / 2, sy = (vh - sh) / 2;
   ctx.drawImage(fuente, sx, sy, sw, sh, 0, 0, W, H);
 
-  // --- Escala de texto según config ---
+  // Postproceso: reducción de ruido (adaptada a la luz) + micro-nitidez,
+  // en una sola pasada para minimizar memoria en móvil.
+  _postprocesarFoto(ctx, W, H);
+
+  // --- Factor de escala proporcional para watermarks ---
+  // El diseño base era un lienzo retrato de 3060px de ancho (lado corto).
+  // Usar el lado corto mantiene el tamaño de los watermarks consistente
+  // tanto en fotos verticales como horizontales.
+  var refScale = Math.min(W, H) / 3060;
   var factorTexto = cfg.tamanoTexto === 'pequeno' ? 0.75 : (cfg.tamanoTexto === 'grande' ? 1.3 : 1.0);
 
-  // --- ROSA DE LOS VIENTOS (esquina superior izquierda) ---
+  // --- ROSA DE LOS VIENTOS ---
   if (cfg.mostrarBrujula) {
-    dibujarRosaVientos(ctx, 120, 120, 95);
+    var rPos = Math.round(120 * refScale);
+    dibujarRosaVientos(ctx, rPos, rPos, Math.round(95 * refScale));
   }
 
-  // --- MINI MAPA (esquina inferior izquierda) ---
+  // --- MINI MAPA ---
   if (cfg.tipoMiniMapa !== 'ninguno') {
-    var mapSize = 500;
-    var mapX = 30, mapY = H - mapSize - 30;
+    var mapSize = Math.round(500 * refScale);
+    var mapMargin = Math.round(30 * refScale);
+    var mapX = mapMargin, mapY = H - mapSize - mapMargin;
+    var mapRadius = Math.round(16 * refScale);
     if (miniMapaImg) {
       ctx.save();
       ctx.beginPath();
-      ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
+      ctx.roundRect(mapX, mapY, mapSize, mapSize, mapRadius);
       ctx.clip();
       ctx.drawImage(miniMapaImg, mapX, mapY, mapSize, mapSize);
       ctx.restore();
       ctx.beginPath();
-      ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
+      ctx.roundRect(mapX, mapY, mapSize, mapSize, mapRadius);
       ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-      ctx.lineWidth = 4;
+      ctx.lineWidth = Math.round(4 * refScale);
       ctx.stroke();
     } else if (gpsPos) {
       ctx.save();
       ctx.beginPath();
-      ctx.roundRect(mapX, mapY, mapSize, mapSize, 16);
+      ctx.roundRect(mapX, mapY, mapSize, mapSize, mapRadius);
       ctx.fillStyle = 'rgba(200,220,200,0.7)';
       ctx.fill();
       ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-      ctx.lineWidth = 4;
+      ctx.lineWidth = Math.round(4 * refScale);
       ctx.stroke();
       ctx.restore();
       ctx.beginPath();
-      ctx.arc(mapX + mapSize / 2, mapY + mapSize / 2, 16, 0, Math.PI * 2);
+      ctx.arc(mapX + mapSize / 2, mapY + mapSize / 2, Math.round(16 * refScale), 0, Math.PI * 2);
       ctx.fillStyle = '#e74c3c';
       ctx.fill();
       ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 5;
+      ctx.lineWidth = Math.round(5 * refScale);
       ctx.stroke();
       ctx.fillStyle = '#333';
-      ctx.font = '22px sans-serif';
+      ctx.font = Math.round(22 * refScale) + 'px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('Zoom ' + cfg.escalaMiniMapa, mapX + mapSize / 2, mapY + mapSize - 20);
+      ctx.fillText('Zoom ' + cfg.escalaMiniMapa, mapX + mapSize / 2, mapY + mapSize - Math.round(20 * refScale));
       ctx.textAlign = 'start';
     }
   }
 
   // --- INFO PANEL (esquina inferior derecha) ---
-  // Construir coordenadas según config
   var coordStr = 'Sin GPS';
   if (gpsPos) {
     if (cfg.tipoCoordenadas === 'geograficas') {
@@ -2586,14 +2818,12 @@ function _renderizarFotoFinal(fuente, fw, fh) {
     }
   }
 
-  // Construir fecha según config
   var fechaFoto = new Date();
   var dd = ('0' + fechaFoto.getDate()).slice(-2);
   var mm = ('0' + (fechaFoto.getMonth() + 1)).slice(-2);
   var yyyy = fechaFoto.getFullYear();
   var fechaStr = dd + '/' + mm + '/' + yyyy;
   if (cfg.formatoFecha === 'fechahora') {
-    // Hora de Madrid (Europe/Madrid)
     try {
       var horaM = fechaFoto.toLocaleTimeString('es-ES', {timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', hour12: false});
       fechaStr += ' ' + horaM;
@@ -2604,7 +2834,6 @@ function _renderizarFotoFinal(fuente, fw, fh) {
     }
   }
 
-  // Orientación
   var orientStr = '';
   if (cfg.mostrarOrientacion && typeof compassHeading !== 'undefined') {
     var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
@@ -2612,62 +2841,54 @@ function _renderizarFotoFinal(fuente, fw, fh) {
     orientStr = dir + ' ' + compassHeading + '°';
   }
 
-  // Sombra para legibilidad
   ctx.shadowColor = 'rgba(0,0,0,0.8)';
-  ctx.shadowBlur = 8;
-  ctx.shadowOffsetX = 2;
-  ctx.shadowOffsetY = 2;
+  ctx.shadowBlur = Math.round(8 * refScale);
+  ctx.shadowOffsetX = Math.round(2 * refScale);
+  ctx.shadowOffsetY = Math.round(2 * refScale);
   ctx.textAlign = 'right';
 
-  // Calcular líneas de texto de abajo hacia arriba
-  var lineY = H - 40;
-  var lineSpacing = Math.round(65 * factorTexto);
-  var fontBase = Math.round(42 * factorTexto);
+  var textRight = W - Math.round(50 * refScale);
+  var lineY = H - Math.round(40 * refScale);
+  var lineSpacing = Math.round(65 * refScale * factorTexto);
+  var fontBase = Math.round(42 * refScale * factorTexto);
 
-  // Municipio/Provincia/CP (si hay datos geocodificados disponibles)
   if (cfg.mostrarMunicipio && gpsPos && gpsPos._geo) {
     var geo = gpsPos._geo;
     var geoStr = [geo.municipio, geo.provincia, geo.cp].filter(Boolean).join(', ');
     if (geoStr) {
       ctx.fillStyle = '#ffffff';
-      ctx.font = Math.round(34 * factorTexto) + 'px sans-serif';
-      ctx.fillText(geoStr, W - 50, lineY);
+      ctx.font = Math.round(34 * refScale * factorTexto) + 'px sans-serif';
+      ctx.fillText(geoStr, textRight, lineY);
       lineY -= lineSpacing;
     }
   }
 
-  // Coordenadas
   ctx.fillStyle = '#ffffff';
-  ctx.font = Math.round(38 * factorTexto) + 'px sans-serif';
-  ctx.fillText(coordStr, W - 50, lineY);
+  ctx.font = Math.round(38 * refScale * factorTexto) + 'px sans-serif';
+  ctx.fillText(coordStr, textRight, lineY);
   lineY -= lineSpacing;
 
-  // Orientación
   if (orientStr) {
     ctx.fillStyle = '#ffffff';
-    ctx.font = Math.round(38 * factorTexto) + 'px sans-serif';
-    ctx.fillText(orientStr, W - 50, lineY);
+    ctx.font = Math.round(38 * refScale * factorTexto) + 'px sans-serif';
+    ctx.fillText(orientStr, textRight, lineY);
     lineY -= lineSpacing;
   }
 
-  // Fecha
   ctx.fillStyle = '#ffffff';
   ctx.font = fontBase + 'px sans-serif';
-  ctx.fillText(fechaStr, W - 50, lineY);
+  ctx.fillText(fechaStr, textRight, lineY);
   lineY -= lineSpacing;
 
-  // Código foto
   ctx.fillStyle = '#ffd700';
-  ctx.font = 'bold ' + Math.round(48 * factorTexto) + 'px sans-serif';
-  ctx.fillText(fotoCodigo, W - 50, lineY);
+  ctx.font = 'bold ' + Math.round(48 * refScale * factorTexto) + 'px sans-serif';
+  ctx.fillText(fotoCodigo, textRight, lineY);
   lineY -= lineSpacing;
 
-  // RAPCA EMA
   ctx.fillStyle = '#ffd700';
-  ctx.font = 'bold ' + Math.round(56 * factorTexto) + 'px sans-serif';
-  ctx.fillText('RAPCA EMA', W - 50, lineY);
+  ctx.font = 'bold ' + Math.round(56 * refScale * factorTexto) + 'px sans-serif';
+  ctx.fillText('RAPCA EMA', textRight, lineY);
 
-  // Resetear sombra y alineación
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
   ctx.shadowOffsetX = 0;
@@ -2677,13 +2898,68 @@ function _renderizarFotoFinal(fuente, fw, fh) {
   fotoCapturada = canvas;
   anotaciones = [];
 
-  // Cerrar cámara, mostrar preview
   if (camaraStream) {
     camaraStream.getTracks().forEach(function(t) { t.stop(); });
     camaraStream = null;
   }
   document.getElementById('camera-modal').classList.remove('open');
   document.getElementById('preview-modal').classList.add('open');
+}
+
+// Postproceso en una sola pasada: reducción de ruido adaptada a la luz
+// + realce sutil de bordes (unsharp mask). Una pasada para limitar el
+// uso de memoria en móviles (un único getImageData/putImageData).
+//
+// Combina dos operaciones lineales sobre cada canal:
+//   denoise = d·(1-nr) + a·nr           (acerca al promedio local: suaviza ruido)
+//   sharp   = denoise + (denoise - a)·s (unsharp mask)
+// que se reduce a: result = d·(1-nr)(1+s) + a·(nr·(1+s) - s)
+// donde d = píxel, a = promedio de los 4 vecinos ortogonales.
+// Con nr=0 equivale al sharpening puro de antes.
+function _postprocesarFoto(ctx, w, h) {
+  if (w * h > 20000000) return;
+  try {
+    var imgData = ctx.getImageData(0, 0, w, h);
+    var d = imgData.data;
+    var src = new Uint8ClampedArray(d);
+    var stride = w * 4;
+
+    // Estimar luz media muestreando luminancia (1 de cada ~50 px)
+    var sumL = 0, nL = 0;
+    var paso = Math.max(4, Math.round(src.length / 4 / 20000)) * 4;
+    for (var p = 0; p < src.length; p += paso) {
+      sumL += 0.299 * src[p] + 0.587 * src[p + 1] + 0.114 * src[p + 2];
+      nL++;
+    }
+    var meanLum = nL > 0 ? sumL / nL : 128;
+
+    // Reducción de ruido proporcional a la oscuridad de la escena.
+    // Escenas luminosas (campo soleado): nr=0 → solo nitidez, color fiel.
+    // Escenas oscuras (amanecer/sombra densa): más suavizado del ruido.
+    var nr = 0;
+    if (meanLum < 60) nr = 0.35;
+    else if (meanLum < 120) nr = 0.35 * (120 - meanLum) / 60;
+
+    // En muy poca luz, bajar el realce para no amplificar ruido residual.
+    var s = meanLum < 60 ? 0.18 : 0.3;
+
+    // Coeficientes precalculados: result = kd·d + ka·a
+    var kd = (1 - nr) * (1 + s);
+    var ka = nr * (1 + s) - s;
+
+    for (var y = 1; y < h - 1; y++) {
+      var row = y * stride;
+      for (var x = 1; x < w - 1; x++) {
+        var i = row + x * 4;
+        for (var c = 0; c < 3; c++) {
+          var center = src[i + c];
+          var a = (src[i - stride + c] + src[i + stride + c] + src[i - 4 + c] + src[i + 4 + c]) * 0.25;
+          d[i + c] = kd * center + ka * a;
+        }
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+  } catch(e) {}
 }
 
 // --- SISTEMA DE GHOSTING PARA FOTOS COMPARATIVAS ---
@@ -3077,6 +3353,46 @@ function limpiarAnotaciones() {
   anotaciones = [];
 }
 
+// Codifica un canvas a JPEG de forma asíncrona (no bloquea la UI).
+// Devuelve {dataUrl, blob}. Usa toBlob si está disponible; si no, cae a
+// toDataURL síncrono como respaldo.
+function _canvasAJpeg(canvas, quality) {
+  return new Promise(function(resolve, reject) {
+    if (canvas.toBlob) {
+      canvas.toBlob(function(blob) {
+        if (!blob) { reject(new Error('toBlob devolvió null')); return; }
+        var r = new FileReader();
+        r.onload = function() { resolve({dataUrl: r.result, blob: blob}); };
+        r.onerror = function() { reject(r.error || new Error('FileReader')); };
+        r.readAsDataURL(blob);
+      }, 'image/jpeg', quality);
+    } else {
+      try { resolve({dataUrl: canvas.toDataURL('image/jpeg', quality), blob: null}); }
+      catch(e) { reject(e); }
+    }
+  });
+}
+
+// Codifica un canvas a Blob JPEG (para descarga directa, sin base64).
+function _canvasABlob(canvas, quality) {
+  return new Promise(function(resolve, reject) {
+    if (canvas.toBlob) {
+      canvas.toBlob(function(blob) {
+        if (!blob) { reject(new Error('toBlob devolvió null')); return; }
+        resolve(blob);
+      }, 'image/jpeg', quality);
+    } else {
+      try {
+        var du = canvas.toDataURL('image/jpeg', quality);
+        var bin = atob(du.split(',')[1]);
+        var arr = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        resolve(new Blob([arr], {type: 'image/jpeg'}));
+      } catch(e) { reject(e); }
+    }
+  });
+}
+
 function aceptarFoto() {
   vibrar(30);
 
@@ -3091,47 +3407,50 @@ function aceptarFoto() {
     return;
   }
 
-  // Guardar thumbnail en IndexedDB (mayor nitidez de previsualización)
-  var thumbCanvas = document.createElement('canvas');
-  thumbCanvas.width = 400;
-  thumbCanvas.height = 533;
-  var tCtx = thumbCanvas.getContext('2d');
-  tCtx.imageSmoothingEnabled = true;
-  tCtx.imageSmoothingQuality = 'high';
-  tCtx.drawImage(canvas, 0, 0, 400, 533);
-  var thumbData = thumbCanvas.toDataURL('image/jpeg', 0.7);
-
-  // Capturar datos de upload antes de cerrar (evitar múltiples toDataURL)
-  var uploadData;
-  var downloadData;
-  try {
-    uploadData = canvas.toDataURL('image/jpeg', 0.92);
-    downloadData = canvas.toDataURL('image/jpeg', 0.95);
-  } catch(e) {
-    showToast('Error al procesar foto. Reintenta.', 'error');
-    return;
-  }
-
-  // Capturar variables en closure antes de cerrar modal
+  // Capturar variables en closure ANTES de cualquier trabajo asíncrono
   var _fotoCodigo = fotoCodigo;
   var _camaraSubtipo = camaraSubtipo;
   var _camaraTipo = camaraTipo;
   var _gpsLat = gpsPos ? gpsPos.lat : null;
   var _gpsLon = gpsPos ? gpsPos.lon : null;
 
-  // Limpiar anotaciones y cerrar inmediatamente
+  // Thumbnail proporcional al canvas real
+  var thumbW = 400;
+  var thumbH = Math.round(thumbW * canvas.height / canvas.width);
+  var thumbCanvas = document.createElement('canvas');
+  thumbCanvas.width = thumbW;
+  thumbCanvas.height = thumbH;
+  var tCtx = thumbCanvas.getContext('2d');
+  tCtx.imageSmoothingEnabled = true;
+  tCtx.imageSmoothingQuality = 'high';
+  tCtx.drawImage(canvas, 0, 0, thumbW, thumbH);
+
+  // Limpiar anotaciones y cerrar inmediatamente (la UI no se congela
+  // porque la codificación JPEG ahora es asíncrona vía toBlob).
   limpiarAnotaciones();
   document.getElementById('preview-modal').classList.remove('open');
 
-  guardarEnDB('fotos', {codigo: _fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
+  // Codificar en secuencia para limitar el pico de memoria en móvil:
+  //   thumbnail (q0.80) → upload (q0.94, dataURL) → download (q0.97, blob)
+  var thumbData, uploadData;
+  _canvasAJpeg(thumbCanvas, 0.8).then(function(thumb) {
+    thumbData = thumb.dataUrl;
+    return _canvasAJpeg(canvas, 0.94);
+  }).then(function(up) {
+    uploadData = up.dataUrl;
+    return _canvasABlob(canvas, 0.97);
+  }).then(function(downloadBlob) {
+
+  return guardarEnDB('fotos', {codigo: _fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
     return guardarEnDB('subidas_pendientes', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
   }).then(function() {
-    // Auto-descarga full-res
+    // Auto-descarga full-res desde Blob (más fiable que data URL en móvil)
+    var blobUrl = URL.createObjectURL(downloadBlob);
     var link = document.createElement('a');
-    link.href = downloadData;
+    link.href = blobUrl;
     link.download = _fotoCodigo + '.jpg';
     link.click();
-    setTimeout(function() { URL.revokeObjectURL(link.href); }, 2000);
+    setTimeout(function() { URL.revokeObjectURL(blobUrl); }, 2000);
 
     // Añadir preview a la página
     if (!fotosPagina[_camaraSubtipo]) fotosPagina[_camaraSubtipo] = [];
@@ -3178,6 +3497,11 @@ function aceptarFoto() {
   }).catch(function(err) {
     console.error('Error guardando foto:', err);
     showToast('Error al guardar foto: ' + (err.message || err), 'error');
+  });
+
+  }).catch(function(err) {
+    console.error('Error codificando foto:', err);
+    showToast('Error al procesar foto. Reintenta.', 'error');
   });
 }
 

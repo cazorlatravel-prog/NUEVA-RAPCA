@@ -803,6 +803,22 @@ function capturarFoto() {
   if (imageCaptureObj && typeof imageCaptureObj.takePhoto === 'function') {
 
     var procesarBlob = function(blob) {
+      // createImageBitmap con orientación EXIF garantiza que la foto se
+      // dibuje siempre derecha, independientemente de cómo el navegador
+      // interprete la rotación del sensor (evita fotos giradas 90°).
+      if (typeof createImageBitmap === 'function') {
+        createImageBitmap(blob, {imageOrientation: 'from-image'}).then(function(bmp) {
+          _renderizarFotoFinal(bmp, bmp.width, bmp.height);
+          try { bmp.close(); } catch(e) {}
+        }).catch(function() {
+          procesarBlobConImagen(blob);
+        });
+      } else {
+        procesarBlobConImagen(blob);
+      }
+    };
+
+    var procesarBlobConImagen = function(blob) {
       var img = new Image();
       img.onload = function() {
         _renderizarFotoFinal(img, img.naturalWidth, img.naturalHeight);
@@ -834,6 +850,10 @@ function capturarFoto() {
         var opts = {};
         if (caps && caps.imageWidth && caps.imageWidth.max) opts.imageWidth = caps.imageWidth.max;
         if (caps && caps.imageHeight && caps.imageHeight.max) opts.imageHeight = caps.imageHeight.max;
+        // Desactivar flash en campo (rara vez útil, puede falsear color de vegetación)
+        if (caps && caps.fillLightMode && caps.fillLightMode.indexOf('off') >= 0) {
+          opts.fillLightMode = 'off';
+        }
         tomarFoto(opts);
       }).catch(function() { tomarFoto({}); });
     } else {
@@ -861,36 +881,55 @@ function _renderizarFotoFinal(fuente, fw, fh) {
   var canvas = document.getElementById('preview-canvas');
   var vw = fw || 1920, vh = fh || 1080;
 
-  // --- CANVAS ADAPTATIVO: dimensiones basadas en la fuente real ---
-  // Antes era fijo 3060×4080, lo que forzaba un upscale de hasta 3.8×
-  // en video (1920×1080), destruyendo la nitidez.
-  // Ahora el canvas se adapta para NO escalar hacia arriba.
+  // --- CANVAS ADAPTATIVO: respeta la ORIENTACIÓN real de la fuente ---
+  // Antes se forzaba SIEMPRE retrato (H=srcLong), lo que en fuentes
+  // landscape (vídeo 1080p, fotos sin EXIF) provocaba un upscale del
+  // 33–122% y recortaba más de la mitad de la escena.
+  // Ahora: si la fuente es horizontal → lienzo horizontal (4:3); si es
+  // vertical → lienzo vertical (3:4). En ambos casos escala ≤ 1 (sin
+  // ampliar) y recorte mínimo.
   var W, H;
   var srcShort = Math.min(vw, vh);
   var srcLong = Math.max(vw, vh);
+  var esLandscape = vw > vh;
 
-  // Orientación portrait: H > W, ratio ~3:4
-  H = srcLong;
-  W = Math.round(H * 3 / 4);
-
-  // Si fuente es portrait y W calculado excede su ancho, usar dims reales
-  if (W > srcShort && vh > vw) {
-    W = srcShort;
-    H = Math.round(W * 4 / 3);
-    if (H > srcLong) H = srcLong;
+  if (esLandscape) {
+    // Lienzo horizontal 4:3
+    W = srcLong;
+    H = Math.round(W * 3 / 4);
+    if (H > srcShort) {
+      H = srcShort;
+      W = Math.round(H * 4 / 3);
+      if (W > srcLong) W = srcLong;
+    }
+  } else {
+    // Lienzo vertical 3:4 (caso típico: teléfono en vertical)
+    H = srcLong;
+    W = Math.round(H * 3 / 4);
+    if (W > srcShort) {
+      W = srcShort;
+      H = Math.round(W * 4 / 3);
+      if (H > srcLong) H = srcLong;
+    }
   }
 
-  // Mínimo 1200px de ancho para watermarks legibles
-  if (W < 1200) {
-    var minScale = 1200 / W;
-    W = 1200;
-    H = Math.round(H * minScale);
+  // Mínimo de tamaño para watermarks legibles, SIN ampliar por encima
+  // de la resolución nativa de la fuente (evita pixelado de vídeo 720p).
+  var ladoCorto = Math.min(W, H);
+  if (ladoCorto < 1200) {
+    var objetivo = Math.min(1200, srcShort);
+    if (objetivo > ladoCorto) {
+      var minScale = objetivo / ladoCorto;
+      W = Math.round(W * minScale);
+      H = Math.round(H * minScale);
+    }
   }
-  // Máximo 5000px de alto por memoria
-  if (H > 5000) {
-    var maxScale = 5000 / H;
-    H = 5000;
+  // Máximo 5000px en el lado largo por memoria
+  var ladoLargo = Math.max(W, H);
+  if (ladoLargo > 5000) {
+    var maxScale = 5000 / ladoLargo;
     W = Math.round(W * maxScale);
+    H = Math.round(H * maxScale);
   }
 
   canvas.width = W;
@@ -906,12 +945,15 @@ function _renderizarFotoFinal(fuente, fw, fh) {
   var sx = (vw - sw) / 2, sy = (vh - sh) / 2;
   ctx.drawImage(fuente, sx, sy, sw, sh, 0, 0, W, H);
 
-  // Micro-nitidez: realce sutil de bordes (unsharp mask ligero)
-  _aplicarNitidezSutil(ctx, W, H);
+  // Postproceso: reducción de ruido (adaptada a la luz) + micro-nitidez,
+  // en una sola pasada para minimizar memoria en móvil.
+  _postprocesarFoto(ctx, W, H);
 
   // --- Factor de escala proporcional para watermarks ---
-  // Todos los tamaños estaban diseñados para 3060×4080.
-  var refScale = W / 3060;
+  // El diseño base era un lienzo retrato de 3060px de ancho (lado corto).
+  // Usar el lado corto mantiene el tamaño de los watermarks consistente
+  // tanto en fotos verticales como horizontales.
+  var refScale = Math.min(W, H) / 3060;
   var factorTexto = cfg.tamanoTexto === 'pequeno' ? 0.75 : (cfg.tamanoTexto === 'grande' ? 1.3 : 1.0);
 
   // --- ROSA DE LOS VIENTOS ---
@@ -1061,23 +1103,55 @@ function _renderizarFotoFinal(fuente, fw, fh) {
   document.getElementById('preview-modal').classList.add('open');
 }
 
-// Realce sutil de bordes (unsharp mask 3×3, amount=0.3)
-function _aplicarNitidezSutil(ctx, w, h) {
+// Postproceso en una sola pasada: reducción de ruido adaptada a la luz
+// + realce sutil de bordes (unsharp mask). Una pasada para limitar el
+// uso de memoria en móviles (un único getImageData/putImageData).
+//
+// Combina dos operaciones lineales sobre cada canal:
+//   denoise = d·(1-nr) + a·nr           (acerca al promedio local: suaviza ruido)
+//   sharp   = denoise + (denoise - a)·s (unsharp mask)
+// que se reduce a: result = d·(1-nr)(1+s) + a·(nr·(1+s) - s)
+// donde d = píxel, a = promedio de los 4 vecinos ortogonales.
+// Con nr=0 equivale al sharpening puro de antes.
+function _postprocesarFoto(ctx, w, h) {
   if (w * h > 20000000) return;
   try {
     var imgData = ctx.getImageData(0, 0, w, h);
     var d = imgData.data;
     var src = new Uint8ClampedArray(d);
     var stride = w * 4;
-    var amount = 0.3;
+
+    // Estimar luz media muestreando luminancia (1 de cada ~50 px)
+    var sumL = 0, nL = 0;
+    var paso = Math.max(4, Math.round(src.length / 4 / 20000)) * 4;
+    for (var p = 0; p < src.length; p += paso) {
+      sumL += 0.299 * src[p] + 0.587 * src[p + 1] + 0.114 * src[p + 2];
+      nL++;
+    }
+    var meanLum = nL > 0 ? sumL / nL : 128;
+
+    // Reducción de ruido proporcional a la oscuridad de la escena.
+    // Escenas luminosas (campo soleado): nr=0 → solo nitidez, color fiel.
+    // Escenas oscuras (amanecer/sombra densa): más suavizado del ruido.
+    var nr = 0;
+    if (meanLum < 60) nr = 0.35;
+    else if (meanLum < 120) nr = 0.35 * (120 - meanLum) / 60;
+
+    // En muy poca luz, bajar el realce para no amplificar ruido residual.
+    var s = meanLum < 60 ? 0.18 : 0.3;
+
+    // Coeficientes precalculados: result = kd·d + ka·a
+    var kd = (1 - nr) * (1 + s);
+    var ka = nr * (1 + s) - s;
+
     for (var y = 1; y < h - 1; y++) {
       var row = y * stride;
       for (var x = 1; x < w - 1; x++) {
         var i = row + x * 4;
         for (var c = 0; c < 3; c++) {
           var center = src[i + c];
-          var avg = (src[i - stride + c] + src[i + stride + c] + src[i - 4 + c] + src[i + 4 + c]) * 0.25;
-          d[i + c] = center + (center - avg) * amount;
+          var a = (src[i - stride + c] + src[i + stride + c] + src[i - 4 + c] + src[i + 4 + c]) * 0.25;
+          d[i + c] = kd * center + ka * a;
         }
       }
     }
@@ -1476,6 +1550,46 @@ function limpiarAnotaciones() {
   anotaciones = [];
 }
 
+// Codifica un canvas a JPEG de forma asíncrona (no bloquea la UI).
+// Devuelve {dataUrl, blob}. Usa toBlob si está disponible; si no, cae a
+// toDataURL síncrono como respaldo.
+function _canvasAJpeg(canvas, quality) {
+  return new Promise(function(resolve, reject) {
+    if (canvas.toBlob) {
+      canvas.toBlob(function(blob) {
+        if (!blob) { reject(new Error('toBlob devolvió null')); return; }
+        var r = new FileReader();
+        r.onload = function() { resolve({dataUrl: r.result, blob: blob}); };
+        r.onerror = function() { reject(r.error || new Error('FileReader')); };
+        r.readAsDataURL(blob);
+      }, 'image/jpeg', quality);
+    } else {
+      try { resolve({dataUrl: canvas.toDataURL('image/jpeg', quality), blob: null}); }
+      catch(e) { reject(e); }
+    }
+  });
+}
+
+// Codifica un canvas a Blob JPEG (para descarga directa, sin base64).
+function _canvasABlob(canvas, quality) {
+  return new Promise(function(resolve, reject) {
+    if (canvas.toBlob) {
+      canvas.toBlob(function(blob) {
+        if (!blob) { reject(new Error('toBlob devolvió null')); return; }
+        resolve(blob);
+      }, 'image/jpeg', quality);
+    } else {
+      try {
+        var du = canvas.toDataURL('image/jpeg', quality);
+        var bin = atob(du.split(',')[1]);
+        var arr = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        resolve(new Blob([arr], {type: 'image/jpeg'}));
+      } catch(e) { reject(e); }
+    }
+  });
+}
+
 function aceptarFoto() {
   vibrar(30);
 
@@ -1490,7 +1604,14 @@ function aceptarFoto() {
     return;
   }
 
-  // Guardar thumbnail proporcional al canvas real
+  // Capturar variables en closure ANTES de cualquier trabajo asíncrono
+  var _fotoCodigo = fotoCodigo;
+  var _camaraSubtipo = camaraSubtipo;
+  var _camaraTipo = camaraTipo;
+  var _gpsLat = gpsPos ? gpsPos.lat : null;
+  var _gpsLon = gpsPos ? gpsPos.lon : null;
+
+  // Thumbnail proporcional al canvas real
   var thumbW = 400;
   var thumbH = Math.round(thumbW * canvas.height / canvas.width);
   var thumbCanvas = document.createElement('canvas');
@@ -1500,38 +1621,33 @@ function aceptarFoto() {
   tCtx.imageSmoothingEnabled = true;
   tCtx.imageSmoothingQuality = 'high';
   tCtx.drawImage(canvas, 0, 0, thumbW, thumbH);
-  var thumbData = thumbCanvas.toDataURL('image/jpeg', 0.7);
 
-  var uploadData;
-  var downloadData;
-  try {
-    uploadData = canvas.toDataURL('image/jpeg', 0.94);
-    downloadData = canvas.toDataURL('image/jpeg', 0.97);
-  } catch(e) {
-    showToast('Error al procesar foto. Reintenta.', 'error');
-    return;
-  }
-
-  // Capturar variables en closure antes de cerrar modal
-  var _fotoCodigo = fotoCodigo;
-  var _camaraSubtipo = camaraSubtipo;
-  var _camaraTipo = camaraTipo;
-  var _gpsLat = gpsPos ? gpsPos.lat : null;
-  var _gpsLon = gpsPos ? gpsPos.lon : null;
-
-  // Limpiar anotaciones y cerrar inmediatamente
+  // Limpiar anotaciones y cerrar inmediatamente (la UI no se congela
+  // porque la codificación JPEG ahora es asíncrona vía toBlob).
   limpiarAnotaciones();
   document.getElementById('preview-modal').classList.remove('open');
 
-  guardarEnDB('fotos', {codigo: _fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
+  // Codificar en secuencia para limitar el pico de memoria en móvil:
+  //   thumbnail (q0.80) → upload (q0.94, dataURL) → download (q0.97, blob)
+  var thumbData, uploadData;
+  _canvasAJpeg(thumbCanvas, 0.8).then(function(thumb) {
+    thumbData = thumb.dataUrl;
+    return _canvasAJpeg(canvas, 0.94);
+  }).then(function(up) {
+    uploadData = up.dataUrl;
+    return _canvasABlob(canvas, 0.97);
+  }).then(function(downloadBlob) {
+
+  return guardarEnDB('fotos', {codigo: _fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
     return guardarEnDB('subidas_pendientes', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
   }).then(function() {
-    // Auto-descarga full-res
+    // Auto-descarga full-res desde Blob (más fiable que data URL en móvil)
+    var blobUrl = URL.createObjectURL(downloadBlob);
     var link = document.createElement('a');
-    link.href = downloadData;
+    link.href = blobUrl;
     link.download = _fotoCodigo + '.jpg';
     link.click();
-    setTimeout(function() { URL.revokeObjectURL(link.href); }, 2000);
+    setTimeout(function() { URL.revokeObjectURL(blobUrl); }, 2000);
 
     // Añadir preview a la página
     if (!fotosPagina[_camaraSubtipo]) fotosPagina[_camaraSubtipo] = [];
@@ -1578,6 +1694,11 @@ function aceptarFoto() {
   }).catch(function(err) {
     console.error('Error guardando foto:', err);
     showToast('Error al guardar foto: ' + (err.message || err), 'error');
+  });
+
+  }).catch(function(err) {
+    console.error('Error codificando foto:', err);
+    showToast('Error al procesar foto. Reintenta.', 'error');
   });
 }
 

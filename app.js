@@ -154,7 +154,9 @@ function buscarFotoData(codigo, tipo, unidad) {
 
     // Último recurso: Cloudinary (si online y tenemos tipo/unidad)
     if (!navigator.onLine || !tipo || !unidad) return null;
-    var cloudUrl = 'https://res.cloudinary.com/drnqs1jwl/image/upload/w_800,q_75/rapca/' + tipo + '/' + unidad + '/' + codigo + '.jpg';
+    // q_auto + f_auto: calidad adaptativa alta y formato óptimo (WebP/AVIF).
+    // w_1600 da buena resolución para rejillas/popups sin descargar el original completo.
+    var cloudUrl = 'https://res.cloudinary.com/drnqs1jwl/image/upload/w_1600,q_auto:good,f_auto/rapca/' + tipo + '/' + unidad + '/' + codigo + '.jpg';
     return fetch(cloudUrl, {mode: 'cors'}).then(function(resp) {
       if (!resp.ok) return null;
       return resp.blob();
@@ -167,6 +169,47 @@ function buscarFotoData(codigo, tipo, unidad) {
       });
     }).catch(function() { return null; });
   });
+}
+
+// Reconstruye {tipo, unidad} de un código de foto buscándolo en los registros.
+function fotoInfoDesdeCodigo(codigo) {
+  if (!codigo || typeof registros === 'undefined' || !registros) return null;
+  for (var i = 0; i < registros.length; i++) {
+    var r = registros[i];
+    if (!r || !r.datos) continue;
+    if (r.datos.fotos && typeof r.datos.fotos === 'string') {
+      var lista = r.datos.fotos.split(',');
+      for (var j = 0; j < lista.length; j++) {
+        if (lista[j].trim() === codigo) return {tipo: r.tipo, unidad: r.unidad};
+      }
+    }
+    if (r.datos.fotosComp && Array.isArray(r.datos.fotosComp)) {
+      for (var k = 0; k < r.datos.fotosComp.length; k++) {
+        var fc = r.datos.fotosComp[k];
+        if (fc && (fc.numero === codigo || fc.codigo === codigo)) return {tipo: r.tipo, unidad: r.unidad};
+      }
+    }
+  }
+  return null;
+}
+
+// Carga la MEJOR versión disponible de una foto (alta resolución) para el visor.
+// Prioriza: full-res local aún sin subir → Cloudinary en alta calidad.
+// Devuelve Promise<string|null> (data URL o URL remota).
+function cargarFotoHD(codigo, tipo, unidad) {
+  if (!codigo || !db) return Promise.resolve(null);
+  return obtenerDeDB('subidas_pendientes', codigo).then(function(f) {
+    if (f && f.data) return f.data; // full-res local (antes de subir)
+    if (!tipo || !unidad) {
+      var info = fotoInfoDesdeCodigo(codigo);
+      if (info) { tipo = tipo || info.tipo; unidad = unidad || info.unidad; }
+    }
+    if (navigator.onLine && tipo && unidad) {
+      // q_auto:best + f_auto: máxima calidad con formato óptimo (WebP/AVIF)
+      return 'https://res.cloudinary.com/drnqs1jwl/image/upload/q_auto:best,f_auto/rapca/' + tipo + '/' + unidad + '/' + codigo + '.jpg';
+    }
+    return null;
+  }).catch(function() { return null; });
 }
 
 // --- UI: Toast, Vibrar, Utilidades ---
@@ -409,21 +452,55 @@ function abrirLightboxMultiple(fotos, idx) {
   mostrarLightbox();
 }
 
+var _lbHDToken = 0;
+
+// Muestra la foto actual del visor: primero el thumbnail (instantáneo) y
+// luego, en segundo plano, sustituye por la versión en alta resolución.
+function _aplicarFotoLightbox() {
+  var foto = lightboxFotos[lightboxIdx];
+  if (!foto) return;
+  var imgEl = document.getElementById('lb-img');
+  imgEl.src = foto.src; // placeholder instantáneo (normalmente el thumbnail)
+  document.getElementById('lb-info').textContent = foto.info || '';
+
+  // Si ya tenemos la versión HD cargada para esta foto, no repetir
+  if (foto._hd) return;
+
+  var token = ++_lbHDToken;
+  var codigo = foto.info;
+  // Solo intentar mejora si 'info' parece un código de foto RAPCA
+  if (!codigo || !/_(VP|EV)_/.test(codigo)) return;
+
+  cargarFotoHD(codigo, foto.tipo, foto.unidad).then(function(hd) {
+    if (!hd || token !== _lbHDToken) return; // el usuario ya cambió de imagen
+    // Precargar para evitar parpadeo; solo intercambiar si carga bien
+    var pre = new Image();
+    pre.onload = function() {
+      if (token !== _lbHDToken) return;
+      imgEl.src = hd;
+      foto.src = hd;   // para que la descarga use también la HD
+      foto._hd = true;
+    };
+    pre.onerror = function() {};
+    if (hd.indexOf('data:') !== 0) pre.crossOrigin = 'anonymous';
+    pre.src = hd;
+  });
+}
+
 function mostrarLightbox() {
   var lb = document.getElementById('lightbox');
   lb.classList.add('open');
-  document.getElementById('lb-img').src = lightboxFotos[lightboxIdx].src;
-  document.getElementById('lb-info').textContent = lightboxFotos[lightboxIdx].info || '';
+  _aplicarFotoLightbox();
 }
 
 function cerrarLightbox() {
+  _lbHDToken++; // invalida cualquier carga HD en curso
   document.getElementById('lightbox').classList.remove('open');
 }
 
 function navLightbox(dir) {
   lightboxIdx = (lightboxIdx + dir + lightboxFotos.length) % lightboxFotos.length;
-  document.getElementById('lb-img').src = lightboxFotos[lightboxIdx].src;
-  document.getElementById('lb-info').textContent = lightboxFotos[lightboxIdx].info || '';
+  _aplicarFotoLightbox();
 }
 
 function descargarFotoLB() {
