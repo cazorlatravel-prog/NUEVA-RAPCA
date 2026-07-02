@@ -455,6 +455,33 @@ document.addEventListener('click', function(e) {
   }
 });
 
+// --- Aplicar selecciones de pastoreo/observación (limpia y re-selecciona) ---
+function aplicarPastoreo(prefix, valores) {
+  var container = document.getElementById(prefix + '-pastoreo-container');
+  if (!container) return;
+  container.querySelectorAll('.pastoreo-btn.selected').forEach(function(b) { b.classList.remove('selected'); });
+  if (!valores) return;
+  for (var p = 0; p < valores.length; p++) {
+    if (valores[p]) {
+      var btn = container.querySelector('.pastoreo-btn[data-punto="' + (p + 1) + '"][data-val="' + valores[p] + '"]');
+      if (btn) btn.classList.add('selected');
+    }
+  }
+}
+
+function aplicarObservacion(prefix, obj) {
+  var container = document.getElementById(prefix + '-obs-container');
+  if (!container) return;
+  container.querySelectorAll('.obs-btn.selected').forEach(function(b) { b.classList.remove('selected'); });
+  if (!obj) return;
+  for (var i = 0; i < OBS_CAMPOS.length; i++) {
+    if (obj[OBS_CAMPOS[i]]) {
+      var btn = container.querySelector('.obs-btn[data-campo="' + OBS_CAMPOS[i] + '"][data-val="' + obj[OBS_CAMPOS[i]] + '"]');
+      if (btn) btn.classList.add('selected');
+    }
+  }
+}
+
 // --- Transecto tabs ---
 function cambiarTransecto(t) {
   vibrar();
@@ -483,6 +510,11 @@ function actualizarTransectoTabs() {
 }
 
 function limpiarFormEI() {
+  // Limpiar pastoreo, observación y observaciones (individuales por transecto)
+  aplicarPastoreo('ev', null);
+  aplicarObservacion('ev', null);
+  var obsTxt = document.getElementById('ev-observaciones');
+  if (obsTxt) obsTxt.value = '';
   // Limpiar plantas
   for (var p = 1; p <= 10; p++) {
     document.getElementById('ev-planta' + p + '-nombre').value = '';
@@ -500,6 +532,8 @@ function limpiarFormEI() {
   // Limpiar herbaceas
   for (var h = 1; h <= 7; h++) document.getElementById('ev-herb' + h).value = '';
   document.getElementById('ev-herbaceas-media').textContent = '\u2014';
+  var herbInline = document.getElementById('ev-herbaceas-media-inline');
+  if (herbInline) herbInline.textContent = '\u2014';
   // Limpiar matorral
   for (var m = 1; m <= 2; m++) {
     document.getElementById('ev-mat' + m + 'cob').value = '';
@@ -573,6 +607,17 @@ function guardarEL() {
   var unidad = document.getElementById('el-unidad').value.trim();
   var zona = document.getElementById('el-zona').value;
   if (!fecha || !unidad) { showToast('Fecha y Unidad son obligatorios', 'error'); return; }
+
+  // Evitar 2 fichas EL el mismo día para la misma unidad
+  if (!editandoRegistro) {
+    var dupEL = registros.find(function(r) {
+      return r.tipo === 'EL' && r.fecha === fecha && r.unidad === unidad && r.operador_email === sesion.email;
+    });
+    if (dupEL) {
+      showToast('Ya existe una Evaluación Ligera de ' + unidad + ' con fecha ' + fecha + '. Edítala desde Registros.', 'error');
+      return;
+    }
+  }
 
   var fotos = fotosPagina['G'] || [];
   var fotosComp = [];
@@ -693,6 +738,12 @@ function recogerDatosEI() {
 
 function restaurarDatosEI(datos) {
   if (!datos) return;
+  // Restaurar pastoreo y observación propios del transecto
+  // (cada transecto tiene sus grados de pastoreo y observación individuales)
+  aplicarPastoreo('ev', datos.pastoreo);
+  aplicarObservacion('ev', datos.observacionPastoreo);
+  var obsTxt = document.getElementById('ev-observaciones');
+  if (obsTxt) obsTxt.value = datos.observaciones || '';
   // Restaurar plantas
   if (datos.plantas) {
     for (var p = 0; p < datos.plantas.length && p < 10; p++) {
@@ -736,6 +787,12 @@ function restaurarDatosEI(datos) {
     document.getElementById('ev-mat2esp').value = p2.especie || '';
     actualizarResumenMatorral();
   }
+  // Restaurar medias generales (antes quedaban las del transecto anterior)
+  document.getElementById('ev-plantas-media').textContent = datos.plantasMedia || '—';
+  document.getElementById('ev-palatables-media').textContent = datos.palatablesMedia || '—';
+  document.getElementById('ev-herbaceas-media').textContent = datos.herbaceasMedia || '—';
+  var herbInline = document.getElementById('ev-herbaceas-media-inline');
+  if (herbInline) herbInline.textContent = datos.herbaceasMedia || '—';
 }
 
 function guardarEI() {
@@ -747,6 +804,22 @@ function guardarEI() {
 
   // Save current transect data
   transectosDatos[transectoActual] = recogerDatosEI();
+
+  // Evitar 2 fichas EI el mismo día para la misma unidad:
+  // si ya existe una, se actualiza esa misma ficha fusionando los transectos
+  // (así T1, T2 y T3 quedan en una única ficha, no en tres)
+  if (!editandoRegistro) {
+    var existenteEI = registros.find(function(r) {
+      return r.tipo === 'EI' && r.fecha === fecha && r.unidad === unidad && r.operador_email === sesion.email;
+    });
+    if (existenteEI) {
+      var prevT = (existenteEI.datos && existenteEI.datos.transectos) || {};
+      if (!transectosDatos.T1 && prevT.T1) transectosDatos.T1 = prevT.T1;
+      if (!transectosDatos.T2 && prevT.T2) transectosDatos.T2 = prevT.T2;
+      if (!transectosDatos.T3 && prevT.T3) transectosDatos.T3 = prevT.T3;
+      editandoRegistro = existenteEI;
+    }
+  }
 
   // Build combined datos with all 3 transects
   var datosT1 = transectosDatos['T1'] || {};
@@ -786,7 +859,6 @@ function guardarEI() {
 
   guardarRegistros();
   fotosPagina = {};
-  detenerAutoGuardado();
   vibrar(50);
   if (navigator.onLine) {
     showToast('Evaluacion Intensiva guardada. Sincronizando...', 'success');
@@ -797,6 +869,8 @@ function guardarEI() {
 
   // Si es T3, resetear completamente
   if (transectoActual === 'T3') {
+    // La unidad est\u00e1 completa: ya no hace falta auto-guardar borrador
+    detenerAutoGuardado();
     transectosDatos = {T1: null, T2: null, T3: null};
     transectoActual = 'T1';
     fotosPagina = {};

@@ -13,11 +13,26 @@ var gpxCapas = []; // Array de {nombre, layer}
 var gpsMapMarker = null;
 var gpsMapCircle = null;
 var gpsMapWatchId = null;
+// Modo seguimiento: el mapa se recentra con cada actualización GPS.
+// Se desactiva al arrastrar el mapa manualmente; el botón 📍 lo reactiva.
+var gpsMapSeguir = true;
 
 function initMapa() {
-  if (mapa) { mapa.invalidateSize(); actualizarMarcadores(); return; }
+  if (mapa) {
+    mapa.invalidateSize();
+    actualizarMarcadores();
+    // Reactivar tracking y centrado al volver a entrar en el mapa
+    // (al salir de la página se detiene el GPS con detenerGPSMapa)
+    gpsMapSeguir = true;
+    if (!gpsMapWatchId) iniciarGPSMapa();
+    centrarMapaEnGPS();
+    return;
+  }
   var mapDiv = document.getElementById('map-container');
   mapa = L.map(mapDiv, {zoomControl: false}).setView([37.78, -3.79], 10);
+
+  // Si el usuario arrastra el mapa, dejar de seguir su posición
+  mapa.on('dragstart', function() { gpsMapSeguir = false; });
 
   // Basemaps
   var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution: '© OSM', maxZoom: 19});
@@ -52,7 +67,24 @@ function initMapa() {
   cargarInfraKMLGuardada();
 
   // Iniciar tracking GPS automático del operador
+  gpsMapSeguir = true;
   iniciarGPSMapa();
+  centrarMapaEnGPS();
+}
+
+// Centrar el mapa en la posición GPS actual (última conocida o nueva lectura)
+function centrarMapaEnGPS() {
+  if (!mapa) return;
+  if (gpsPos) {
+    mapa.setView([gpsPos.lat, gpsPos.lon], Math.max(mapa.getZoom(), 15));
+    return;
+  }
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude};
+    // Solo centrar si el usuario no ha movido el mapa mientras tanto
+    if (mapa && gpsMapSeguir) mapa.setView([gpsPos.lat, gpsPos.lon], 16);
+  }, function() {}, {enableHighAccuracy: true, timeout: 10000, maximumAge: 60000});
 }
 
 function actualizarMarcadores() {
@@ -165,6 +197,7 @@ function iniciarGPSMapa() {
     var latlng = [pos.coords.latitude, pos.coords.longitude];
     var accuracy = pos.coords.accuracy || 30;
     var heading = pos.coords.heading;
+    var esPrimerFix = !gpsMapMarker;
 
     if (!gpsMapMarker) {
       // Crear marcador con punto azul pulsante
@@ -198,6 +231,12 @@ function iniciarGPSMapa() {
         arrow.style.display = 'none';
       }
     }
+
+    // Seguimiento: recentrar el mapa según te mueves
+    if (gpsMapSeguir && mapa) {
+      if (esPrimerFix) mapa.setView(latlng, Math.max(mapa.getZoom(), 16));
+      else mapa.panTo(latlng);
+    }
   }, function(err) {
     if (err.code === 1) showToast('GPS: permiso denegado', 'error');
   }, {enableHighAccuracy: true, maximumAge: 3000, timeout: 10000});
@@ -214,6 +253,8 @@ function detenerGPSMapa() {
 
 function miPosicion() {
   if (!navigator.geolocation) { showToast('GPS no disponible', 'error'); return; }
+  // Reactivar el seguimiento continuo
+  gpsMapSeguir = true;
   // Si no hay tracking activo, iniciarlo
   if (!gpsMapWatchId) iniciarGPSMapa();
   // Centrar en posición actual
