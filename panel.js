@@ -466,55 +466,74 @@ async function exportarPDFRegistro(id, opcionesFotos) {
   html += '<tr><th>Zona</th><td>' + escapeHtml(r.zona) + '</td><th>Transecto</th><td>' + escapeHtml(r.transecto || '—') + '</td></tr>';
   html += '<tr><th>Operador</th><td>' + escapeHtml(r.operador_nombre || '') + '</td><th>Coordenadas</th><td>' + (r.lat ? formatCoordNW(r.lat, r.lon) : '—') + '</td></tr></table>';
 
-  if (r.datos.pastoreo) {
-    html += '<h3>Grados de Pastoreo</h3><table><tr>';
-    r.datos.pastoreo.forEach(function(p, i) { html += '<th>Punto ' + (i+1) + '</th>'; });
-    html += '</tr><tr>';
-    r.datos.pastoreo.forEach(function(p) { html += '<td>' + escapeHtml(p || '—') + '</td>'; });
-    html += '</tr></table>';
+  // Secciones de datos de campo, reutilizable por transecto en fichas EI
+  function seccionesDatos(d) {
+    var s = '';
+    if (d.pastoreo) {
+      s += '<h3>Grados de Pastoreo</h3><table><tr>';
+      d.pastoreo.forEach(function(p, i) { s += '<th>Punto ' + (i+1) + '</th>'; });
+      s += '</tr><tr>';
+      d.pastoreo.forEach(function(p) { s += '<td>' + escapeHtml(p || '—') + '</td>'; });
+      s += '</tr></table>';
+    }
+
+    if (d.observacionPastoreo) {
+      s += '<h3>Observación Pastoreo</h3><table><tr><th>Señal Paso</th><th>Veredas</th><th>Cagarrutas</th></tr><tr>';
+      s += '<td>' + escapeHtml(d.observacionPastoreo.senal || '—') + '</td>';
+      s += '<td>' + escapeHtml(d.observacionPastoreo.veredas || '—') + '</td>';
+      s += '<td>' + escapeHtml(d.observacionPastoreo.cagarrutas || '—') + '</td></tr></table>';
+    }
+
+    if (d.plantas) {
+      s += '<h3>Plantas</h3><table><tr><th>Especie</th><th>Notas</th><th>Media</th></tr>';
+      d.plantas.forEach(function(p) {
+        s += '<tr><td style="font-style:italic">' + escapeHtml(p.nombre || '—') + '</td><td>' + (p.notas || []).join(', ') + '</td><td><strong>' + escapeHtml(p.media || '—') + '</strong></td></tr>';
+      });
+      s += '</table><p><strong>Media general: ' + (d.plantasMedia || '—') + '</strong></p>';
+    }
+
+    if (d.palatables) {
+      s += '<h3>Palatables</h3><table><tr><th>Especie</th><th>Notas</th><th>Media</th></tr>';
+      d.palatables.forEach(function(p) {
+        s += '<tr><td style="font-style:italic">' + escapeHtml(p.nombre || '—') + '</td><td>' + (p.notas || []).join(', ') + '</td><td><strong>' + escapeHtml(p.media || '—') + '</strong></td></tr>';
+      });
+      s += '</table><p><strong>Media general: ' + (d.palatablesMedia || '—') + '</strong></p>';
+    }
+
+    if (d.herbaceas) {
+      s += '<h3>Herbáceas</h3><table><tr>';
+      for (var h = 1; h <= 7; h++) s += '<th>H' + h + '</th>';
+      s += '<th>Media</th></tr><tr>';
+      d.herbaceas.forEach(function(v) { s += '<td>' + (v !== null ? v : '—') + '</td>'; });
+      s += '<td><strong>' + (d.herbaceasMedia || '—') + '</strong></td></tr></table>';
+    }
+
+    if (d.matorral) {
+      var mp1 = d.matorral.punto1 || {};
+      var mp2 = d.matorral.punto2 || {};
+      s += '<h3>Matorralización</h3><table><tr><th></th><th>Cobertura (%)</th><th>Altura (cm)</th><th>Especie</th></tr>';
+      s += '<tr><td>Punto 1</td><td>' + (mp1.cobertura || 0) + '</td><td>' + (mp1.altura || 0) + '</td><td style="font-style:italic">' + escapeHtml(mp1.especie || '—') + '</td></tr>';
+      s += '<tr><td>Punto 2</td><td>' + (mp2.cobertura || 0) + '</td><td>' + (mp2.altura || 0) + '</td><td style="font-style:italic">' + escapeHtml(mp2.especie || '—') + '</td></tr>';
+      s += '</table><p><strong>Volumen: ' + (d.matorral.volumen || '—') + ' m³/ha</strong> (Cob media: ' + (d.matorral.mediaCob || '—') + '%, Alt media: ' + (d.matorral.mediaAlt || '—') + ' cm)</p>';
+    }
+
+    if (d.observaciones) s += '<h3>Observaciones</h3><p>' + escapeHtml(d.observaciones) + '</p>';
+    return s;
   }
 
-  if (r.datos.observacionPastoreo) {
-    html += '<h3>Observación Pastoreo</h3><table><tr><th>Señal Paso</th><th>Veredas</th><th>Cagarrutas</th></tr><tr>';
-    html += '<td>' + escapeHtml(r.datos.observacionPastoreo.senal || '—') + '</td>';
-    html += '<td>' + escapeHtml(r.datos.observacionPastoreo.veredas || '—') + '</td>';
-    html += '<td>' + escapeHtml(r.datos.observacionPastoreo.cagarrutas || '—') + '</td></tr></table>';
-  }
-
-  if (r.datos.plantas) {
-    html += '<h3>Plantas</h3><table><tr><th>Especie</th><th>Notas</th><th>Media</th></tr>';
-    r.datos.plantas.forEach(function(p) {
-      html += '<tr><td style="font-style:italic">' + escapeHtml(p.nombre || '—') + '</td><td>' + (p.notas || []).join(', ') + '</td><td><strong>' + escapeHtml(p.media || '—') + '</strong></td></tr>';
+  if (r.datos.transectos) {
+    // Ficha EI con transectos: imprimir cada transecto con datos
+    // (antes el informe solo mostraba T1 y se perdían T2/T3)
+    ['T1', 'T2', 'T3'].forEach(function(t) {
+      var dt = r.datos.transectos[t];
+      if (!dt) return;
+      if (typeof esTransectoVacio === 'function' && esTransectoVacio(dt)) return;
+      html += '<h2 style="background:#fd9853;color:#fff;padding:6px 12px;border-radius:6px;margin-top:24px">Transecto ' + t + '</h2>';
+      html += seccionesDatos(dt);
     });
-    html += '</table><p><strong>Media general: ' + (r.datos.plantasMedia || '—') + '</strong></p>';
+  } else {
+    html += seccionesDatos(r.datos);
   }
-
-  if (r.datos.palatables) {
-    html += '<h3>Palatables</h3><table><tr><th>Especie</th><th>Notas</th><th>Media</th></tr>';
-    r.datos.palatables.forEach(function(p) {
-      html += '<tr><td style="font-style:italic">' + escapeHtml(p.nombre || '—') + '</td><td>' + (p.notas || []).join(', ') + '</td><td><strong>' + escapeHtml(p.media || '—') + '</strong></td></tr>';
-    });
-    html += '</table><p><strong>Media general: ' + (r.datos.palatablesMedia || '—') + '</strong></p>';
-  }
-
-  if (r.datos.herbaceas) {
-    html += '<h3>Herbáceas</h3><table><tr>';
-    for (var h = 1; h <= 7; h++) html += '<th>H' + h + '</th>';
-    html += '<th>Media</th></tr><tr>';
-    r.datos.herbaceas.forEach(function(v) { html += '<td>' + (v !== null ? v : '—') + '</td>'; });
-    html += '<td><strong>' + (r.datos.herbaceasMedia || '—') + '</strong></td></tr></table>';
-  }
-
-  if (r.datos.matorral) {
-    var mp1 = r.datos.matorral.punto1 || {};
-    var mp2 = r.datos.matorral.punto2 || {};
-    html += '<h3>Matorralización</h3><table><tr><th></th><th>Cobertura (%)</th><th>Altura (cm)</th><th>Especie</th></tr>';
-    html += '<tr><td>Punto 1</td><td>' + (mp1.cobertura || 0) + '</td><td>' + (mp1.altura || 0) + '</td><td style="font-style:italic">' + escapeHtml(mp1.especie || '—') + '</td></tr>';
-    html += '<tr><td>Punto 2</td><td>' + (mp2.cobertura || 0) + '</td><td>' + (mp2.altura || 0) + '</td><td style="font-style:italic">' + escapeHtml(mp2.especie || '—') + '</td></tr>';
-    html += '</table><p><strong>Volumen: ' + (r.datos.matorral.volumen || '—') + ' m³/ha</strong> (Cob media: ' + (r.datos.matorral.mediaCob || '—') + '%, Alt media: ' + (r.datos.matorral.mediaAlt || '—') + ' cm)</p>';
-  }
-
-  if (r.datos.observaciones) html += '<h3>Observaciones</h3><p>' + escapeHtml(r.datos.observaciones) + '</p>';
 
   // ---- FOTOS COMPARATIVAS (prioridad alta, más grandes) ----
   if (opcionesFotos.incluirComparativas && r.datos.fotosComp && r.datos.fotosComp.length > 0) {
@@ -578,9 +597,17 @@ async function exportarPDFRegistro(id, opcionesFotos) {
   html += '<hr><p style="color:#888;font-size:11px">Generado por RAPCA Campo · ' + new Date().toLocaleString('es-ES') + '</p></body></html>';
 
   var win = window.open('', '_blank');
-  win.document.write(html);
-  win.document.close();
-  win.print();
+  if (win) {
+    win.document.write(html);
+    win.document.close();
+    // Pequeña espera para que las imágenes se rendericen antes de imprimir
+    setTimeout(function() { win.print(); }, 400);
+  } else {
+    // Popup bloqueado (habitual en móvil o al exportar varios): descargar HTML
+    var nombreArch = 'informe_' + r.tipo + '_' + String(r.unidad).replace(/[^\w\-]/g, '_') + '_' + r.fecha + '.html';
+    descargarArchivo(html, nombreArch, 'text/html');
+    showToast('Popup bloqueado: informe descargado como HTML', 'info');
+  }
 }
 
 function registrosFiltradosPanel() {
@@ -602,51 +629,51 @@ function exportarExcelRegistros() {
   var regs = registrosFiltradosPanel();
   if (regs.length === 0) { showToast('No hay registros para exportar', 'error'); return; }
 
-  var filas = regs.map(function(r) {
+  function filaExcel(r, datos, transectoLabel) {
     var fila = {
       'Tipo': r.tipo,
       'Fecha': r.fecha,
       'Unidad': r.unidad,
       'Zona': r.zona || '',
-      'Transecto': r.transecto || '',
+      'Transecto': transectoLabel || '',
       'Operador': r.operador_nombre || '',
       'Latitud': r.lat || '',
       'Longitud': r.lon || '',
       'Enviado': r.enviado ? 'Sí' : 'No'
     };
 
-    if (r.datos) {
+    if (datos) {
       // Pastoreo
-      if (r.datos.pastoreo) {
-        if (Array.isArray(r.datos.pastoreo)) {
-          fila['Pastoreo'] = r.datos.pastoreo.join(', ');
+      if (datos.pastoreo) {
+        if (Array.isArray(datos.pastoreo)) {
+          fila['Pastoreo'] = datos.pastoreo.join(', ');
         } else {
-          fila['Pastoreo'] = String(r.datos.pastoreo);
+          fila['Pastoreo'] = String(datos.pastoreo);
         }
       }
       // Observación pastoreo
-      if (r.datos.observacionPastoreo) {
-        var obs = r.datos.observacionPastoreo;
+      if (datos.observacionPastoreo) {
+        var obs = datos.observacionPastoreo;
         fila['Señal Paso'] = obs.senal || '';
         fila['Veredas'] = obs.veredas || '';
         fila['Cagarrutas'] = obs.cagarrutas || '';
       }
       // Fotos
-      fila['Fotos'] = r.datos.fotos || '';
+      fila['Fotos'] = datos.fotos || '';
       // Fotos comparativas
-      if (r.datos.fotosComp && r.datos.fotosComp.length > 0) {
-        fila['Fotos Comparativas'] = r.datos.fotosComp.map(function(f) {
+      if (datos.fotosComp && datos.fotosComp.length > 0) {
+        fila['Fotos Comparativas'] = datos.fotosComp.map(function(f) {
           return f.numero + ' (' + f.waypoint + ')';
         }).join(', ');
       }
       // Observaciones
-      fila['Observaciones'] = r.datos.observaciones || '';
+      fila['Observaciones'] = datos.observaciones || '';
 
       // Datos EI específicos
       if (r.tipo === 'EI') {
         // Plantas
-        if (r.datos.plantas) {
-          r.datos.plantas.forEach(function(p, i) {
+        if (datos.plantas) {
+          datos.plantas.forEach(function(p, i) {
             if (p.nombre) {
               fila['Planta ' + (i + 1)] = p.nombre;
               fila['Planta ' + (i + 1) + ' Media'] = p.media || '';
@@ -654,10 +681,10 @@ function exportarExcelRegistros() {
             }
           });
         }
-        fila['Media Plantas'] = r.datos.plantasMedia || '';
+        fila['Media Plantas'] = datos.plantasMedia || '';
         // Palatables
-        if (r.datos.palatables) {
-          r.datos.palatables.forEach(function(p, i) {
+        if (datos.palatables) {
+          datos.palatables.forEach(function(p, i) {
             if (p.nombre) {
               fila['Palatable ' + (i + 1)] = p.nombre;
               fila['Palatable ' + (i + 1) + ' Media'] = p.media || '';
@@ -665,15 +692,15 @@ function exportarExcelRegistros() {
             }
           });
         }
-        fila['Media Palatables'] = r.datos.palatablesMedia || '';
+        fila['Media Palatables'] = datos.palatablesMedia || '';
         // Herbáceas
-        if (r.datos.herbaceas) {
-          fila['Herbáceas'] = r.datos.herbaceas.filter(function(n) { return n !== null; }).join(', ');
+        if (datos.herbaceas) {
+          fila['Herbáceas'] = datos.herbaceas.filter(function(n) { return n !== null; }).join(', ');
         }
-        fila['Media Herbáceas'] = r.datos.herbaceasMedia || '';
+        fila['Media Herbáceas'] = datos.herbaceasMedia || '';
         // Matorral
-        if (r.datos.matorral) {
-          var mat = r.datos.matorral;
+        if (datos.matorral) {
+          var mat = datos.matorral;
           fila['Matorral P1 Cobertura'] = mat.punto1 ? mat.punto1.cobertura : '';
           fila['Matorral P1 Altura'] = mat.punto1 ? mat.punto1.altura : '';
           fila['Matorral P1 Especie'] = mat.punto1 ? mat.punto1.especie : '';
@@ -688,6 +715,24 @@ function exportarExcelRegistros() {
     }
 
     return fila;
+  }
+
+  // Fichas EI con transectos: una fila por transecto con datos
+  // (antes solo se exportaba T1 y se perdían T2/T3)
+  var filas = [];
+  regs.forEach(function(r) {
+    if (r.tipo === 'EI' && r.datos && r.datos.transectos) {
+      var alguna = false;
+      ['T1', 'T2', 'T3'].forEach(function(t) {
+        var dt = r.datos.transectos[t];
+        if (!dt) return;
+        filas.push(filaExcel(r, dt, t));
+        alguna = true;
+      });
+      if (!alguna) filas.push(filaExcel(r, r.datos, r.transecto || ''));
+    } else {
+      filas.push(filaExcel(r, r.datos, r.transecto || ''));
+    }
   });
 
   var ws = XLSX.utils.json_to_sheet(filas);
@@ -711,20 +756,25 @@ async function descargarFotosZIP(id) {
   if (!r || !r.datos.fotos) { showToast('No hay fotos', 'error'); return; }
   var zip = new JSZip();
   var codigos = r.datos.fotos.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
+  var noEncontradas = 0;
   for (var i = 0; i < codigos.length; i++) {
     try {
-      var foto = await obtenerDeDB('fotos', codigos[i]);
-      if (foto) {
-        var base64 = foto.data.split(',')[1];
-        zip.file(codigos[i] + '.jpg', base64, {base64: true});
+      // Buscar en todas las fuentes (local, precarga, pendientes, Cloudinary)
+      var data = await buscarFotoData(codigos[i], r.tipo, r.unidad);
+      if (data && data.indexOf('data:') === 0) {
+        zip.file(codigos[i] + '.jpg', data.split(',')[1], {base64: true});
+      } else {
+        noEncontradas++;
       }
-    } catch(e) {}
+    } catch(e) { noEncontradas++; }
   }
+  if (noEncontradas === codigos.length) { showToast('No se pudo recuperar ninguna foto', 'error'); return; }
   zip.generateAsync({type: 'blob'}).then(function(blob) {
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = r.unidad + '_fotos.zip';
     a.click();
+    if (noEncontradas > 0) showToast(noEncontradas + ' fotos no disponibles', 'info');
   });
 }
 
@@ -732,6 +782,7 @@ async function descargarTodasFotosZIP() {
   var zip = new JSZip();
   var all = await obtenerTodosDB('fotos');
   all.forEach(function(foto) {
+    if (!foto || !foto.data || typeof foto.data !== 'string') return;
     var base64 = foto.data.split(',')[1];
     zip.file(foto.codigo + '.jpg', base64, {base64: true});
   });
@@ -1281,31 +1332,41 @@ async function ejecutarInformeInfra() {
     for (var ri = 0; ri < regsFiltrados.length; ri++) {
       var r = regsFiltrados[ri];
       html += '<div style="margin-top:16px;border-left:4px solid ' + (r.tipo === 'VP' ? '#2e7d32' : r.tipo === 'EL' ? '#1565c0' : '#e65100') + ';padding-left:12px">';
-      html += '<h4 style="margin:0 0 8px;color:#1a3d2e"><span class="badge" style="background:' + (r.tipo === 'VP' ? '#2e7d32' : r.tipo === 'EL' ? '#1565c0' : '#e65100') + '">' + r.tipo + '</span> ' + r.fecha + ' — ' + r.unidad + (r.transecto ? ' (T' + r.transecto + ')' : '') + '</h4>';
+      html += '<h4 style="margin:0 0 8px;color:#1a3d2e"><span class="badge" style="background:' + (r.tipo === 'VP' ? '#2e7d32' : r.tipo === 'EL' ? '#1565c0' : '#e65100') + '">' + r.tipo + '</span> ' + escapeHtml(r.fecha) + ' — ' + escapeHtml(r.unidad) + (r.transecto ? ' (' + escapeHtml(r.transecto) + ')' : '') + '</h4>';
 
-      // Datos del registro (pastoreo, observaciones, etc.)
-      if (r.datos.pastoreo) {
-        html += '<table><tr><th colspan="' + r.datos.pastoreo.length + '">Grados de Pastoreo</th></tr><tr>';
-        r.datos.pastoreo.forEach(function(p, pi) { html += '<td style="text-align:center"><strong>P' + (pi+1) + ':</strong> ' + (p || '—') + '</td>'; });
-        html += '</tr></table>';
-      }
+      // Datos del registro: en fichas EI con transectos, mostrar cada uno
+      var muestrasReg = (r.tipo === 'EI' && r.datos.transectos)
+        ? ['T1', 'T2', 'T3'].map(function(t) { return {t: t, d: r.datos.transectos[t]}; })
+            .filter(function(m) { return m.d && !(typeof esTransectoVacio === 'function' && esTransectoVacio(m.d)); })
+        : [{t: '', d: r.datos}];
 
-      if (r.datos.observaciones) {
-        html += '<p><strong>Observaciones:</strong> ' + escapeHtml(r.datos.observaciones) + '</p>';
-      }
+      muestrasReg.forEach(function(m) {
+        var d = m.d;
+        if (m.t) html += '<p style="font-weight:700;color:#e65100;margin:10px 0 4px">Transecto ' + m.t + '</p>';
 
-      if (r.datos.plantas) {
-        html += '<table><tr><th>Especie</th><th>Media</th></tr>';
-        r.datos.plantas.forEach(function(p) { html += '<tr><td style="font-style:italic">' + escapeHtml(p.nombre || '—') + '</td><td>' + (p.media || '—') + '</td></tr>'; });
-        html += '</table>';
-      }
+        if (d.pastoreo) {
+          html += '<table><tr><th colspan="' + d.pastoreo.length + '">Grados de Pastoreo</th></tr><tr>';
+          d.pastoreo.forEach(function(p, pi) { html += '<td style="text-align:center"><strong>P' + (pi+1) + ':</strong> ' + escapeHtml(p || '—') + '</td>'; });
+          html += '</tr></table>';
+        }
 
-      if (r.datos.herbaceas) {
-        html += '<p><strong>Herbáceas media:</strong> ' + (r.datos.herbaceasMedia || '—') + ' cm</p>';
-      }
-      if (r.datos.matorral) {
-        html += '<p><strong>Matorralización:</strong> Vol. ' + (r.datos.matorral.volumen || '—') + ' m³/ha</p>';
-      }
+        if (d.observaciones) {
+          html += '<p><strong>Observaciones:</strong> ' + escapeHtml(d.observaciones) + '</p>';
+        }
+
+        if (d.plantas) {
+          html += '<table><tr><th>Especie</th><th>Media</th></tr>';
+          d.plantas.forEach(function(p) { html += '<tr><td style="font-style:italic">' + escapeHtml(p.nombre || '—') + '</td><td>' + (p.media || '—') + '</td></tr>'; });
+          html += '</table>';
+        }
+
+        if (d.herbaceas) {
+          html += '<p><strong>Herbáceas media:</strong> ' + (d.herbaceasMedia || '—') + ' cm</p>';
+        }
+        if (d.matorral) {
+          html += '<p><strong>Matorralización:</strong> Vol. ' + (d.matorral.volumen || '—') + ' m³/ha</p>';
+        }
+      });
 
       // ---- FOTOS ----
       if (fotosTipo !== 'ninguna') {
