@@ -180,6 +180,9 @@ async function sincronizar() {
         formData.append('entry.datos', JSON.stringify(r.datos));
         await fetch(GOOGLE_FORM_URL, {method: 'POST', body: formData, mode: 'no-cors'});
         r.enviadoForm = true;
+        // Persistir al momento: si la app se cierra a mitad de la cola,
+        // el flag no se perdería y no se duplicarían filas en la hoja
+        guardarRegistros();
       }
     } catch(e) {}
 

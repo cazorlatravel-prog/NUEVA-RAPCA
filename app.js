@@ -683,15 +683,17 @@ window.addEventListener('popstate', function(e) {
     return;
   }
 
-  // Si estamos en una página que no es inicio, volver a inicio
+  // Si estamos en una página que no es el inicio, volver al menú principal
+  // (antes comparaba con 'panel-page' y el botón atrás llevaba siempre al
+  // Panel de Registros en vez de al menú, sin poder salir de la app)
   var activePage = document.querySelector('.page.active');
-  if (activePage && activePage.id !== 'panel-page') {
+  if (activePage && activePage.id !== 'menu-page') {
     pushHistoryState();
-    irPagina('panel');
+    irPagina('menu');
     return;
   }
 
-  // En el panel principal: dejar salir pero re-empujar por si acaso
+  // En el menú principal: dejar salir pero re-empujar por si acaso
   pushHistoryState();
 });
 
@@ -714,7 +716,10 @@ function mostrarDialogoSalir() {
 
 function guardarYSalir() {
   var tipo = getTipoFormActivo();
-  if (tipo && typeof guardarBorrador === 'function') {
+  if (editandoRegistro) {
+    // Al editar un registro no existe borrador: avisar en vez de fingir éxito
+    showToast('Estabas editando un registro: los cambios no guardados se descartan', 'info');
+  } else if (tipo && typeof guardarBorrador === 'function') {
     guardarBorrador(tipo);
     showToast('Borrador de ' + tipo + ' guardado', 'success');
   }
@@ -747,6 +752,9 @@ document.addEventListener('DOMContentLoaded', function() {
     if (typeof migrarWaypointsDeRegistros === 'function') {
       setTimeout(function() { migrarWaypointsDeRegistros(); }, 2000);
     }
+  }).catch(function(e) {
+    console.error('IndexedDB no disponible:', e);
+    showToast('Almacenamiento local no disponible: las fotos no se podrán guardar en este dispositivo', 'error');
   });
   if (typeof verificarSesion === 'function') verificarSesion();
   actualizarEstado();

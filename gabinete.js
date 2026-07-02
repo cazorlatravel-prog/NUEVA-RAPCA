@@ -7,10 +7,18 @@
 // (registros antiguos, donde todo era un único transecto)
 function _muestrasEI(d) {
   if (!d) return [];
+  var lista;
   if (d.transectos) {
-    return ['T1', 'T2', 'T3'].map(function(t) { return d.transectos[t]; }).filter(Boolean);
+    lista = ['T1', 'T2', 'T3'].map(function(t) { return d.transectos[t]; }).filter(Boolean);
+  } else {
+    lista = [d];
   }
-  return [d];
+  // Descartar transectos visitados pero vacíos: sus matorral.volumen="0.00"
+  // diluían las medias de los informes con ceros
+  if (typeof esTransectoVacio === 'function') {
+    lista = lista.filter(function(t) { return !esTransectoVacio(t); });
+  }
+  return lista;
 }
 
 // ----------------------------------------------------------
@@ -556,10 +564,14 @@ function ejecutarExportCSV() {
     // Registros EI con transectos: una fila por transecto con datos
     // (antes el CSV solo exportaba el nivel superior = T1 y se perdían T2/T3)
     if (d.transectos) {
+      var alguna = false;
       ['T1', 'T2', 'T3'].forEach(function(t) {
         var dt = d.transectos[t];
-        if (dt) lines.push(filaCSV(r, dt, t).map(_csvEscape).join(','));
+        if (!dt || (typeof esTransectoVacio === 'function' && esTransectoVacio(dt))) return;
+        lines.push(filaCSV(r, dt, t).map(_csvEscape).join(','));
+        alguna = true;
       });
+      if (!alguna) lines.push(filaCSV(r, d, r.transecto || '').map(_csvEscape).join(','));
     } else {
       lines.push(filaCSV(r, d, r.transecto || '').map(_csvEscape).join(','));
     }

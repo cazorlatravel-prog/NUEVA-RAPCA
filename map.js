@@ -33,6 +33,12 @@ var gpsMapWatchId = null;
 var gpsMapSeguir = true;
 
 function initMapa() {
+  // Leaflet se carga desde CDN: si aún no está disponible (offline sin caché
+  // o red lenta), avisar en vez de romper con ReferenceError
+  if (typeof L === 'undefined') {
+    showToast('El mapa no está disponible: sin conexión y librería no descargada. Reintenta con conexión.', 'error');
+    return;
+  }
   if (mapa) {
     mapa.invalidateSize();
     actualizarMarcadores();

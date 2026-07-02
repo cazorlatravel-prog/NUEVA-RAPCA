@@ -17,6 +17,7 @@ function irPrecarga() {
   }
   if (!navigator.onLine) {
     showToast('Necesitas conexión para precargar fotos', 'error');
+    irPagina('menu');
     return;
   }
   actualizarEstadoPrecarga();
@@ -369,7 +370,9 @@ function mostrarGaleriaPrecarga(fotos) {
       var img = document.createElement('img');
       img.src = f.data;
       img.style.cssText = 'width:100%;height:100%;object-fit:cover';
-      img.onclick = function() { abrirLightboxFoto(f.data, f.codigo + ' (' + f.fecha + ')'); };
+      // Pasar el código limpio: con ' (fecha)' pegado, "Eliminar" del lightbox
+      // no borraba nada y la mejora a HD generaba URLs inválidas
+      img.onclick = function() { abrirLightboxFoto(f.data, f.codigo); };
       wrap.appendChild(img);
 
       var badge = document.createElement('div');

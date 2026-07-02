@@ -683,15 +683,17 @@ window.addEventListener('popstate', function(e) {
     return;
   }
 
-  // Si estamos en una página que no es inicio, volver a inicio
+  // Si estamos en una página que no es el inicio, volver al menú principal
+  // (antes comparaba con 'panel-page' y el botón atrás llevaba siempre al
+  // Panel de Registros en vez de al menú, sin poder salir de la app)
   var activePage = document.querySelector('.page.active');
-  if (activePage && activePage.id !== 'panel-page') {
+  if (activePage && activePage.id !== 'menu-page') {
     pushHistoryState();
-    irPagina('panel');
+    irPagina('menu');
     return;
   }
 
-  // En el panel principal: dejar salir pero re-empujar por si acaso
+  // En el menú principal: dejar salir pero re-empujar por si acaso
   pushHistoryState();
 });
 
@@ -714,7 +716,10 @@ function mostrarDialogoSalir() {
 
 function guardarYSalir() {
   var tipo = getTipoFormActivo();
-  if (tipo && typeof guardarBorrador === 'function') {
+  if (editandoRegistro) {
+    // Al editar un registro no existe borrador: avisar en vez de fingir éxito
+    showToast('Estabas editando un registro: los cambios no guardados se descartan', 'info');
+  } else if (tipo && typeof guardarBorrador === 'function') {
     guardarBorrador(tipo);
     showToast('Borrador de ' + tipo + ' guardado', 'success');
   }
@@ -747,6 +752,9 @@ document.addEventListener('DOMContentLoaded', function() {
     if (typeof migrarWaypointsDeRegistros === 'function') {
       setTimeout(function() { migrarWaypointsDeRegistros(); }, 2000);
     }
+  }).catch(function(e) {
+    console.error('IndexedDB no disponible:', e);
+    showToast('Almacenamiento local no disponible: las fotos no se podrán guardar en este dispositivo', 'error');
   });
   if (typeof verificarSesion === 'function') verificarSesion();
   actualizarEstado();
@@ -1561,6 +1569,7 @@ function guardarVP() {
   var zona = document.getElementById('vp-zona').value;
   if (!fecha || !unidad) { showToast('Fecha y Unidad son obligatorios', 'error'); return; }
 
+  var eraEdicion = !!editandoRegistro;
   var fotos = fotosPagina['G'] || [];
   var fotosComp = [];
   if (fotosPagina['W1']) fotosPagina['W1'].forEach(function(f) { fotosComp.push({numero: f.codigo || f, waypoint: 'W1', lat: f.lat || null, lon: f.lon || null}); });
@@ -1596,7 +1605,9 @@ function guardarVP() {
   }
 
   guardarRegistros();
-  limpiarBorrador('VP');
+  // Solo limpiar el borrador si era una visita nueva: al guardar una EDICION
+  // el borrador puede pertenecer a otra visita a medias
+  if (!eraEdicion) limpiarBorrador('VP');
   fotosPagina = {};
   detenerAutoGuardado();
   vibrar(50);
@@ -1632,6 +1643,7 @@ function guardarEL() {
   if (fotosPagina['W1']) fotosPagina['W1'].forEach(function(f) { fotosComp.push({numero: f.codigo || f, waypoint: 'W1', lat: f.lat || null, lon: f.lon || null}); });
   if (fotosPagina['W2']) fotosPagina['W2'].forEach(function(f) { fotosComp.push({numero: f.codigo || f, waypoint: 'W2', lat: f.lat || null, lon: f.lon || null}); });
 
+  var eraEdicion = !!editandoRegistro;
   var reg = {
     id: editandoRegistro ? editandoRegistro.id : Date.now(),
     tipo: 'EL',
@@ -1662,7 +1674,9 @@ function guardarEL() {
   }
 
   guardarRegistros();
-  limpiarBorrador('EL');
+  // Solo limpiar el borrador si era una visita nueva: al guardar una EDICION
+  // el borrador puede pertenecer a otra visita a medias
+  if (!eraEdicion) limpiarBorrador('EL');
   fotosPagina = {};
   detenerAutoGuardado();
   vibrar(50);
@@ -1853,6 +1867,10 @@ function guardarEI() {
   var zona = document.getElementById('ev-zona').value;
   if (!fecha || !unidad) { showToast('Fecha y Unidad son obligatorios', 'error'); return; }
 
+  // ¿Venimos de editar un registro existente desde el Panel? (capturar antes
+  // de que la fusión por unidad+día reasigne editandoRegistro)
+  var eraEdicion = !!editandoRegistro;
+
   // Save current transect data
   transectosDatos[transectoActual] = recogerDatosEI();
 
@@ -1875,6 +1893,13 @@ function guardarEI() {
       editandoRegistro = existenteEI;
     }
   }
+
+  // Los transectos "visitados" pero sin datos reales (objetos materializados
+  // al cambiar de pestaña) no se persisten: generaban filas vacías en
+  // CSV/Excel y diluían las medias de los informes con ceros
+  ['T1', 'T2', 'T3'].forEach(function(t) {
+    if (transectosDatos[t] && esTransectoVacio(transectosDatos[t])) transectosDatos[t] = null;
+  });
 
   // Build combined datos with all 3 transects
   var datosT1 = transectosDatos['T1'] || {};
@@ -1942,6 +1967,15 @@ function guardarEI() {
     showToast('Evaluacion Intensiva guardada. Sin conexion \u2014 se sincronizara al conectar.', 'info');
   }
 
+  // Si ven\u00eda de EDITAR un registro desde el Panel, salir del formulario:
+  // permanecer en \u00e9l contaminar\u00eda el borrador de una visita nueva a medias
+  // en cuanto saltara el auto-guardado (cada 30s)
+  if (eraEdicion) {
+    detenerAutoGuardado();
+    irPagina('panel');
+    return;
+  }
+
   // Si es T3, resetear completamente
   if (transectoActual === 'T3') {
     // La unidad est\u00e1 completa: ya no hace falta auto-guardar borrador
@@ -1964,6 +1998,10 @@ function guardarEI() {
     actualizarTransectoTabs();
     if (transectosDatos[next]) restaurarDatosEI(transectosDatos[next]);
     else limpiarFormEI();
+    // Alinear el borrador con lo recién guardado: si la app se recarga antes
+    // del próximo auto-guardado, un borrador rancio restauraría un transecto
+    // viejo que pisaría al guardado en la siguiente fusión
+    guardarBorrador('EI');
   }
 }
 // RAPCA Campo — camera.js — Cámara y fotos
@@ -2078,10 +2116,13 @@ function abrirCamara(tipo, subtipo) {
   var contadorLocal = contadores[contKey] || 0;
   var reiniciados = localStorage.getItem('rapca_contadores_reiniciados') === 'true';
   var nuevoContador = reiniciados ? contadorLocal + 1 : Math.max(contadorLocal, maxEnRegistros) + 1;
+  // NUNCA reutilizar un código ya existente: sobrescribiría el thumbnail,
+  // la subida pendiente y la copia de Cloudinary de la foto antigua
+  if (nuevoContador <= maxEnRegistros) nuevoContador = maxEnRegistros + 1;
   contadores[contKey] = nuevoContador;
   safeStore('rapca_contadores_' + tipo, contadores);
-  // Quitar flag de reinicio tras la primera foto nueva
-  if (reiniciados) localStorage.removeItem('rapca_contadores_reiniciados');
+  // Nota: el flag 'rapca_contadores_reiniciados' se consume en aceptarFoto(),
+  // no aquí — si el usuario cancela sin hacer foto, el reinicio sigue vigente
 
   if (subtipo === 'G') {
     fotoCodigo = unidad + '_' + codeTipo + '_' + nuevoContador;
@@ -2400,7 +2441,14 @@ function iniciarExposureSlide() {
   var video = document.getElementById('camera-video');
   if (!video) return;
 
-  video.addEventListener('touchmove', function(e) {
+  // Retirar handlers previos: se llamaba en cada apertura/switch de cámara y
+  // los listeners se acumulaban sobre el mismo <video> (lag creciente)
+  if (video._expoMoveHandler) {
+    video.removeEventListener('touchmove', video._expoMoveHandler);
+    video.removeEventListener('touchend', video._expoEndHandler);
+  }
+
+  video._expoMoveHandler = function(e) {
     if (!camaraStream || e.touches.length !== 1) return;
 
     var track = camaraStream.getVideoTracks()[0];
@@ -2447,12 +2495,14 @@ function iniciarExposureSlide() {
     // NO cambiar exposureMode a 'manual' aquí porque bloquearía el auto-ajuste.
     // Solo ajustar exposureCompensation (que funciona con modo continuous).
     track.applyConstraints({advanced: [{exposureCompensation: newComp}]}).catch(function() {});
-  }, {passive: true});
+  };
+  video.addEventListener('touchmove', video._expoMoveHandler, {passive: true});
 
-  video.addEventListener('touchend', function() {
+  video._expoEndHandler = function() {
     _exposureSlideActive = false;
     _exposureStartY = 0;
-  });
+  };
+  video.addEventListener('touchend', video._expoEndHandler);
 }
 
 var miniMapaImg = null; // Imagen capturada del mini mapa para overlay
@@ -2609,7 +2659,7 @@ function iniciarOverlayCamara() {
   // GPS para overlay
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(function(pos) {
-      gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude};
+      gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude, accuracy: pos.coords.accuracy};
 
       // Mostrar coordenadas según config
       if (cfg.tipoCoordenadas === 'geograficas') {
@@ -2802,6 +2852,14 @@ function formatCoordGeo(lat, lon) {
     return d + '° ' + ('0' + m).slice(-2) + "' " + s.toFixed(1) + '" ' + (val >= 0 ? pos : neg);
   }
   return toDMS(lat, 'N', 'S') + '  ' + toDMS(lon, 'E', 'W');
+}
+
+// Alias usado por mapa (panel GPS, tabla de atributos, waypoints) y por los
+// informes PDF. Existía en versiones antiguas y se perdió en un refactor:
+// sin él, generar el PDF de un registro con coordenadas lanzaba
+// ReferenceError y el informe nunca se creaba.
+function formatCoordNW(lat, lon) {
+  return formatCoordGeo(lat, lon);
 }
 
 // Formatear coordenadas UTM como string
@@ -3787,71 +3845,80 @@ function aceptarFoto() {
   tCtx.imageSmoothingQuality = 'high';
   tCtx.drawImage(canvas, 0, 0, thumbW, thumbH);
 
+  // Thumbnail síncrono (canvas de 400px, coste despreciable): la foto debe
+  // quedar registrada en fotosPagina ANTES de cualquier trabajo asíncrono.
+  // Antes el push se hacía al final de una cadena de 1-3s y si el usuario
+  // guardaba la ficha o cambiaba de página justo después de aceptar, la foto
+  // quedaba huérfana (en IndexedDB pero fuera del registro).
+  var thumbData = thumbCanvas.toDataURL('image/jpeg', 0.8);
+
+  // --- Registro síncrono en la página ---
+  if (!fotosPagina[_camaraSubtipo]) fotosPagina[_camaraSubtipo] = [];
+  if (_camaraSubtipo === 'W1' || _camaraSubtipo === 'W2') {
+    fotosPagina[_camaraSubtipo].push({codigo: _fotoCodigo, lat: _gpsLat, lon: _gpsLon});
+    // Guardar waypoint persistente en IndexedDB
+    if (_gpsLat && _gpsLon && db) {
+      var prefixW = _camaraTipo === 'EI' ? 'ev' : _camaraTipo.toLowerCase();
+      var _unidad = document.getElementById(prefixW + '-unidad') ? document.getElementById(prefixW + '-unidad').value : '';
+      guardarEnDB('waypoints_comp', {
+        id: _fotoCodigo,
+        codigo: _fotoCodigo,
+        waypoint: _camaraSubtipo,
+        lat: _gpsLat,
+        lon: _gpsLon,
+        unidad: _unidad,
+        tipo: _camaraTipo,
+        fecha: new Date().toISOString(),
+        operador: sesion ? sesion.nombre : ''
+      }).catch(function(e) { console.warn('Error guardando waypoint:', e); });
+    }
+  } else {
+    fotosPagina[_camaraSubtipo].push(_fotoCodigo);
+  }
+
+  var prefix = _camaraTipo === 'EI' ? 'ev' : _camaraTipo.toLowerCase();
+  var previewGrid = document.getElementById(prefix + '-fotos-preview');
+  if (previewGrid) {
+    var img = document.createElement('img');
+    img.src = thumbData;
+    img.title = _fotoCodigo;
+    img.onclick = function() { abrirLightboxFoto(this.src, _fotoCodigo); };
+    previewGrid.appendChild(img);
+  }
+  actualizarBtnEliminarFotos(prefix);
+
+  // El flag de reinicio de contadores se consume aquí, con la primera foto
+  // realmente aceptada (antes se consumía al abrir la cámara, aunque se cancelara)
+  localStorage.removeItem('rapca_contadores_reiniciados');
+
   // Limpiar anotaciones y cerrar inmediatamente (la UI no se congela
-  // porque la codificación JPEG ahora es asíncrona vía toBlob).
+  // porque la codificación JPEG es asíncrona vía toBlob).
   limpiarAnotaciones();
   document.getElementById('preview-modal').classList.remove('open');
 
-  // Codificar la foto de plena calidad PRIMERO, inyectar el GPS en el EXIF
-  // y descargarla. Después se codifican thumbnail y versión de subida.
-  var thumbData, uploadData;
-  _canvasABlob(canvas, 0.97).then(function(downloadBlob) {
-    // Insertar coordenadas GPS en los metadatos EXIF del archivo descargado
-    return inyectarGPSenJPEG(downloadBlob, _gpsLat, _gpsLon, _gpsAlt);
-  }).then(function(blobFinal) {
-    descargarBlob(blobFinal, _fotoCodigo + '.jpg');
-    return _canvasAJpeg(thumbCanvas, 0.8);
-  }).then(function(thumb) {
-    thumbData = thumb.dataUrl;
-    // Versión de subida: codificar a blob, inyectar GPS en EXIF y
-    // reconvertir a data URL (formato que espera sync.js/upload.php),
-    // para que la copia de Cloudinary también quede geolocalizada.
-    return _canvasABlob(canvas, 0.94);
-  }).then(function(upBlob) {
-    return inyectarGPSenJPEG(upBlob, _gpsLat, _gpsLon, _gpsAlt);
-  }).then(function(upBlobExif) {
-    return _blobADataURL(upBlobExif);
-  }).then(function(upDataUrl) {
-    uploadData = upDataUrl;
-
-  return guardarEnDB('fotos', {codigo: _fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
-    return guardarEnDB('subidas_pendientes', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
+  // --- Codificación de calidad completa ---
+  // Ambas versiones (descarga 0.97 y subida 0.94) se lanzan en el MISMO tick:
+  // toBlob captura el bitmap en el momento de la llamada, y el canvas de
+  // preview se reutiliza en la siguiente captura (codificar la segunda
+  // versión "más tarde" podía guardar la foto siguiente bajo este código).
+  Promise.all([
+    _canvasABlob(canvas, 0.97),
+    _canvasABlob(canvas, 0.94)
+  ]).then(function(blobs) {
+    // Insertar coordenadas GPS en los metadatos EXIF de ambas copias
+    return Promise.all([
+      inyectarGPSenJPEG(blobs[0], _gpsLat, _gpsLon, _gpsAlt),
+      inyectarGPSenJPEG(blobs[1], _gpsLat, _gpsLon, _gpsAlt)
+    ]);
+  }).then(function(conExif) {
+    descargarBlob(conExif[0], _fotoCodigo + '.jpg');
+    // La versión de subida viaja como data URL (formato de sync.js/upload.php)
+    return _blobADataURL(conExif[1]);
+  }).then(function(uploadData) {
+    return guardarEnDB('fotos', {codigo: _fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
+      return guardarEnDB('subidas_pendientes', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
+    });
   }).then(function() {
-    // Añadir preview a la página
-    if (!fotosPagina[_camaraSubtipo]) fotosPagina[_camaraSubtipo] = [];
-    if (_camaraSubtipo === 'W1' || _camaraSubtipo === 'W2') {
-      fotosPagina[_camaraSubtipo].push({codigo: _fotoCodigo, lat: _gpsLat, lon: _gpsLon});
-      // Guardar waypoint persistente en IndexedDB
-      if (_gpsLat && _gpsLon && db) {
-        var prefix = _camaraTipo === 'EI' ? 'ev' : _camaraTipo.toLowerCase();
-        var _unidad = document.getElementById(prefix + '-unidad') ? document.getElementById(prefix + '-unidad').value : '';
-        guardarEnDB('waypoints_comp', {
-          id: _fotoCodigo,
-          codigo: _fotoCodigo,
-          waypoint: _camaraSubtipo,
-          lat: _gpsLat,
-          lon: _gpsLon,
-          unidad: _unidad,
-          tipo: _camaraTipo,
-          fecha: new Date().toISOString(),
-          operador: sesion ? sesion.nombre : ''
-        }).catch(function(e) { console.warn('Error guardando waypoint:', e); });
-      }
-    } else {
-      fotosPagina[_camaraSubtipo].push(_fotoCodigo);
-    }
-
-    var prefix = _camaraTipo === 'EI' ? 'ev' : _camaraTipo.toLowerCase();
-    var previewGrid = document.getElementById(prefix + '-fotos-preview');
-    if (previewGrid) {
-      var img = document.createElement('img');
-      img.src = thumbData;
-      img.title = _fotoCodigo;
-      img.onclick = function() { abrirLightboxFoto(this.src, _fotoCodigo); };
-      previewGrid.appendChild(img);
-    }
-
-    actualizarBtnEliminarFotos(prefix);
     actualizarContadorFotos();
     if (navigator.onLine) {
       showToast('Foto ' + _fotoCodigo + ' guardada. Subiendo...', 'success');
@@ -3860,13 +3927,8 @@ function aceptarFoto() {
       showToast('Foto ' + _fotoCodigo + ' guardada. Sin conexión — se subirá al conectar.', 'info');
     }
   }).catch(function(err) {
-    console.error('Error guardando foto:', err);
-    showToast('Error al guardar foto: ' + (err.message || err), 'error');
-  });
-
-  }).catch(function(err) {
-    console.error('Error codificando foto:', err);
-    showToast('Error al procesar foto. Reintenta.', 'error');
+    console.error('Error procesando foto:', err);
+    showToast('Error al guardar foto ' + _fotoCodigo + ': ' + (err.message || err), 'error');
   });
 }
 
@@ -4052,6 +4114,9 @@ async function sincronizar() {
         formData.append('entry.datos', JSON.stringify(r.datos));
         await fetch(GOOGLE_FORM_URL, {method: 'POST', body: formData, mode: 'no-cors'});
         r.enviadoForm = true;
+        // Persistir al momento: si la app se cierra a mitad de la cola,
+        // el flag no se perdería y no se duplicarían filas en la hoja
+        guardarRegistros();
       }
     } catch(e) {}
 
@@ -4503,6 +4568,12 @@ var gpsMapWatchId = null;
 var gpsMapSeguir = true;
 
 function initMapa() {
+  // Leaflet se carga desde CDN: si aún no está disponible (offline sin caché
+  // o red lenta), avisar en vez de romper con ReferenceError
+  if (typeof L === 'undefined') {
+    showToast('El mapa no está disponible: sin conexión y librería no descargada. Reintenta con conexión.', 'error');
+    return;
+  }
   if (mapa) {
     mapa.invalidateSize();
     actualizarMarcadores();
@@ -6721,7 +6792,7 @@ function exportarExcelRegistros() {
       var alguna = false;
       ['T1', 'T2', 'T3'].forEach(function(t) {
         var dt = r.datos.transectos[t];
-        if (!dt) return;
+        if (!dt || (typeof esTransectoVacio === 'function' && esTransectoVacio(dt))) return;
         filas.push(filaExcel(r, dt, t));
         alguna = true;
       });
@@ -7328,7 +7399,7 @@ async function ejecutarInformeInfra() {
     for (var ri = 0; ri < regsFiltrados.length; ri++) {
       var r = regsFiltrados[ri];
       html += '<div style="margin-top:16px;border-left:4px solid ' + (r.tipo === 'VP' ? '#2e7d32' : r.tipo === 'EL' ? '#1565c0' : '#e65100') + ';padding-left:12px">';
-      html += '<h4 style="margin:0 0 8px;color:#1a3d2e"><span class="badge" style="background:' + (r.tipo === 'VP' ? '#2e7d32' : r.tipo === 'EL' ? '#1565c0' : '#e65100') + '">' + r.tipo + '</span> ' + escapeHtml(r.fecha) + ' — ' + escapeHtml(r.unidad) + (r.transecto ? ' (' + escapeHtml(r.transecto) + ')' : '') + '</h4>';
+      html += '<h4 style="margin:0 0 8px;color:#1a3d2e"><span class="badge" style="background:' + (r.tipo === 'VP' ? '#2e7d32' : r.tipo === 'EL' ? '#1565c0' : '#e65100') + '">' + r.tipo + '</span> ' + escapeHtml(r.fecha) + ' — ' + escapeHtml(r.unidad) + (r.transecto ? ' (' + escapeHtml(String(r.transecto).charAt(0) === 'T' ? r.transecto : 'T' + r.transecto) + ')' : '') + '</h4>';
 
       // Datos del registro: en fichas EI con transectos, mostrar cada uno
       var muestrasReg = (r.tipo === 'EI' && r.datos.transectos)
@@ -8108,10 +8179,18 @@ async function eliminarUsuarioServidor(userId, email) {
 // (registros antiguos, donde todo era un único transecto)
 function _muestrasEI(d) {
   if (!d) return [];
+  var lista;
   if (d.transectos) {
-    return ['T1', 'T2', 'T3'].map(function(t) { return d.transectos[t]; }).filter(Boolean);
+    lista = ['T1', 'T2', 'T3'].map(function(t) { return d.transectos[t]; }).filter(Boolean);
+  } else {
+    lista = [d];
   }
-  return [d];
+  // Descartar transectos visitados pero vacíos: sus matorral.volumen="0.00"
+  // diluían las medias de los informes con ceros
+  if (typeof esTransectoVacio === 'function') {
+    lista = lista.filter(function(t) { return !esTransectoVacio(t); });
+  }
+  return lista;
 }
 
 // ----------------------------------------------------------
@@ -8657,10 +8736,14 @@ function ejecutarExportCSV() {
     // Registros EI con transectos: una fila por transecto con datos
     // (antes el CSV solo exportaba el nivel superior = T1 y se perdían T2/T3)
     if (d.transectos) {
+      var alguna = false;
       ['T1', 'T2', 'T3'].forEach(function(t) {
         var dt = d.transectos[t];
-        if (dt) lines.push(filaCSV(r, dt, t).map(_csvEscape).join(','));
+        if (!dt || (typeof esTransectoVacio === 'function' && esTransectoVacio(dt))) return;
+        lines.push(filaCSV(r, dt, t).map(_csvEscape).join(','));
+        alguna = true;
       });
+      if (!alguna) lines.push(filaCSV(r, d, r.transecto || '').map(_csvEscape).join(','));
     } else {
       lines.push(filaCSV(r, d, r.transecto || '').map(_csvEscape).join(','));
     }
@@ -8695,6 +8778,7 @@ function irPrecarga() {
   }
   if (!navigator.onLine) {
     showToast('Necesitas conexión para precargar fotos', 'error');
+    irPagina('menu');
     return;
   }
   actualizarEstadoPrecarga();
@@ -9047,7 +9131,9 @@ function mostrarGaleriaPrecarga(fotos) {
       var img = document.createElement('img');
       img.src = f.data;
       img.style.cssText = 'width:100%;height:100%;object-fit:cover';
-      img.onclick = function() { abrirLightboxFoto(f.data, f.codigo + ' (' + f.fecha + ')'); };
+      // Pasar el código limpio: con ' (fecha)' pegado, "Eliminar" del lightbox
+      // no borraba nada y la mejora a HD generaba URLs inválidas
+      img.onclick = function() { abrirLightboxFoto(f.data, f.codigo); };
       wrap.appendChild(img);
 
       var badge = document.createElement('div');
@@ -9572,7 +9658,11 @@ function compCargarFotos() {
   var f1 = document.getElementById('comp-fecha1').value;
   var f2 = document.getElementById('comp-fecha2').value;
   if (!unidad || !f1 || !f2) return;
-  compModoSlider();
+  // Mantener el modo de visualización elegido (antes cambiar la fecha
+  // forzaba siempre el modo Slider aunque estuvieras en Side by Side)
+  var btnSide = document.getElementById('comp-btn-side');
+  if (btnSide && btnSide.className.indexOf('btn-primary') >= 0) compModoSide();
+  else compModoSlider();
 }
 
 // Buscar el código y tipo de foto para una unidad/waypoint/fecha

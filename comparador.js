@@ -152,7 +152,11 @@ function compCargarFotos() {
   var f1 = document.getElementById('comp-fecha1').value;
   var f2 = document.getElementById('comp-fecha2').value;
   if (!unidad || !f1 || !f2) return;
-  compModoSlider();
+  // Mantener el modo de visualización elegido (antes cambiar la fecha
+  // forzaba siempre el modo Slider aunque estuvieras en Side by Side)
+  var btnSide = document.getElementById('comp-btn-side');
+  if (btnSide && btnSide.className.indexOf('btn-primary') >= 0) compModoSide();
+  else compModoSlider();
 }
 
 // Buscar el código y tipo de foto para una unidad/waypoint/fecha

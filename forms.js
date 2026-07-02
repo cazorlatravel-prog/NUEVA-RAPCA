@@ -573,6 +573,7 @@ function guardarVP() {
   var zona = document.getElementById('vp-zona').value;
   if (!fecha || !unidad) { showToast('Fecha y Unidad son obligatorios', 'error'); return; }
 
+  var eraEdicion = !!editandoRegistro;
   var fotos = fotosPagina['G'] || [];
   var fotosComp = [];
   if (fotosPagina['W1']) fotosPagina['W1'].forEach(function(f) { fotosComp.push({numero: f.codigo || f, waypoint: 'W1', lat: f.lat || null, lon: f.lon || null}); });
@@ -608,7 +609,9 @@ function guardarVP() {
   }
 
   guardarRegistros();
-  limpiarBorrador('VP');
+  // Solo limpiar el borrador si era una visita nueva: al guardar una EDICION
+  // el borrador puede pertenecer a otra visita a medias
+  if (!eraEdicion) limpiarBorrador('VP');
   fotosPagina = {};
   detenerAutoGuardado();
   vibrar(50);
@@ -644,6 +647,7 @@ function guardarEL() {
   if (fotosPagina['W1']) fotosPagina['W1'].forEach(function(f) { fotosComp.push({numero: f.codigo || f, waypoint: 'W1', lat: f.lat || null, lon: f.lon || null}); });
   if (fotosPagina['W2']) fotosPagina['W2'].forEach(function(f) { fotosComp.push({numero: f.codigo || f, waypoint: 'W2', lat: f.lat || null, lon: f.lon || null}); });
 
+  var eraEdicion = !!editandoRegistro;
   var reg = {
     id: editandoRegistro ? editandoRegistro.id : Date.now(),
     tipo: 'EL',
@@ -674,7 +678,9 @@ function guardarEL() {
   }
 
   guardarRegistros();
-  limpiarBorrador('EL');
+  // Solo limpiar el borrador si era una visita nueva: al guardar una EDICION
+  // el borrador puede pertenecer a otra visita a medias
+  if (!eraEdicion) limpiarBorrador('EL');
   fotosPagina = {};
   detenerAutoGuardado();
   vibrar(50);
@@ -865,6 +871,10 @@ function guardarEI() {
   var zona = document.getElementById('ev-zona').value;
   if (!fecha || !unidad) { showToast('Fecha y Unidad son obligatorios', 'error'); return; }
 
+  // ¿Venimos de editar un registro existente desde el Panel? (capturar antes
+  // de que la fusión por unidad+día reasigne editandoRegistro)
+  var eraEdicion = !!editandoRegistro;
+
   // Save current transect data
   transectosDatos[transectoActual] = recogerDatosEI();
 
@@ -887,6 +897,13 @@ function guardarEI() {
       editandoRegistro = existenteEI;
     }
   }
+
+  // Los transectos "visitados" pero sin datos reales (objetos materializados
+  // al cambiar de pestaña) no se persisten: generaban filas vacías en
+  // CSV/Excel y diluían las medias de los informes con ceros
+  ['T1', 'T2', 'T3'].forEach(function(t) {
+    if (transectosDatos[t] && esTransectoVacio(transectosDatos[t])) transectosDatos[t] = null;
+  });
 
   // Build combined datos with all 3 transects
   var datosT1 = transectosDatos['T1'] || {};
@@ -954,6 +971,15 @@ function guardarEI() {
     showToast('Evaluacion Intensiva guardada. Sin conexion \u2014 se sincronizara al conectar.', 'info');
   }
 
+  // Si ven\u00eda de EDITAR un registro desde el Panel, salir del formulario:
+  // permanecer en \u00e9l contaminar\u00eda el borrador de una visita nueva a medias
+  // en cuanto saltara el auto-guardado (cada 30s)
+  if (eraEdicion) {
+    detenerAutoGuardado();
+    irPagina('panel');
+    return;
+  }
+
   // Si es T3, resetear completamente
   if (transectoActual === 'T3') {
     // La unidad est\u00e1 completa: ya no hace falta auto-guardar borrador
@@ -976,5 +1002,9 @@ function guardarEI() {
     actualizarTransectoTabs();
     if (transectosDatos[next]) restaurarDatosEI(transectosDatos[next]);
     else limpiarFormEI();
+    // Alinear el borrador con lo recién guardado: si la app se recarga antes
+    // del próximo auto-guardado, un borrador rancio restauraría un transecto
+    // viejo que pisaría al guardado en la siguiente fusión
+    guardarBorrador('EI');
   }
 }

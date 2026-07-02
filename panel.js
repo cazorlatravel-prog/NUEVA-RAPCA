@@ -725,7 +725,7 @@ function exportarExcelRegistros() {
       var alguna = false;
       ['T1', 'T2', 'T3'].forEach(function(t) {
         var dt = r.datos.transectos[t];
-        if (!dt) return;
+        if (!dt || (typeof esTransectoVacio === 'function' && esTransectoVacio(dt))) return;
         filas.push(filaExcel(r, dt, t));
         alguna = true;
       });
@@ -1332,7 +1332,7 @@ async function ejecutarInformeInfra() {
     for (var ri = 0; ri < regsFiltrados.length; ri++) {
       var r = regsFiltrados[ri];
       html += '<div style="margin-top:16px;border-left:4px solid ' + (r.tipo === 'VP' ? '#2e7d32' : r.tipo === 'EL' ? '#1565c0' : '#e65100') + ';padding-left:12px">';
-      html += '<h4 style="margin:0 0 8px;color:#1a3d2e"><span class="badge" style="background:' + (r.tipo === 'VP' ? '#2e7d32' : r.tipo === 'EL' ? '#1565c0' : '#e65100') + '">' + r.tipo + '</span> ' + escapeHtml(r.fecha) + ' — ' + escapeHtml(r.unidad) + (r.transecto ? ' (' + escapeHtml(r.transecto) + ')' : '') + '</h4>';
+      html += '<h4 style="margin:0 0 8px;color:#1a3d2e"><span class="badge" style="background:' + (r.tipo === 'VP' ? '#2e7d32' : r.tipo === 'EL' ? '#1565c0' : '#e65100') + '">' + r.tipo + '</span> ' + escapeHtml(r.fecha) + ' — ' + escapeHtml(r.unidad) + (r.transecto ? ' (' + escapeHtml(String(r.transecto).charAt(0) === 'T' ? r.transecto : 'T' + r.transecto) + ')' : '') + '</h4>';
 
       // Datos del registro: en fichas EI con transectos, mostrar cada uno
       var muestrasReg = (r.tipo === 'EI' && r.datos.transectos)

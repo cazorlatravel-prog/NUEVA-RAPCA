@@ -110,10 +110,13 @@ function abrirCamara(tipo, subtipo) {
   var contadorLocal = contadores[contKey] || 0;
   var reiniciados = localStorage.getItem('rapca_contadores_reiniciados') === 'true';
   var nuevoContador = reiniciados ? contadorLocal + 1 : Math.max(contadorLocal, maxEnRegistros) + 1;
+  // NUNCA reutilizar un código ya existente: sobrescribiría el thumbnail,
+  // la subida pendiente y la copia de Cloudinary de la foto antigua
+  if (nuevoContador <= maxEnRegistros) nuevoContador = maxEnRegistros + 1;
   contadores[contKey] = nuevoContador;
   safeStore('rapca_contadores_' + tipo, contadores);
-  // Quitar flag de reinicio tras la primera foto nueva
-  if (reiniciados) localStorage.removeItem('rapca_contadores_reiniciados');
+  // Nota: el flag 'rapca_contadores_reiniciados' se consume en aceptarFoto(),
+  // no aquí — si el usuario cancela sin hacer foto, el reinicio sigue vigente
 
   if (subtipo === 'G') {
     fotoCodigo = unidad + '_' + codeTipo + '_' + nuevoContador;
@@ -432,7 +435,14 @@ function iniciarExposureSlide() {
   var video = document.getElementById('camera-video');
   if (!video) return;
 
-  video.addEventListener('touchmove', function(e) {
+  // Retirar handlers previos: se llamaba en cada apertura/switch de cámara y
+  // los listeners se acumulaban sobre el mismo <video> (lag creciente)
+  if (video._expoMoveHandler) {
+    video.removeEventListener('touchmove', video._expoMoveHandler);
+    video.removeEventListener('touchend', video._expoEndHandler);
+  }
+
+  video._expoMoveHandler = function(e) {
     if (!camaraStream || e.touches.length !== 1) return;
 
     var track = camaraStream.getVideoTracks()[0];
@@ -479,12 +489,14 @@ function iniciarExposureSlide() {
     // NO cambiar exposureMode a 'manual' aquí porque bloquearía el auto-ajuste.
     // Solo ajustar exposureCompensation (que funciona con modo continuous).
     track.applyConstraints({advanced: [{exposureCompensation: newComp}]}).catch(function() {});
-  }, {passive: true});
+  };
+  video.addEventListener('touchmove', video._expoMoveHandler, {passive: true});
 
-  video.addEventListener('touchend', function() {
+  video._expoEndHandler = function() {
     _exposureSlideActive = false;
     _exposureStartY = 0;
-  });
+  };
+  video.addEventListener('touchend', video._expoEndHandler);
 }
 
 var miniMapaImg = null; // Imagen capturada del mini mapa para overlay
@@ -641,7 +653,7 @@ function iniciarOverlayCamara() {
   // GPS para overlay
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(function(pos) {
-      gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude};
+      gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude, accuracy: pos.coords.accuracy};
 
       // Mostrar coordenadas según config
       if (cfg.tipoCoordenadas === 'geograficas') {
@@ -834,6 +846,14 @@ function formatCoordGeo(lat, lon) {
     return d + '° ' + ('0' + m).slice(-2) + "' " + s.toFixed(1) + '" ' + (val >= 0 ? pos : neg);
   }
   return toDMS(lat, 'N', 'S') + '  ' + toDMS(lon, 'E', 'W');
+}
+
+// Alias usado por mapa (panel GPS, tabla de atributos, waypoints) y por los
+// informes PDF. Existía en versiones antiguas y se perdió en un refactor:
+// sin él, generar el PDF de un registro con coordenadas lanzaba
+// ReferenceError y el informe nunca se creaba.
+function formatCoordNW(lat, lon) {
+  return formatCoordGeo(lat, lon);
 }
 
 // Formatear coordenadas UTM como string
@@ -1819,71 +1839,80 @@ function aceptarFoto() {
   tCtx.imageSmoothingQuality = 'high';
   tCtx.drawImage(canvas, 0, 0, thumbW, thumbH);
 
+  // Thumbnail síncrono (canvas de 400px, coste despreciable): la foto debe
+  // quedar registrada en fotosPagina ANTES de cualquier trabajo asíncrono.
+  // Antes el push se hacía al final de una cadena de 1-3s y si el usuario
+  // guardaba la ficha o cambiaba de página justo después de aceptar, la foto
+  // quedaba huérfana (en IndexedDB pero fuera del registro).
+  var thumbData = thumbCanvas.toDataURL('image/jpeg', 0.8);
+
+  // --- Registro síncrono en la página ---
+  if (!fotosPagina[_camaraSubtipo]) fotosPagina[_camaraSubtipo] = [];
+  if (_camaraSubtipo === 'W1' || _camaraSubtipo === 'W2') {
+    fotosPagina[_camaraSubtipo].push({codigo: _fotoCodigo, lat: _gpsLat, lon: _gpsLon});
+    // Guardar waypoint persistente en IndexedDB
+    if (_gpsLat && _gpsLon && db) {
+      var prefixW = _camaraTipo === 'EI' ? 'ev' : _camaraTipo.toLowerCase();
+      var _unidad = document.getElementById(prefixW + '-unidad') ? document.getElementById(prefixW + '-unidad').value : '';
+      guardarEnDB('waypoints_comp', {
+        id: _fotoCodigo,
+        codigo: _fotoCodigo,
+        waypoint: _camaraSubtipo,
+        lat: _gpsLat,
+        lon: _gpsLon,
+        unidad: _unidad,
+        tipo: _camaraTipo,
+        fecha: new Date().toISOString(),
+        operador: sesion ? sesion.nombre : ''
+      }).catch(function(e) { console.warn('Error guardando waypoint:', e); });
+    }
+  } else {
+    fotosPagina[_camaraSubtipo].push(_fotoCodigo);
+  }
+
+  var prefix = _camaraTipo === 'EI' ? 'ev' : _camaraTipo.toLowerCase();
+  var previewGrid = document.getElementById(prefix + '-fotos-preview');
+  if (previewGrid) {
+    var img = document.createElement('img');
+    img.src = thumbData;
+    img.title = _fotoCodigo;
+    img.onclick = function() { abrirLightboxFoto(this.src, _fotoCodigo); };
+    previewGrid.appendChild(img);
+  }
+  actualizarBtnEliminarFotos(prefix);
+
+  // El flag de reinicio de contadores se consume aquí, con la primera foto
+  // realmente aceptada (antes se consumía al abrir la cámara, aunque se cancelara)
+  localStorage.removeItem('rapca_contadores_reiniciados');
+
   // Limpiar anotaciones y cerrar inmediatamente (la UI no se congela
-  // porque la codificación JPEG ahora es asíncrona vía toBlob).
+  // porque la codificación JPEG es asíncrona vía toBlob).
   limpiarAnotaciones();
   document.getElementById('preview-modal').classList.remove('open');
 
-  // Codificar la foto de plena calidad PRIMERO, inyectar el GPS en el EXIF
-  // y descargarla. Después se codifican thumbnail y versión de subida.
-  var thumbData, uploadData;
-  _canvasABlob(canvas, 0.97).then(function(downloadBlob) {
-    // Insertar coordenadas GPS en los metadatos EXIF del archivo descargado
-    return inyectarGPSenJPEG(downloadBlob, _gpsLat, _gpsLon, _gpsAlt);
-  }).then(function(blobFinal) {
-    descargarBlob(blobFinal, _fotoCodigo + '.jpg');
-    return _canvasAJpeg(thumbCanvas, 0.8);
-  }).then(function(thumb) {
-    thumbData = thumb.dataUrl;
-    // Versión de subida: codificar a blob, inyectar GPS en EXIF y
-    // reconvertir a data URL (formato que espera sync.js/upload.php),
-    // para que la copia de Cloudinary también quede geolocalizada.
-    return _canvasABlob(canvas, 0.94);
-  }).then(function(upBlob) {
-    return inyectarGPSenJPEG(upBlob, _gpsLat, _gpsLon, _gpsAlt);
-  }).then(function(upBlobExif) {
-    return _blobADataURL(upBlobExif);
-  }).then(function(upDataUrl) {
-    uploadData = upDataUrl;
-
-  return guardarEnDB('fotos', {codigo: _fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
-    return guardarEnDB('subidas_pendientes', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
+  // --- Codificación de calidad completa ---
+  // Ambas versiones (descarga 0.97 y subida 0.94) se lanzan en el MISMO tick:
+  // toBlob captura el bitmap en el momento de la llamada, y el canvas de
+  // preview se reutiliza en la siguiente captura (codificar la segunda
+  // versión "más tarde" podía guardar la foto siguiente bajo este código).
+  Promise.all([
+    _canvasABlob(canvas, 0.97),
+    _canvasABlob(canvas, 0.94)
+  ]).then(function(blobs) {
+    // Insertar coordenadas GPS en los metadatos EXIF de ambas copias
+    return Promise.all([
+      inyectarGPSenJPEG(blobs[0], _gpsLat, _gpsLon, _gpsAlt),
+      inyectarGPSenJPEG(blobs[1], _gpsLat, _gpsLon, _gpsAlt)
+    ]);
+  }).then(function(conExif) {
+    descargarBlob(conExif[0], _fotoCodigo + '.jpg');
+    // La versión de subida viaja como data URL (formato de sync.js/upload.php)
+    return _blobADataURL(conExif[1]);
+  }).then(function(uploadData) {
+    return guardarEnDB('fotos', {codigo: _fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
+      return guardarEnDB('subidas_pendientes', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
+    });
   }).then(function() {
-    // Añadir preview a la página
-    if (!fotosPagina[_camaraSubtipo]) fotosPagina[_camaraSubtipo] = [];
-    if (_camaraSubtipo === 'W1' || _camaraSubtipo === 'W2') {
-      fotosPagina[_camaraSubtipo].push({codigo: _fotoCodigo, lat: _gpsLat, lon: _gpsLon});
-      // Guardar waypoint persistente en IndexedDB
-      if (_gpsLat && _gpsLon && db) {
-        var prefix = _camaraTipo === 'EI' ? 'ev' : _camaraTipo.toLowerCase();
-        var _unidad = document.getElementById(prefix + '-unidad') ? document.getElementById(prefix + '-unidad').value : '';
-        guardarEnDB('waypoints_comp', {
-          id: _fotoCodigo,
-          codigo: _fotoCodigo,
-          waypoint: _camaraSubtipo,
-          lat: _gpsLat,
-          lon: _gpsLon,
-          unidad: _unidad,
-          tipo: _camaraTipo,
-          fecha: new Date().toISOString(),
-          operador: sesion ? sesion.nombre : ''
-        }).catch(function(e) { console.warn('Error guardando waypoint:', e); });
-      }
-    } else {
-      fotosPagina[_camaraSubtipo].push(_fotoCodigo);
-    }
-
-    var prefix = _camaraTipo === 'EI' ? 'ev' : _camaraTipo.toLowerCase();
-    var previewGrid = document.getElementById(prefix + '-fotos-preview');
-    if (previewGrid) {
-      var img = document.createElement('img');
-      img.src = thumbData;
-      img.title = _fotoCodigo;
-      img.onclick = function() { abrirLightboxFoto(this.src, _fotoCodigo); };
-      previewGrid.appendChild(img);
-    }
-
-    actualizarBtnEliminarFotos(prefix);
     actualizarContadorFotos();
     if (navigator.onLine) {
       showToast('Foto ' + _fotoCodigo + ' guardada. Subiendo...', 'success');
@@ -1892,13 +1921,8 @@ function aceptarFoto() {
       showToast('Foto ' + _fotoCodigo + ' guardada. Sin conexión — se subirá al conectar.', 'info');
     }
   }).catch(function(err) {
-    console.error('Error guardando foto:', err);
-    showToast('Error al guardar foto: ' + (err.message || err), 'error');
-  });
-
-  }).catch(function(err) {
-    console.error('Error codificando foto:', err);
-    showToast('Error al procesar foto. Reintenta.', 'error');
+    console.error('Error procesando foto:', err);
+    showToast('Error al guardar foto ' + _fotoCodigo + ': ' + (err.message || err), 'error');
   });
 }
 
