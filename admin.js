@@ -118,7 +118,8 @@ function resetearWatermarkConfig() {
 
 function renderAdmin() {
   if (!sesion || sesion.rol !== 'admin') { irPagina('menu'); return; }
-  var usuarios = JSON.parse(localStorage.getItem('rapca_usuarios_local') || '[]');
+  // safeParse: un valor corrupto en localStorage dejaba el panel inutilizable
+  var usuarios = safeParse('rapca_usuarios_local', []);
   var lista = document.getElementById('admin-users-list');
   lista.innerHTML = usuarios.map(function(u, i) {
     return '<div class="card admin-user-card">' +
@@ -174,7 +175,7 @@ async function cargarUsuariosServidor() {
             '<div class="admin-user-actions">' +
             '<button class="btn btn-sm btn-outline" onclick="editarUsuarioServidor(' + idx + ')">✏️</button>' +
             '<button class="btn btn-sm btn-outline" onclick="toggleUsuarioServidor(' + u.id + ')">' + (u.activo ? '⏸' : '▶') + '</button>' +
-            '<button class="btn btn-sm btn-danger" onclick="eliminarUsuarioServidor(' + u.id + ', \'' + String(u.email).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')">🗑️</button>' +
+            '<button class="btn btn-sm btn-danger" onclick="eliminarUsuarioServidor(' + u.id + ', \'' + escapeHtml(String(u.email).replace(/\\/g, '\\\\').replace(/'/g, "\\'")) + '\')">🗑️</button>' +
             '</div></div>';
         });
         lista.innerHTML = html;

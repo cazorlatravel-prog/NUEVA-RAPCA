@@ -17,6 +17,10 @@ function detenerAutoGuardado() {
 }
 
 function guardarBorrador(tipo) {
+  // Nunca sobrescribir el borrador mientras se edita un registro existente:
+  // contaminaría la próxima visita nueva con los datos (y fotos) del registro,
+  // y al borrar ese duplicado se podrían eliminar fotos del registro original
+  if (editandoRegistro) return;
   var prefix = tipo === 'EI' ? 'ev' : tipo.toLowerCase();
   var data = {};
 
@@ -87,9 +91,20 @@ function cargarBorrador(tipo) {
     }
   }
 
-  // Fotos
-  if (data.fotosPagina) {
-    fotosPagina = data.fotosPagina;
+  // Fotos: restaurar y renderizar previews (antes quedaban restauradas pero
+  // invisibles: se adjuntaban al guardar sin que el usuario pudiera verlas)
+  if (data.fotosPagina && Object.keys(data.fotosPagina).length && typeof restaurarFotosRegistro === 'function') {
+    var fp = data.fotosPagina;
+    var fcU = [];
+    (fp.W1 || []).forEach(function(f) { fcU.push({numero: f.codigo || f, waypoint: 'W1', lat: f.lat || null, lon: f.lon || null}); });
+    (fp.W2 || []).forEach(function(f) { fcU.push({numero: f.codigo || f, waypoint: 'W2', lat: f.lat || null, lon: f.lon || null}); });
+    var grid = document.getElementById(prefix + '-fotos-preview');
+    if (grid) grid.innerHTML = '';
+    restaurarFotosRegistro({
+      tipo: tipo,
+      unidad: (unidad && unidad.value) || '',
+      datos: {fotos: (fp.G || []).join(', '), fotosComp: fcU}
+    }, prefix);
   }
 
   // EI specific data
@@ -205,8 +220,8 @@ function initFormVP() {
   fotosPagina = {};
   document.getElementById('vp-fotos-preview').innerHTML = '';
   if (editandoRegistro && editandoRegistro.tipo === 'VP') {
-    // Editando registro existente: cargar sus datos (NO el borrador)
-    limpiarBorrador('VP');
+    // Editando registro existente: cargar sus datos (NO el borrador).
+    // No se limpia el borrador: puede pertenecer a una visita nueva a medias.
     cargarRegistroEnForm(editandoRegistro, 'vp');
   } else {
     // Nueva visita: cargar borrador si existe
@@ -226,8 +241,8 @@ function initFormEL() {
   fotosPagina = {};
   document.getElementById('el-fotos-preview').innerHTML = '';
   if (editandoRegistro && editandoRegistro.tipo === 'EL') {
-    // Editando registro existente: cargar sus datos (NO el borrador)
-    limpiarBorrador('EL');
+    // Editando registro existente: cargar sus datos (NO el borrador).
+    // No se limpia el borrador: puede pertenecer a una visita nueva a medias.
     cargarRegistroEnForm(editandoRegistro, 'el');
   } else {
     // Nueva visita: cargar borrador si existe
@@ -254,8 +269,8 @@ function initFormEI() {
   transectosDatos = {T1: null, T2: null, T3: null};
   actualizarTransectoTabs();
   if (editandoRegistro && editandoRegistro.tipo === 'EI') {
-    // Editando registro existente: cargar sus datos (NO el borrador)
-    limpiarBorrador('EI');
+    // Editando registro existente: cargar sus datos (NO el borrador).
+    // No se limpia el borrador: puede pertenecer a una visita nueva a medias.
     cargarRegistroEnForm(editandoRegistro, 'ev');
     if (editandoRegistro.datos) {
       // Restaurar todos los transectos si existen
@@ -541,6 +556,11 @@ function limpiarFormEI() {
     document.getElementById('ev-mat' + m + 'esp').value = '';
   }
   document.getElementById('ev-mat-resultado').style.display = 'none';
+  // Limpiar fotos del transecto (cada transecto tiene las suyas)
+  fotosPagina = {};
+  var fotoGrid = document.getElementById('ev-fotos-preview');
+  if (fotoGrid) fotoGrid.innerHTML = '';
+  if (typeof actualizarBtnEliminarFotos === 'function') actualizarBtnEliminarFotos('ev');
 }
 
 // ============================================================
@@ -665,6 +685,32 @@ function guardarEL() {
     showToast('Evaluacion Ligera guardada. Sin conexion \u2014 se sincronizara al conectar.', 'info');
   }
   irPagina('menu');
+}
+
+// ¿Tiene el transecto algún dato real introducido por el operador?
+// (cambiar de pestaña materializa transectos "visitados" como objetos con
+// todo vacío, que no deben confundirse con transectos rellenados)
+function esTransectoVacio(t) {
+  if (!t) return true;
+  function algunaPlanta(arr) {
+    return arr && arr.some(function(x) {
+      return x && (x.nombre || (x.notas && x.notas.some(function(n) { return n !== null && n !== ''; })));
+    });
+  }
+  if (algunaPlanta(t.plantas) || algunaPlanta(t.palatables)) return false;
+  if (t.herbaceas && t.herbaceas.some(function(n) { return n !== null && n !== ''; })) return false;
+  if (t.matorral) {
+    var p1 = t.matorral.punto1 || {}, p2 = t.matorral.punto2 || {};
+    if (p1.cobertura || p1.altura || p1.especie || p2.cobertura || p2.altura || p2.especie) return false;
+  }
+  if (t.pastoreo && t.pastoreo.some(function(v) { return v; })) return false;
+  if (t.observacionPastoreo) {
+    for (var k in t.observacionPastoreo) { if (t.observacionPastoreo[k]) return false; }
+  }
+  if (t.fotos) return false;
+  if (t.fotosComp && t.fotosComp.length) return false;
+  if (t.observaciones) return false;
+  return true;
 }
 
 function recogerDatosEI() {
@@ -793,6 +839,23 @@ function restaurarDatosEI(datos) {
   document.getElementById('ev-herbaceas-media').textContent = datos.herbaceasMedia || '—';
   var herbInline = document.getElementById('ev-herbaceas-media-inline');
   if (herbInline) herbInline.textContent = datos.herbaceasMedia || '—';
+  // Restaurar las fotos propias del transecto (cada transecto tiene las suyas)
+  restaurarFotosEI(datos);
+}
+
+// Restaura fotosPagina y el preview con las fotos de un transecto concreto
+function restaurarFotosEI(datos) {
+  var grid = document.getElementById('ev-fotos-preview');
+  if (grid) grid.innerHTML = '';
+  if (typeof restaurarFotosRegistro !== 'function') return;
+  restaurarFotosRegistro({
+    tipo: 'EI',
+    unidad: (document.getElementById('ev-unidad') || {}).value || '',
+    datos: {
+      fotos: (datos && datos.fotos) || '',
+      fotosComp: (datos && datos.fotosComp) || []
+    }
+  }, 'ev');
 }
 
 function guardarEI() {
@@ -813,10 +876,14 @@ function guardarEI() {
       return r.tipo === 'EI' && r.fecha === fecha && r.unidad === unidad && r.operador_email === sesion.email;
     });
     if (existenteEI) {
-      var prevT = (existenteEI.datos && existenteEI.datos.transectos) || {};
-      if (!transectosDatos.T1 && prevT.T1) transectosDatos.T1 = prevT.T1;
-      if (!transectosDatos.T2 && prevT.T2) transectosDatos.T2 = prevT.T2;
-      if (!transectosDatos.T3 && prevT.T3) transectosDatos.T3 = prevT.T3;
+      // Registros antiguos sin datos.transectos: sus datos top-level son T1
+      var prevT = (existenteEI.datos && existenteEI.datos.transectos) ||
+                  {T1: existenteEI.datos || null, T2: null, T3: null};
+      // Un transecto visitado pero SIN datos reales (objeto vacío) no debe
+      // pisar un transecto ya guardado en la ficha existente
+      if (esTransectoVacio(transectosDatos.T1) && prevT.T1) transectosDatos.T1 = prevT.T1;
+      if (esTransectoVacio(transectosDatos.T2) && prevT.T2) transectosDatos.T2 = prevT.T2;
+      if (esTransectoVacio(transectosDatos.T3) && prevT.T3) transectosDatos.T3 = prevT.T3;
       editandoRegistro = existenteEI;
     }
   }
@@ -833,6 +900,26 @@ function guardarEI() {
     datosCombinados[keys[i]] = datosT1[keys[i]];
   }
   datosCombinados.transectos = {T1: datosT1, T2: datosT2, T3: datosT3};
+
+  // Fotos a nivel de ficha: unión de las fotos de los 3 transectos
+  // (cada transecto guarda las suyas; la ficha las muestra todas)
+  var fotosU = [], fotosCompU = [];
+  [datosT1, datosT2, datosT3].forEach(function(dt) {
+    if (!dt) return;
+    if (dt.fotos) {
+      dt.fotos.split(',').forEach(function(c) {
+        c = c.trim();
+        if (c && fotosU.indexOf(c) < 0) fotosU.push(c);
+      });
+    }
+    if (dt.fotosComp) {
+      dt.fotosComp.forEach(function(fc) {
+        if (!fotosCompU.some(function(x) { return x.numero === fc.numero; })) fotosCompU.push(fc);
+      });
+    }
+  });
+  datosCombinados.fotos = fotosU.join(', ');
+  datosCombinados.fotosComp = fotosCompU;
 
   var reg = {
     id: editandoRegistro ? editandoRegistro.id : Date.now(),
@@ -881,8 +968,13 @@ function guardarEI() {
     limpiarBorrador('EI');
     showToast('Unidad completada. Formulario reseteado.', 'info');
   } else {
-    // Avanzar al siguiente transecto
+    // Avanzar al siguiente transecto SIN re-recoger el formulario:
+    // fotosPagina ya se vació y llamar aquí a cambiarTransecto volvería a
+    // ejecutar recogerDatosEI, borrando las fotos del transecto recién guardado
     var next = transectoActual === 'T1' ? 'T2' : 'T3';
-    cambiarTransecto(next);
+    transectoActual = next;
+    actualizarTransectoTabs();
+    if (transectosDatos[next]) restaurarDatosEI(transectosDatos[next]);
+    else limpiarFormEI();
   }
 }

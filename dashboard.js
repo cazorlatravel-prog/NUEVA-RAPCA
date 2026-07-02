@@ -65,7 +65,7 @@ function renderDashboard() {
     var tieneEI = regs.some(function(r) { return r.unidad === u && r.tipo === 'EI'; });
     if (!tieneEI) sinEI.push(u);
   });
-  if (sinEI.length > 0) html += '<div class="dash-alert">📋 ' + sinEI.length + ' unidades sin Evaluación Intensa: ' + sinEI.slice(0, 5).join(', ') + (sinEI.length > 5 ? '...' : '') + '</div>';
+  if (sinEI.length > 0) html += '<div class="dash-alert">📋 ' + sinEI.length + ' unidades sin Evaluación Intensa: ' + escapeHtml(sinEI.slice(0, 5).join(', ')) + (sinEI.length > 5 ? '...' : '') + '</div>';
   html += '</div>';
 
   content.innerHTML = html;

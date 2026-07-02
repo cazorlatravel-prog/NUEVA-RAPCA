@@ -459,32 +459,32 @@ async function exportarPDFRegistro(id, opcionesFotos) {
   var conFotos = opcionesFotos.incluirComparativas || opcionesFotos.incluirGenerales;
   showToast(conFotos ? 'Preparando informe con fotos...' : 'Preparando informe...', 'info');
 
-  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>RAPCA ' + r.tipo + ' - ' + r.unidad + '</title>';
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>RAPCA ' + escapeHtml(r.tipo) + ' - ' + escapeHtml(r.unidad) + '</title>';
   html += '<style>body{font-family:sans-serif;padding:20px;max-width:800px;margin:0 auto}h1{color:#1a3d2e}h2{color:#1a3d2e;margin-top:24px}table{width:100%;border-collapse:collapse;margin:10px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f0}.badge{padding:3px 8px;border-radius:12px;color:#fff;font-weight:700}img{max-width:100%}@media print{div[style*="page-break"]{page-break-before:always}img{break-inside:avoid}}</style></head><body>';
-  html += '<h1>RAPCA EMA — ' + r.tipo + '</h1>';
-  html += '<table><tr><th>Fecha</th><td>' + r.fecha + '</td><th>Unidad</th><td>' + r.unidad + '</td></tr>';
-  html += '<tr><th>Zona</th><td>' + r.zona + '</td><th>Transecto</th><td>' + (r.transecto || '—') + '</td></tr>';
-  html += '<tr><th>Operador</th><td>' + (r.operador_nombre || '') + '</td><th>Coordenadas</th><td>' + (r.lat ? formatCoordNW(r.lat, r.lon) : '—') + '</td></tr></table>';
+  html += '<h1>RAPCA EMA — ' + escapeHtml(r.tipo) + '</h1>';
+  html += '<table><tr><th>Fecha</th><td>' + escapeHtml(r.fecha) + '</td><th>Unidad</th><td>' + escapeHtml(r.unidad) + '</td></tr>';
+  html += '<tr><th>Zona</th><td>' + escapeHtml(r.zona) + '</td><th>Transecto</th><td>' + escapeHtml(r.transecto || '—') + '</td></tr>';
+  html += '<tr><th>Operador</th><td>' + escapeHtml(r.operador_nombre || '') + '</td><th>Coordenadas</th><td>' + (r.lat ? formatCoordNW(r.lat, r.lon) : '—') + '</td></tr></table>';
 
   if (r.datos.pastoreo) {
     html += '<h3>Grados de Pastoreo</h3><table><tr>';
     r.datos.pastoreo.forEach(function(p, i) { html += '<th>Punto ' + (i+1) + '</th>'; });
     html += '</tr><tr>';
-    r.datos.pastoreo.forEach(function(p) { html += '<td>' + (p || '—') + '</td>'; });
+    r.datos.pastoreo.forEach(function(p) { html += '<td>' + escapeHtml(p || '—') + '</td>'; });
     html += '</tr></table>';
   }
 
   if (r.datos.observacionPastoreo) {
     html += '<h3>Observación Pastoreo</h3><table><tr><th>Señal Paso</th><th>Veredas</th><th>Cagarrutas</th></tr><tr>';
-    html += '<td>' + (r.datos.observacionPastoreo.senal || '—') + '</td>';
-    html += '<td>' + (r.datos.observacionPastoreo.veredas || '—') + '</td>';
-    html += '<td>' + (r.datos.observacionPastoreo.cagarrutas || '—') + '</td></tr></table>';
+    html += '<td>' + escapeHtml(r.datos.observacionPastoreo.senal || '—') + '</td>';
+    html += '<td>' + escapeHtml(r.datos.observacionPastoreo.veredas || '—') + '</td>';
+    html += '<td>' + escapeHtml(r.datos.observacionPastoreo.cagarrutas || '—') + '</td></tr></table>';
   }
 
   if (r.datos.plantas) {
     html += '<h3>Plantas</h3><table><tr><th>Especie</th><th>Notas</th><th>Media</th></tr>';
     r.datos.plantas.forEach(function(p) {
-      html += '<tr><td style="font-style:italic">' + (p.nombre || '—') + '</td><td>' + (p.notas || []).join(', ') + '</td><td><strong>' + (p.media || '—') + '</strong></td></tr>';
+      html += '<tr><td style="font-style:italic">' + escapeHtml(p.nombre || '—') + '</td><td>' + (p.notas || []).join(', ') + '</td><td><strong>' + escapeHtml(p.media || '—') + '</strong></td></tr>';
     });
     html += '</table><p><strong>Media general: ' + (r.datos.plantasMedia || '—') + '</strong></p>';
   }
@@ -492,7 +492,7 @@ async function exportarPDFRegistro(id, opcionesFotos) {
   if (r.datos.palatables) {
     html += '<h3>Palatables</h3><table><tr><th>Especie</th><th>Notas</th><th>Media</th></tr>';
     r.datos.palatables.forEach(function(p) {
-      html += '<tr><td style="font-style:italic">' + (p.nombre || '—') + '</td><td>' + (p.notas || []).join(', ') + '</td><td><strong>' + (p.media || '—') + '</strong></td></tr>';
+      html += '<tr><td style="font-style:italic">' + escapeHtml(p.nombre || '—') + '</td><td>' + (p.notas || []).join(', ') + '</td><td><strong>' + escapeHtml(p.media || '—') + '</strong></td></tr>';
     });
     html += '</table><p><strong>Media general: ' + (r.datos.palatablesMedia || '—') + '</strong></p>';
   }
@@ -509,12 +509,12 @@ async function exportarPDFRegistro(id, opcionesFotos) {
     var mp1 = r.datos.matorral.punto1 || {};
     var mp2 = r.datos.matorral.punto2 || {};
     html += '<h3>Matorralización</h3><table><tr><th></th><th>Cobertura (%)</th><th>Altura (cm)</th><th>Especie</th></tr>';
-    html += '<tr><td>Punto 1</td><td>' + (mp1.cobertura || 0) + '</td><td>' + (mp1.altura || 0) + '</td><td style="font-style:italic">' + (mp1.especie || '—') + '</td></tr>';
-    html += '<tr><td>Punto 2</td><td>' + (mp2.cobertura || 0) + '</td><td>' + (mp2.altura || 0) + '</td><td style="font-style:italic">' + (mp2.especie || '—') + '</td></tr>';
+    html += '<tr><td>Punto 1</td><td>' + (mp1.cobertura || 0) + '</td><td>' + (mp1.altura || 0) + '</td><td style="font-style:italic">' + escapeHtml(mp1.especie || '—') + '</td></tr>';
+    html += '<tr><td>Punto 2</td><td>' + (mp2.cobertura || 0) + '</td><td>' + (mp2.altura || 0) + '</td><td style="font-style:italic">' + escapeHtml(mp2.especie || '—') + '</td></tr>';
     html += '</table><p><strong>Volumen: ' + (r.datos.matorral.volumen || '—') + ' m³/ha</strong> (Cob media: ' + (r.datos.matorral.mediaCob || '—') + '%, Alt media: ' + (r.datos.matorral.mediaAlt || '—') + ' cm)</p>';
   }
 
-  if (r.datos.observaciones) html += '<h3>Observaciones</h3><p>' + r.datos.observaciones + '</p>';
+  if (r.datos.observaciones) html += '<h3>Observaciones</h3><p>' + escapeHtml(r.datos.observaciones) + '</p>';
 
   // ---- FOTOS COMPARATIVAS (prioridad alta, más grandes) ----
   if (opcionesFotos.incluirComparativas && r.datos.fotosComp && r.datos.fotosComp.length > 0) {

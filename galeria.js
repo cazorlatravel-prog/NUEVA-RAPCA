@@ -32,7 +32,7 @@ function renderGaleria() {
   regs.forEach(function(r) { if (unidades.indexOf(r.unidad) < 0) unidades.push(r.unidad); });
 
   html += '<div class="gal-filters">';
-  html += '<select id="gal-f-unidad" onchange="filtrarGaleria()"><option value="">Unidad</option>' + unidades.map(function(u) { return '<option>' + u + '</option>'; }).join('') + '</select>';
+  html += '<select id="gal-f-unidad" onchange="filtrarGaleria()"><option value="">Unidad</option>' + unidades.map(function(u) { return '<option>' + escapeHtml(u) + '</option>'; }).join('') + '</select>';
   html += '<select id="gal-f-tipo" onchange="filtrarGaleria()"><option value="">Tipo</option><option>VP</option><option>EL</option><option>EI</option></select>';
   html += '<input type="date" id="gal-f-fecha" onchange="filtrarGaleria()">';
   html += '</div>';
@@ -123,12 +123,12 @@ function filtrarGaleria() {
 
   var html = '';
   Object.keys(grupos).sort().forEach(function(unidad) {
-    html += '<div class="gal-group-title">' + unidad + ' (' + grupos[unidad].length + ')</div>';
+    html += '<div class="gal-group-title">' + escapeHtml(unidad) + ' (' + grupos[unidad].length + ')</div>';
     grupos[unidad].forEach(function(f, i) {
       var selected = galSeleccionadas.indexOf(f.codigo) >= 0;
-      html += '<div class="gal-item' + (selected ? ' selected' : '') + '" data-codigo="' + f.codigo + '">';
-      html += '<img id="gal-img-' + f.codigo.replace(/[^a-zA-Z0-9]/g, '_') + '" src="" alt="' + f.codigo + '" onclick="galAbrirFoto(\'' + f.codigo + '\')">';
-      html += '<div class="gal-check" onclick="event.stopPropagation();galToggleSel(\'' + f.codigo + '\',this.parentNode)">✓</div>';
+      html += '<div class="gal-item' + (selected ? ' selected' : '') + '" data-codigo="' + escapeHtml(f.codigo) + '">';
+      html += '<img id="gal-img-' + f.codigo.replace(/[^a-zA-Z0-9]/g, '_') + '" src="" alt="' + escapeHtml(f.codigo) + '" onclick="galAbrirFoto(\'' + escapeJsAttr(f.codigo) + '\')">';
+      html += '<div class="gal-check" onclick="event.stopPropagation();galToggleSel(\'' + escapeJsAttr(f.codigo) + '\',this.parentNode)">✓</div>';
       html += '</div>';
     });
   });
@@ -219,20 +219,26 @@ async function galDescargarSel() {
   }
   // ZIP
   var zip = new JSZip();
+  var noEncontradas = 0;
   for (var i = 0; i < galSeleccionadas.length; i++) {
-    var foto = await obtenerDeDB('fotos', galSeleccionadas[i]);
-    if (foto) {
-      var base64 = foto.data.split(',')[1];
-      zip.file(galSeleccionadas[i] + '.jpg', base64, {base64: true});
+    var cod = galSeleccionadas[i];
+    var info = (typeof fotoInfoDesdeCodigo === 'function' && fotoInfoDesdeCodigo(cod)) || {};
+    // Buscar en todas las fuentes, no solo el store local (ZIP incompleto)
+    var data = await buscarFotoData(cod, info.tipo, info.unidad).catch(function() { return null; });
+    if (data && data.indexOf('data:') === 0) {
+      zip.file(cod + '.jpg', data.split(',')[1], {base64: true});
+    } else {
+      noEncontradas++;
     }
   }
+  if (noEncontradas === galSeleccionadas.length) { showToast('No se pudo recuperar ninguna foto', 'error'); return; }
   zip.generateAsync({type: 'blob'}).then(function(blob) {
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'rapca_fotos_seleccionadas.zip';
     a.click();
   });
-  showToast('Descargando ZIP...', 'info');
+  showToast(noEncontradas > 0 ? 'Descargando ZIP (' + noEncontradas + ' fotos no disponibles)...' : 'Descargando ZIP...', 'info');
 }
 
 function galCompararSel() {
@@ -468,38 +474,48 @@ async function galDescargarTodas() {
   if (tipo) regs = regs.filter(function(r) { return r.tipo === tipo; });
   if (fecha) regs = regs.filter(function(r) { return r.fecha === fecha; });
 
-  var codigos = [];
+  var items = [], vistos = {};
   regs.forEach(function(r) {
     if (!r.datos) return;
     if (r.datos.fotos) {
       r.datos.fotos.split(',').forEach(function(f) {
         var cod = f.trim();
-        if (cod && codigos.indexOf(cod) < 0) codigos.push(cod);
+        if (cod && !vistos[cod]) { vistos[cod] = true; items.push({codigo: cod, tipo: r.tipo, unidad: r.unidad}); }
       });
     }
     if (r.datos.fotosComp) {
       r.datos.fotosComp.forEach(function(fc) {
-        if (fc.numero && codigos.indexOf(fc.numero) < 0) codigos.push(fc.numero);
+        if (fc.numero && !vistos[fc.numero]) { vistos[fc.numero] = true; items.push({codigo: fc.numero, tipo: r.tipo, unidad: r.unidad}); }
       });
     }
   });
 
-  if (codigos.length === 0) { showToast('No hay fotos para descargar', 'error'); return; }
+  if (items.length === 0) { showToast('No hay fotos para descargar', 'error'); return; }
 
-  showToast('Preparando ' + codigos.length + ' fotos...', 'info');
+  showToast('Preparando ' + items.length + ' fotos...', 'info');
   var zip = new JSZip();
-  for (var i = 0; i < codigos.length; i++) {
-    var foto = await obtenerDeDB('fotos', codigos[i]);
-    if (foto && foto.data) {
-      var base64 = foto.data.split(',')[1];
-      zip.file(codigos[i] + '.jpg', base64, {base64: true});
+  var noEncontradas = 0;
+  for (var i = 0; i < items.length; i++) {
+    // Buscar en todas las fuentes (local, precarga, pendientes, Cloudinary),
+    // igual que los thumbnails: antes solo se miraba el store local y el ZIP
+    // salía incompleto sin aviso
+    var data = await buscarFotoData(items[i].codigo, items[i].tipo, items[i].unidad).catch(function() { return null; });
+    if (data && data.indexOf('data:') === 0) {
+      zip.file(items[i].codigo + '.jpg', data.split(',')[1], {base64: true});
+    } else {
+      noEncontradas++;
     }
   }
+  if (noEncontradas === items.length) { showToast('No se pudo recuperar ninguna foto', 'error'); return; }
   zip.generateAsync({type: 'blob'}).then(function(blob) {
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'rapca_galeria_fotos.zip';
     a.click();
-    showToast('Descarga completada', 'success');
+    if (noEncontradas > 0) {
+      showToast('Descarga completada: ' + (items.length - noEncontradas) + ' fotos (' + noEncontradas + ' no disponibles)', 'info');
+    } else {
+      showToast('Descarga completada', 'success');
+    }
   });
 }

@@ -839,13 +839,12 @@ function iniciarSesion() {
       guardarUsuarioLocal(email, pass, data.nombre, data.rol);
       loginExito();
     } else {
-      // Servidor respondió pero credenciales incorrectas — mostrar error
-      // Intentar fallback local solo si el servidor rechaza explícitamente
-      var localOk = loginLocal(email, pass, errDiv);
-      if (!localOk) {
-        errDiv.textContent = data.error || 'Credenciales incorrectas';
-        errDiv.style.display = 'block';
-      }
+      // Servidor respondió y rechazó las credenciales: NO intentar el fallback
+      // local (permitía entrar con una contraseña antigua ya cambiada o con un
+      // usuario desactivado en el servidor). El acceso offline queda solo para
+      // cuando no hay conexión (rama catch).
+      errDiv.textContent = data.error || 'Credenciales incorrectas';
+      errDiv.style.display = 'block';
     }
   }).catch(function(err) {
     btn.disabled = false;
@@ -1006,6 +1005,10 @@ function detenerAutoGuardado() {
 }
 
 function guardarBorrador(tipo) {
+  // Nunca sobrescribir el borrador mientras se edita un registro existente:
+  // contaminaría la próxima visita nueva con los datos (y fotos) del registro,
+  // y al borrar ese duplicado se podrían eliminar fotos del registro original
+  if (editandoRegistro) return;
   var prefix = tipo === 'EI' ? 'ev' : tipo.toLowerCase();
   var data = {};
 
@@ -1076,9 +1079,20 @@ function cargarBorrador(tipo) {
     }
   }
 
-  // Fotos
-  if (data.fotosPagina) {
-    fotosPagina = data.fotosPagina;
+  // Fotos: restaurar y renderizar previews (antes quedaban restauradas pero
+  // invisibles: se adjuntaban al guardar sin que el usuario pudiera verlas)
+  if (data.fotosPagina && Object.keys(data.fotosPagina).length && typeof restaurarFotosRegistro === 'function') {
+    var fp = data.fotosPagina;
+    var fcU = [];
+    (fp.W1 || []).forEach(function(f) { fcU.push({numero: f.codigo || f, waypoint: 'W1', lat: f.lat || null, lon: f.lon || null}); });
+    (fp.W2 || []).forEach(function(f) { fcU.push({numero: f.codigo || f, waypoint: 'W2', lat: f.lat || null, lon: f.lon || null}); });
+    var grid = document.getElementById(prefix + '-fotos-preview');
+    if (grid) grid.innerHTML = '';
+    restaurarFotosRegistro({
+      tipo: tipo,
+      unidad: (unidad && unidad.value) || '',
+      datos: {fotos: (fp.G || []).join(', '), fotosComp: fcU}
+    }, prefix);
   }
 
   // EI specific data
@@ -1194,8 +1208,8 @@ function initFormVP() {
   fotosPagina = {};
   document.getElementById('vp-fotos-preview').innerHTML = '';
   if (editandoRegistro && editandoRegistro.tipo === 'VP') {
-    // Editando registro existente: cargar sus datos (NO el borrador)
-    limpiarBorrador('VP');
+    // Editando registro existente: cargar sus datos (NO el borrador).
+    // No se limpia el borrador: puede pertenecer a una visita nueva a medias.
     cargarRegistroEnForm(editandoRegistro, 'vp');
   } else {
     // Nueva visita: cargar borrador si existe
@@ -1215,8 +1229,8 @@ function initFormEL() {
   fotosPagina = {};
   document.getElementById('el-fotos-preview').innerHTML = '';
   if (editandoRegistro && editandoRegistro.tipo === 'EL') {
-    // Editando registro existente: cargar sus datos (NO el borrador)
-    limpiarBorrador('EL');
+    // Editando registro existente: cargar sus datos (NO el borrador).
+    // No se limpia el borrador: puede pertenecer a una visita nueva a medias.
     cargarRegistroEnForm(editandoRegistro, 'el');
   } else {
     // Nueva visita: cargar borrador si existe
@@ -1243,8 +1257,8 @@ function initFormEI() {
   transectosDatos = {T1: null, T2: null, T3: null};
   actualizarTransectoTabs();
   if (editandoRegistro && editandoRegistro.tipo === 'EI') {
-    // Editando registro existente: cargar sus datos (NO el borrador)
-    limpiarBorrador('EI');
+    // Editando registro existente: cargar sus datos (NO el borrador).
+    // No se limpia el borrador: puede pertenecer a una visita nueva a medias.
     cargarRegistroEnForm(editandoRegistro, 'ev');
     if (editandoRegistro.datos) {
       // Restaurar todos los transectos si existen
@@ -1530,6 +1544,11 @@ function limpiarFormEI() {
     document.getElementById('ev-mat' + m + 'esp').value = '';
   }
   document.getElementById('ev-mat-resultado').style.display = 'none';
+  // Limpiar fotos del transecto (cada transecto tiene las suyas)
+  fotosPagina = {};
+  var fotoGrid = document.getElementById('ev-fotos-preview');
+  if (fotoGrid) fotoGrid.innerHTML = '';
+  if (typeof actualizarBtnEliminarFotos === 'function') actualizarBtnEliminarFotos('ev');
 }
 
 // ============================================================
@@ -1654,6 +1673,32 @@ function guardarEL() {
     showToast('Evaluacion Ligera guardada. Sin conexion \u2014 se sincronizara al conectar.', 'info');
   }
   irPagina('menu');
+}
+
+// ¿Tiene el transecto algún dato real introducido por el operador?
+// (cambiar de pestaña materializa transectos "visitados" como objetos con
+// todo vacío, que no deben confundirse con transectos rellenados)
+function esTransectoVacio(t) {
+  if (!t) return true;
+  function algunaPlanta(arr) {
+    return arr && arr.some(function(x) {
+      return x && (x.nombre || (x.notas && x.notas.some(function(n) { return n !== null && n !== ''; })));
+    });
+  }
+  if (algunaPlanta(t.plantas) || algunaPlanta(t.palatables)) return false;
+  if (t.herbaceas && t.herbaceas.some(function(n) { return n !== null && n !== ''; })) return false;
+  if (t.matorral) {
+    var p1 = t.matorral.punto1 || {}, p2 = t.matorral.punto2 || {};
+    if (p1.cobertura || p1.altura || p1.especie || p2.cobertura || p2.altura || p2.especie) return false;
+  }
+  if (t.pastoreo && t.pastoreo.some(function(v) { return v; })) return false;
+  if (t.observacionPastoreo) {
+    for (var k in t.observacionPastoreo) { if (t.observacionPastoreo[k]) return false; }
+  }
+  if (t.fotos) return false;
+  if (t.fotosComp && t.fotosComp.length) return false;
+  if (t.observaciones) return false;
+  return true;
 }
 
 function recogerDatosEI() {
@@ -1782,6 +1827,23 @@ function restaurarDatosEI(datos) {
   document.getElementById('ev-herbaceas-media').textContent = datos.herbaceasMedia || '—';
   var herbInline = document.getElementById('ev-herbaceas-media-inline');
   if (herbInline) herbInline.textContent = datos.herbaceasMedia || '—';
+  // Restaurar las fotos propias del transecto (cada transecto tiene las suyas)
+  restaurarFotosEI(datos);
+}
+
+// Restaura fotosPagina y el preview con las fotos de un transecto concreto
+function restaurarFotosEI(datos) {
+  var grid = document.getElementById('ev-fotos-preview');
+  if (grid) grid.innerHTML = '';
+  if (typeof restaurarFotosRegistro !== 'function') return;
+  restaurarFotosRegistro({
+    tipo: 'EI',
+    unidad: (document.getElementById('ev-unidad') || {}).value || '',
+    datos: {
+      fotos: (datos && datos.fotos) || '',
+      fotosComp: (datos && datos.fotosComp) || []
+    }
+  }, 'ev');
 }
 
 function guardarEI() {
@@ -1802,10 +1864,14 @@ function guardarEI() {
       return r.tipo === 'EI' && r.fecha === fecha && r.unidad === unidad && r.operador_email === sesion.email;
     });
     if (existenteEI) {
-      var prevT = (existenteEI.datos && existenteEI.datos.transectos) || {};
-      if (!transectosDatos.T1 && prevT.T1) transectosDatos.T1 = prevT.T1;
-      if (!transectosDatos.T2 && prevT.T2) transectosDatos.T2 = prevT.T2;
-      if (!transectosDatos.T3 && prevT.T3) transectosDatos.T3 = prevT.T3;
+      // Registros antiguos sin datos.transectos: sus datos top-level son T1
+      var prevT = (existenteEI.datos && existenteEI.datos.transectos) ||
+                  {T1: existenteEI.datos || null, T2: null, T3: null};
+      // Un transecto visitado pero SIN datos reales (objeto vacío) no debe
+      // pisar un transecto ya guardado en la ficha existente
+      if (esTransectoVacio(transectosDatos.T1) && prevT.T1) transectosDatos.T1 = prevT.T1;
+      if (esTransectoVacio(transectosDatos.T2) && prevT.T2) transectosDatos.T2 = prevT.T2;
+      if (esTransectoVacio(transectosDatos.T3) && prevT.T3) transectosDatos.T3 = prevT.T3;
       editandoRegistro = existenteEI;
     }
   }
@@ -1822,6 +1888,26 @@ function guardarEI() {
     datosCombinados[keys[i]] = datosT1[keys[i]];
   }
   datosCombinados.transectos = {T1: datosT1, T2: datosT2, T3: datosT3};
+
+  // Fotos a nivel de ficha: unión de las fotos de los 3 transectos
+  // (cada transecto guarda las suyas; la ficha las muestra todas)
+  var fotosU = [], fotosCompU = [];
+  [datosT1, datosT2, datosT3].forEach(function(dt) {
+    if (!dt) return;
+    if (dt.fotos) {
+      dt.fotos.split(',').forEach(function(c) {
+        c = c.trim();
+        if (c && fotosU.indexOf(c) < 0) fotosU.push(c);
+      });
+    }
+    if (dt.fotosComp) {
+      dt.fotosComp.forEach(function(fc) {
+        if (!fotosCompU.some(function(x) { return x.numero === fc.numero; })) fotosCompU.push(fc);
+      });
+    }
+  });
+  datosCombinados.fotos = fotosU.join(', ');
+  datosCombinados.fotosComp = fotosCompU;
 
   var reg = {
     id: editandoRegistro ? editandoRegistro.id : Date.now(),
@@ -1870,9 +1956,14 @@ function guardarEI() {
     limpiarBorrador('EI');
     showToast('Unidad completada. Formulario reseteado.', 'info');
   } else {
-    // Avanzar al siguiente transecto
+    // Avanzar al siguiente transecto SIN re-recoger el formulario:
+    // fotosPagina ya se vació y llamar aquí a cambiarTransecto volvería a
+    // ejecutar recogerDatosEI, borrando las fotos del transecto recién guardado
     var next = transectoActual === 'T1' ? 'T2' : 'T3';
-    cambiarTransecto(next);
+    transectoActual = next;
+    actualizarTransectoTabs();
+    if (transectosDatos[next]) restaurarDatosEI(transectosDatos[next]);
+    else limpiarFormEI();
   }
 }
 // RAPCA Campo — camera.js — Cámara y fotos
@@ -1944,6 +2035,42 @@ function abrirCamara(tipo, subtipo) {
     var codigo = typeof f === 'object' ? f.codigo : f;
     var n = extraerNumDeCodigo(codigo);
     if (n > maxEnRegistros) maxEnRegistros = n;
+  });
+
+  // Y en los borradores sin guardar de los 3 formularios: EL y EI comparten
+  // el prefijo 'EV', y una foto de un borrador EL podía colisionar (y
+  // sobrescribirse en IndexedDB) con una nueva foto EI de la misma unidad
+  ['vp', 'el', 'ei'].forEach(function(bt) {
+    var borr = safeParse('rapca_borrador_' + bt, null);
+    if (!borr) return;
+    function escanearFP(fp) {
+      if (!fp) return;
+      [].concat(fp['G'] || [], fp['W1'] || [], fp['W2'] || []).forEach(function(f) {
+        var codigo = typeof f === 'object' ? f.codigo : f;
+        var n = extraerNumDeCodigo(codigo);
+        if (n > maxEnRegistros) maxEnRegistros = n;
+      });
+    }
+    escanearFP(borr.fotosPagina);
+    // Borrador EI: fotos guardadas dentro de cada transecto
+    if (borr.transectosDatos) {
+      ['T1', 'T2', 'T3'].forEach(function(t) {
+        var dt = borr.transectosDatos[t];
+        if (!dt) return;
+        if (dt.fotos && typeof dt.fotos === 'string') {
+          dt.fotos.split(',').forEach(function(f) {
+            var n = extraerNumDeCodigo(f.trim());
+            if (n > maxEnRegistros) maxEnRegistros = n;
+          });
+        }
+        if (dt.fotosComp && Array.isArray(dt.fotosComp)) {
+          dt.fotosComp.forEach(function(fc) {
+            var n = extraerNumDeCodigo(fc.numero || '');
+            if (n > maxEnRegistros) maxEnRegistros = n;
+          });
+        }
+      });
+    }
   });
 
   // Usar el mayor entre el contador localStorage y el máximo en registros
@@ -3767,6 +3894,17 @@ function programarReintento(registro, intento) {
 
 async function procesarReintentos() {
   if (syncRetryCola.length === 0) return;
+  // No competir con una sincronización en curso ni quemar reintentos offline:
+  // volver a intentarlo más tarde manteniendo la cola intacta
+  if (sincronizando || !navigator.onLine) {
+    if (!syncRetryTimer) {
+      syncRetryTimer = setTimeout(function() {
+        syncRetryTimer = null;
+        procesarReintentos();
+      }, 5000);
+    }
+    return;
+  }
   var cola = syncRetryCola.slice();
   syncRetryCola = [];
 
@@ -3774,6 +3912,9 @@ async function procesarReintentos() {
     var item = cola[i];
     var r = item.registro;
     var intento = item.intento;
+
+    // Ya sincronizado por otra vía (p. ej. sincronizar() lo procesó): saltar
+    if (r.enviado) continue;
 
     r.syncEstado = 'sincronizando';
     actualizarIndicadorSync();
@@ -3802,6 +3943,7 @@ async function procesarReintentos() {
           if (result.ok) {
             r.enviado = true;
             r.syncEstado = 'sincronizado';
+            guardarRegistros();
             console.log('Reintento exitoso para registro', r.id, 'en intento', intento + 1);
           } else {
             r.syncEstado = 'error';
@@ -3897,9 +4039,10 @@ async function sincronizar() {
   var yaReautenticado = false;
   for (var i = 0; i < pendientes.length; i++) {
     var r = pendientes[i];
-    // Intentar Google Forms
+    // Intentar Google Forms (solo una vez por registro: con mode no-cors la
+    // respuesta es opaca y reenviarlo en cada reintento duplica filas en la hoja)
     try {
-      if (GOOGLE_FORM_URL) {
+      if (GOOGLE_FORM_URL && !r.enviadoForm) {
         var formData = new FormData();
         formData.append('entry.tipo', r.tipo);
         formData.append('entry.fecha', r.fecha);
@@ -3908,6 +4051,7 @@ async function sincronizar() {
         formData.append('entry.transecto', r.transecto);
         formData.append('entry.datos', JSON.stringify(r.datos));
         await fetch(GOOGLE_FORM_URL, {method: 'POST', body: formData, mode: 'no-cors'});
+        r.enviadoForm = true;
       }
     } catch(e) {}
 
@@ -3937,6 +4081,9 @@ async function sincronizar() {
             r.enviado = true;
             r.syncEstado = 'sincronizado';
             exitos++;
+            // Persistir cada éxito al momento: si la app se cierra a mitad
+            // de la cola, no se pierde el estado y no se reenvía
+            guardarRegistros();
           } else {
             r.syncEstado = 'error';
             programarReintento(r, 0);
@@ -4211,9 +4358,11 @@ async function cargarRegistrosServidor() {
             operador_nombre: sr.operador_nombre || sr.email
           });
         } else {
-          // Marcar como enviado si ya existe localmente
+          // Marcar como enviado si ya existe localmente, PERO nunca pisar
+          // registros con cambios locales pendientes de subir (enviado === false),
+          // p. ej. ediciones hechas offline que aún no se han sincronizado.
           var idx = registros.findIndex(function(r) { return r.id === localId; });
-          if (idx >= 0) {
+          if (idx >= 0 && registros[idx].enviado !== false) {
             registros[idx].enviado = true;
             registros[idx].syncEstado = 'sincronizado';
           }
@@ -4224,13 +4373,14 @@ async function cargarRegistrosServidor() {
       reconstruirContadores();
       actualizarIndicadorSync();
 
-      // Actualizar panel admin si existe
+      // Actualizar panel admin si existe (escapando datos de otros operadores)
       var div = document.getElementById('admin-server-records');
       if (div) {
-        div.innerHTML = '<p>' + data.registros.length + ' registros en servidor</p>';
+        var htmlSrv = '<p>' + data.registros.length + ' registros en servidor</p>';
         data.registros.forEach(function(r) {
-          div.innerHTML += '<div class="card" style="font-size:12px"><strong>' + r.tipo + '</strong> ' + (r.unidad || '') + ' · ' + r.fecha + ' · <small>' + r.email + '</small></div>';
+          htmlSrv += '<div class="card" style="font-size:12px"><strong>' + escapeHtml(r.tipo) + '</strong> ' + escapeHtml(r.unidad || '') + ' · ' + escapeHtml(r.fecha) + ' · <small>' + escapeHtml(r.email) + '</small></div>';
         });
+        div.innerHTML = htmlSrv;
       }
     }
   } catch(e) {
@@ -4267,16 +4417,20 @@ var subiendoFotosAuto = false;
 var subiendoFotosAutoTimer = null;
 async function subirFotosPendientesAuto() {
   if (!db || subiendoFotosAuto) return;
-  var pendientes = await obtenerTodosDB('subidas_pendientes');
-  if (pendientes.length === 0) return;
+  // Sin token válido no hay nada que subir (evita TypeError y prompts espontáneos)
+  if (!sesion || !sesion.token || sesion.token.startsWith('local_')) return;
+  // Poner el flag ANTES de cualquier await: dos eventos 'online' casi simultáneos
+  // pasaban ambos el guard y subían la misma lista de fotos por duplicado
   subiendoFotosAuto = true;
-  // Safety timeout: si después de 2 min por foto sigue bloqueado, liberar el flag
-  subiendoFotosAutoTimer = setTimeout(function() {
-    console.warn('subirFotosPendientesAuto: timeout de seguridad alcanzado, liberando flag');
-    subiendoFotosAuto = false;
-    subiendoFotosAutoTimer = null;
-  }, Math.max(120000, pendientes.length * 30000)); // mín 2min, o 30s por foto
   try {
+    var pendientes = await obtenerTodosDB('subidas_pendientes');
+    if (pendientes.length === 0) return;
+    // Safety timeout: si después de 2 min por foto sigue bloqueado, liberar el flag
+    subiendoFotosAutoTimer = setTimeout(function() {
+      console.warn('subirFotosPendientesAuto: timeout de seguridad alcanzado, liberando flag');
+      subiendoFotosAuto = false;
+      subiendoFotosAutoTimer = null;
+    }, Math.max(120000, pendientes.length * 30000)); // mín 2min, o 30s por foto
     for (var i = 0; i < pendientes.length; i++) {
       var foto = pendientes[i];
       try {
@@ -4308,14 +4462,30 @@ async function subirFotosPendientesAuto() {
 // --- Sync automático al reconectar ---
 window.addEventListener('online', function() {
   showToast('Conexión recuperada. Sincronizando...', 'info');
+  // sincronizarAuto ya lanza la subida de fotos pendientes; llamarla aquí
+  // de nuevo provocaba dos subidas concurrentes de las mismas fotos
   setTimeout(function() {
     sincronizarAuto();
-    subirFotosPendientesAuto();
   }, 2000);
 });
 // ============================================================
 // RAPCA Campo — map.js — Mapa, KML, GPS, exportaciones geo
 // ============================================================
+
+// Escapa texto para XML (exportaciones KML/GPX): una unidad con '&' o '<'
+// generaba archivos inválidos que Google Earth/GPS rechazan
+function escapeXml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+// Escapa una cadena para usarla dentro de un literal JS con comillas simples
+// en un atributo HTML inline (escapeHtml solo no basta: el parser HTML
+// decodifica &#39; de vuelta a comilla dentro del atributo)
+function escapeJsAttr(s) {
+  return escapeHtml(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+}
 
 // Capa persistente de waypoints comparativos
 var capaWaypointsPersist = null;
@@ -4427,7 +4597,7 @@ function actualizarMarcadores() {
           container.dataset.loaded = '1';
           obtenerDeDB('fotos', codigo).then(function(f) {
             if (f && container) {
-              container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeHtml(codigo) + '\')">';
+              container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeJsAttr(codigo) + '\')">';
             } else if (container) {
               container.innerHTML = '<span style="color:#888;font-size:11px">' + escapeHtml(codigo) + '</span>';
             }
@@ -4484,7 +4654,7 @@ function actualizarMarcadores() {
             container.dataset.loaded = '1';
             obtenerDeDB('fotos', codigo).then(function(f) {
               if (f && container) {
-                container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeHtml(codigo) + '\')">';
+                container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeJsAttr(codigo) + '\')">';
               } else if (container) {
                 container.innerHTML = '<span style="color:#888;font-size:11px">' + escapeHtml(codigo) + '</span>';
               }
@@ -4564,6 +4734,14 @@ function detenerGPSMapa() {
   }
   if (gpsMapMarker && mapa) { mapa.removeLayer(gpsMapMarker); gpsMapMarker = null; }
   if (gpsMapCircle && mapa) { mapa.removeLayer(gpsMapCircle); gpsMapCircle = null; }
+  // Detener también el watch del panel de coordenadas: seguía vivo en
+  // segundo plano (gastando batería) al salir del mapa con el panel abierto
+  if (typeof gpsWatchId !== 'undefined' && gpsWatchId) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+    var gpsPanel = document.getElementById('gps-panel');
+    if (gpsPanel) gpsPanel.classList.remove('visible');
+  }
 }
 
 function miPosicion() {
@@ -4707,7 +4885,7 @@ function agregarWaypoint() {
   if (!gpsPos) { showToast('Esperando GPS...', 'error'); return; }
   var name = prompt('Nombre del waypoint:');
   if (!name) return;
-  L.marker([gpsPos.lat, gpsPos.lon]).addTo(mapa).bindPopup('<strong>' + name + '</strong><br>' + formatCoordNW(gpsPos.lat, gpsPos.lon)).openPopup();
+  L.marker([gpsPos.lat, gpsPos.lon]).addTo(mapa).bindPopup('<strong>' + escapeHtml(name) + '</strong><br>' + formatCoordNW(gpsPos.lat, gpsPos.lon)).openPopup();
   showToast('Waypoint añadido', 'success');
 }
 
@@ -4782,7 +4960,7 @@ function renderAttrTable() {
   var cols = Object.keys(attrData[0]);
   thead.innerHTML = '<tr>' + cols.map(function(c) { return '<th onclick="ordenarAttrTable(\'' + c + '\')">' + c + '</th>'; }).join('') + '</tr>';
   tbody.innerHTML = attrData.map(function(row) {
-    return '<tr>' + cols.map(function(c) { return '<td>' + (row[c] || '') + '</td>'; }).join('') + '</tr>';
+    return '<tr>' + cols.map(function(c) { return '<td>' + escapeHtml(row[c] || '') + '</td>'; }).join('') + '</tr>';
   }).join('');
 }
 
@@ -5078,7 +5256,7 @@ function renderKMLPanel() {
       '<div class="kml-layer-header">' +
         '<label style="display:flex;align-items:center;gap:4px;flex:1;min-width:0">' +
           '<input type="checkbox" checked onchange="toggleKMLLayer(' + idx + ',this.checked)" style="width:16px;height:16px">' +
-          '<span style="font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📂 ' + capa.nombre + '</span>' +
+          '<span style="font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📂 ' + escapeHtml(capa.nombre) + '</span>' +
         '</label>' +
         '<button onclick="removeKMLLayer(' + idx + ')" style="background:none;border:none;color:#e74c3c;font-size:14px;cursor:pointer;padding:0">✕</button>' +
       '</div>' +
@@ -5090,7 +5268,7 @@ function renderKMLPanel() {
       (capa.attrFields.length > 0 ?
         '<div class="kml-layer-controls">' +
           '<label style="font-size:10px;display:flex;align-items:center;gap:4px">Popup: <select onchange="updateKMLPopupField(' + idx + ',this.value)" style="font-size:10px;flex:1;min-width:0">' +
-            capa.attrFields.map(function(f) { return '<option value="' + f + '"' + (f === capa.popupField ? ' selected' : '') + '>' + f + '</option>'; }).join('') +
+            capa.attrFields.map(function(f) { return '<option value="' + escapeHtml(f) + '"' + (f === capa.popupField ? ' selected' : '') + '>' + escapeHtml(f) + '</option>'; }).join('') +
           '</select></label>' +
         '</div>' : '') +
     '';
@@ -5212,7 +5390,7 @@ function exportarKML() {
   var regs = misRegistros().filter(function(r) { return r.lat && r.lon; });
   var kml = '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>RAPCA Registros</name>';
   regs.forEach(function(r) {
-    kml += '<Placemark><name>' + r.tipo + ' - ' + r.unidad + '</name><description>' + r.fecha + '</description><Point><coordinates>' + r.lon + ',' + r.lat + ',0</coordinates></Point></Placemark>';
+    kml += '<Placemark><name>' + escapeXml(r.tipo + ' - ' + r.unidad) + '</name><description>' + escapeXml(r.fecha) + '</description><Point><coordinates>' + r.lon + ',' + r.lat + ',0</coordinates></Point></Placemark>';
   });
   kml += '</Document></kml>';
   descargarArchivo(kml, 'rapca_registros.kml', 'application/vnd.google-earth.kml+xml');
@@ -5267,7 +5445,7 @@ function exportarGPX() {
   var regs = misRegistros().filter(function(r) { return r.lat && r.lon; });
   var gpx = '<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="RAPCA Campo">';
   regs.forEach(function(r) {
-    gpx += '<wpt lat="' + r.lat + '" lon="' + r.lon + '"><name>' + r.tipo + ' - ' + r.unidad + '</name><desc>' + r.fecha + '</desc></wpt>';
+    gpx += '<wpt lat="' + r.lat + '" lon="' + r.lon + '"><name>' + escapeXml(r.tipo + ' - ' + r.unidad) + '</name><desc>' + escapeXml(r.fecha) + '</desc></wpt>';
   });
   gpx += '</gpx>';
   descargarArchivo(gpx, 'rapca_registros.gpx', 'application/gpx+xml');
@@ -5298,7 +5476,7 @@ function filtrarOperadorMapa() {
   var colores = {VP: '#88d8b0', EL: '#2ecc71', EI: '#fd9853'};
   regs.forEach(function(r) {
     var marker = L.circleMarker([r.lat, r.lon], {radius: 8, fillColor: colores[r.tipo], color: '#fff', weight: 2, fillOpacity: 0.9});
-    marker.bindPopup(r.tipo + ' - ' + r.unidad);
+    marker.bindPopup(escapeHtml(r.tipo + ' - ' + r.unidad));
     mapaMarkers.addLayer(marker);
   });
 }
@@ -5380,7 +5558,7 @@ function cargarWaypointsPersistentes() {
           container.dataset.loaded = '1';
           obtenerDeDB('fotos', codigo).then(function(f) {
             if (f && f.data && container) {
-              container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeHtml(codigo) + '\')">';
+              container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeJsAttr(codigo) + '\')">';
             }
           }).catch(function() {});
         });
@@ -6277,32 +6455,32 @@ async function exportarPDFRegistro(id, opcionesFotos) {
   var conFotos = opcionesFotos.incluirComparativas || opcionesFotos.incluirGenerales;
   showToast(conFotos ? 'Preparando informe con fotos...' : 'Preparando informe...', 'info');
 
-  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>RAPCA ' + r.tipo + ' - ' + r.unidad + '</title>';
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>RAPCA ' + escapeHtml(r.tipo) + ' - ' + escapeHtml(r.unidad) + '</title>';
   html += '<style>body{font-family:sans-serif;padding:20px;max-width:800px;margin:0 auto}h1{color:#1a3d2e}h2{color:#1a3d2e;margin-top:24px}table{width:100%;border-collapse:collapse;margin:10px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f0}.badge{padding:3px 8px;border-radius:12px;color:#fff;font-weight:700}img{max-width:100%}@media print{div[style*="page-break"]{page-break-before:always}img{break-inside:avoid}}</style></head><body>';
-  html += '<h1>RAPCA EMA — ' + r.tipo + '</h1>';
-  html += '<table><tr><th>Fecha</th><td>' + r.fecha + '</td><th>Unidad</th><td>' + r.unidad + '</td></tr>';
-  html += '<tr><th>Zona</th><td>' + r.zona + '</td><th>Transecto</th><td>' + (r.transecto || '—') + '</td></tr>';
-  html += '<tr><th>Operador</th><td>' + (r.operador_nombre || '') + '</td><th>Coordenadas</th><td>' + (r.lat ? formatCoordNW(r.lat, r.lon) : '—') + '</td></tr></table>';
+  html += '<h1>RAPCA EMA — ' + escapeHtml(r.tipo) + '</h1>';
+  html += '<table><tr><th>Fecha</th><td>' + escapeHtml(r.fecha) + '</td><th>Unidad</th><td>' + escapeHtml(r.unidad) + '</td></tr>';
+  html += '<tr><th>Zona</th><td>' + escapeHtml(r.zona) + '</td><th>Transecto</th><td>' + escapeHtml(r.transecto || '—') + '</td></tr>';
+  html += '<tr><th>Operador</th><td>' + escapeHtml(r.operador_nombre || '') + '</td><th>Coordenadas</th><td>' + (r.lat ? formatCoordNW(r.lat, r.lon) : '—') + '</td></tr></table>';
 
   if (r.datos.pastoreo) {
     html += '<h3>Grados de Pastoreo</h3><table><tr>';
     r.datos.pastoreo.forEach(function(p, i) { html += '<th>Punto ' + (i+1) + '</th>'; });
     html += '</tr><tr>';
-    r.datos.pastoreo.forEach(function(p) { html += '<td>' + (p || '—') + '</td>'; });
+    r.datos.pastoreo.forEach(function(p) { html += '<td>' + escapeHtml(p || '—') + '</td>'; });
     html += '</tr></table>';
   }
 
   if (r.datos.observacionPastoreo) {
     html += '<h3>Observación Pastoreo</h3><table><tr><th>Señal Paso</th><th>Veredas</th><th>Cagarrutas</th></tr><tr>';
-    html += '<td>' + (r.datos.observacionPastoreo.senal || '—') + '</td>';
-    html += '<td>' + (r.datos.observacionPastoreo.veredas || '—') + '</td>';
-    html += '<td>' + (r.datos.observacionPastoreo.cagarrutas || '—') + '</td></tr></table>';
+    html += '<td>' + escapeHtml(r.datos.observacionPastoreo.senal || '—') + '</td>';
+    html += '<td>' + escapeHtml(r.datos.observacionPastoreo.veredas || '—') + '</td>';
+    html += '<td>' + escapeHtml(r.datos.observacionPastoreo.cagarrutas || '—') + '</td></tr></table>';
   }
 
   if (r.datos.plantas) {
     html += '<h3>Plantas</h3><table><tr><th>Especie</th><th>Notas</th><th>Media</th></tr>';
     r.datos.plantas.forEach(function(p) {
-      html += '<tr><td style="font-style:italic">' + (p.nombre || '—') + '</td><td>' + (p.notas || []).join(', ') + '</td><td><strong>' + (p.media || '—') + '</strong></td></tr>';
+      html += '<tr><td style="font-style:italic">' + escapeHtml(p.nombre || '—') + '</td><td>' + (p.notas || []).join(', ') + '</td><td><strong>' + escapeHtml(p.media || '—') + '</strong></td></tr>';
     });
     html += '</table><p><strong>Media general: ' + (r.datos.plantasMedia || '—') + '</strong></p>';
   }
@@ -6310,7 +6488,7 @@ async function exportarPDFRegistro(id, opcionesFotos) {
   if (r.datos.palatables) {
     html += '<h3>Palatables</h3><table><tr><th>Especie</th><th>Notas</th><th>Media</th></tr>';
     r.datos.palatables.forEach(function(p) {
-      html += '<tr><td style="font-style:italic">' + (p.nombre || '—') + '</td><td>' + (p.notas || []).join(', ') + '</td><td><strong>' + (p.media || '—') + '</strong></td></tr>';
+      html += '<tr><td style="font-style:italic">' + escapeHtml(p.nombre || '—') + '</td><td>' + (p.notas || []).join(', ') + '</td><td><strong>' + escapeHtml(p.media || '—') + '</strong></td></tr>';
     });
     html += '</table><p><strong>Media general: ' + (r.datos.palatablesMedia || '—') + '</strong></p>';
   }
@@ -6327,12 +6505,12 @@ async function exportarPDFRegistro(id, opcionesFotos) {
     var mp1 = r.datos.matorral.punto1 || {};
     var mp2 = r.datos.matorral.punto2 || {};
     html += '<h3>Matorralización</h3><table><tr><th></th><th>Cobertura (%)</th><th>Altura (cm)</th><th>Especie</th></tr>';
-    html += '<tr><td>Punto 1</td><td>' + (mp1.cobertura || 0) + '</td><td>' + (mp1.altura || 0) + '</td><td style="font-style:italic">' + (mp1.especie || '—') + '</td></tr>';
-    html += '<tr><td>Punto 2</td><td>' + (mp2.cobertura || 0) + '</td><td>' + (mp2.altura || 0) + '</td><td style="font-style:italic">' + (mp2.especie || '—') + '</td></tr>';
+    html += '<tr><td>Punto 1</td><td>' + (mp1.cobertura || 0) + '</td><td>' + (mp1.altura || 0) + '</td><td style="font-style:italic">' + escapeHtml(mp1.especie || '—') + '</td></tr>';
+    html += '<tr><td>Punto 2</td><td>' + (mp2.cobertura || 0) + '</td><td>' + (mp2.altura || 0) + '</td><td style="font-style:italic">' + escapeHtml(mp2.especie || '—') + '</td></tr>';
     html += '</table><p><strong>Volumen: ' + (r.datos.matorral.volumen || '—') + ' m³/ha</strong> (Cob media: ' + (r.datos.matorral.mediaCob || '—') + '%, Alt media: ' + (r.datos.matorral.mediaAlt || '—') + ' cm)</p>';
   }
 
-  if (r.datos.observaciones) html += '<h3>Observaciones</h3><p>' + r.datos.observaciones + '</p>';
+  if (r.datos.observaciones) html += '<h3>Observaciones</h3><p>' + escapeHtml(r.datos.observaciones) + '</p>';
 
   // ---- FOTOS COMPARATIVAS (prioridad alta, más grandes) ----
   if (opcionesFotos.incluirComparativas && r.datos.fotosComp && r.datos.fotosComp.length > 0) {
@@ -7547,7 +7725,8 @@ function resetearWatermarkConfig() {
 
 function renderAdmin() {
   if (!sesion || sesion.rol !== 'admin') { irPagina('menu'); return; }
-  var usuarios = JSON.parse(localStorage.getItem('rapca_usuarios_local') || '[]');
+  // safeParse: un valor corrupto en localStorage dejaba el panel inutilizable
+  var usuarios = safeParse('rapca_usuarios_local', []);
   var lista = document.getElementById('admin-users-list');
   lista.innerHTML = usuarios.map(function(u, i) {
     return '<div class="card admin-user-card">' +
@@ -7603,7 +7782,7 @@ async function cargarUsuariosServidor() {
             '<div class="admin-user-actions">' +
             '<button class="btn btn-sm btn-outline" onclick="editarUsuarioServidor(' + idx + ')">✏️</button>' +
             '<button class="btn btn-sm btn-outline" onclick="toggleUsuarioServidor(' + u.id + ')">' + (u.activo ? '⏸' : '▶') + '</button>' +
-            '<button class="btn btn-sm btn-danger" onclick="eliminarUsuarioServidor(' + u.id + ', \'' + String(u.email).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')">🗑️</button>' +
+            '<button class="btn btn-sm btn-danger" onclick="eliminarUsuarioServidor(' + u.id + ', \'' + escapeHtml(String(u.email).replace(/\\/g, '\\\\').replace(/'/g, "\\'")) + '\')">🗑️</button>' +
             '</div></div>';
         });
         lista.innerHTML = html;
@@ -7863,6 +8042,17 @@ async function eliminarUsuarioServidor(userId, email) {
 // GABINETE / OFICINA - Funciones de analisis y exportacion
 // ============================================================
 
+// Devuelve las muestras de un registro EI: sus transectos con datos
+// (registros nuevos con datos.transectos) o el propio nivel superior
+// (registros antiguos, donde todo era un único transecto)
+function _muestrasEI(d) {
+  if (!d) return [];
+  if (d.transectos) {
+    return ['T1', 'T2', 'T3'].map(function(t) { return d.transectos[t]; }).filter(Boolean);
+  }
+  return [d];
+}
+
 // ----------------------------------------------------------
 // 1. Dashboard de completitud por unidad
 // ----------------------------------------------------------
@@ -7986,32 +8176,34 @@ function mostrarEstadisticasZona() {
   var palatablesMediaSum = 0, palatablesMediaCount = 0;
 
   ei.forEach(function(r) {
-    var d = r.datos;
-    if (!d) return;
-    // Herbaceas
-    if (d.herbaceas && Array.isArray(d.herbaceas)) {
-      d.herbaceas.forEach(function(v) {
-        if (v !== null && v !== undefined && v !== '') {
-          herbStats.sum += parseFloat(v) || 0;
-          herbStats.count++;
-        }
-      });
-    }
-    // Matorral volume
-    if (d.matorral && d.matorral.volumen) {
-      var vol = parseFloat(d.matorral.volumen);
-      if (!isNaN(vol)) { matVolSum += vol; matVolCount++; }
-    }
-    // Plantas media
-    if (d.plantasMedia && d.plantasMedia !== '\u2014') {
-      var pm = parseFloat(d.plantasMedia);
-      if (!isNaN(pm)) { plantasMediaSum += pm; plantasMediaCount++; }
-    }
-    // Palatables media
-    if (d.palatablesMedia && d.palatablesMedia !== '\u2014') {
-      var pam = parseFloat(d.palatablesMedia);
-      if (!isNaN(pam)) { palatablesMediaSum += pam; palatablesMediaCount++; }
-    }
+    // Agregar sobre TODOS los transectos con datos (antes solo se le\u00eda el
+    // nivel superior = T1 y se ignoraban T2/T3 en registros nuevos)
+    _muestrasEI(r.datos).forEach(function(d) {
+      // Herbaceas
+      if (d.herbaceas && Array.isArray(d.herbaceas)) {
+        d.herbaceas.forEach(function(v) {
+          if (v !== null && v !== undefined && v !== '') {
+            herbStats.sum += parseFloat(v) || 0;
+            herbStats.count++;
+          }
+        });
+      }
+      // Matorral volume
+      if (d.matorral && d.matorral.volumen) {
+        var vol = parseFloat(d.matorral.volumen);
+        if (!isNaN(vol)) { matVolSum += vol; matVolCount++; }
+      }
+      // Plantas media
+      if (d.plantasMedia && d.plantasMedia !== '\u2014') {
+        var pm = parseFloat(d.plantasMedia);
+        if (!isNaN(pm)) { plantasMediaSum += pm; plantasMediaCount++; }
+      }
+      // Palatables media
+      if (d.palatablesMedia && d.palatablesMedia !== '\u2014') {
+        var pam = parseFloat(d.palatablesMedia);
+        if (!isNaN(pam)) { palatablesMediaSum += pam; palatablesMediaCount++; }
+      }
+    });
   });
 
   var html = '<div style="margin-top:12px">';
@@ -8157,17 +8349,18 @@ function descargarInformeZona() {
   // EI stats
   var herbSum = 0, herbCount = 0, matVolSum = 0, matVolCount = 0;
   ei.forEach(function(r) {
-    var d = r.datos;
-    if (!d) return;
-    if (d.herbaceas && Array.isArray(d.herbaceas)) {
-      d.herbaceas.forEach(function(v) {
-        if (v !== null && v !== undefined && v !== '') { herbSum += parseFloat(v) || 0; herbCount++; }
-      });
-    }
-    if (d.matorral && d.matorral.volumen) {
-      var vol = parseFloat(d.matorral.volumen);
-      if (!isNaN(vol)) { matVolSum += vol; matVolCount++; }
-    }
+    // Agregar sobre todos los transectos con datos, no solo T1
+    _muestrasEI(r.datos).forEach(function(d) {
+      if (d.herbaceas && Array.isArray(d.herbaceas)) {
+        d.herbaceas.forEach(function(v) {
+          if (v !== null && v !== undefined && v !== '') { herbSum += parseFloat(v) || 0; herbCount++; }
+        });
+      }
+      if (d.matorral && d.matorral.volumen) {
+        var vol = parseFloat(d.matorral.volumen);
+        if (!isNaN(vol)) { matVolSum += vol; matVolCount++; }
+      }
+    });
   });
 
   // Build printable HTML
@@ -8355,8 +8548,7 @@ function ejecutarExportCSV() {
 
   var lines = [headers.map(_csvEscape).join(',')];
 
-  regs.forEach(function(r) {
-    var d = r.datos || {};
+  function filaCSV(r, d, transectoLabel) {
     var pastoreo = d.pastoreo || [];
     var obsPast = '';
     if (d.observacionPastoreo) {
@@ -8373,13 +8565,13 @@ function ejecutarExportCSV() {
 
     var nFotosComp = (d.fotosComp && Array.isArray(d.fotosComp)) ? d.fotosComp.length : 0;
 
-    var row = [
+    return [
       r.id,
       r.tipo,
       r.fecha,
       r.zona || '',
       r.unidad || '',
-      r.transecto || '',
+      transectoLabel,
       r.operador_nombre || '',
       r.operador_email || '',
       r.lat != null ? r.lat : '',
@@ -8397,8 +8589,20 @@ function ejecutarExportCSV() {
       d.herbaceasMedia || '',
       (d.matorral && d.matorral.volumen) ? d.matorral.volumen : ''
     ];
+  }
 
-    lines.push(row.map(_csvEscape).join(','));
+  regs.forEach(function(r) {
+    var d = r.datos || {};
+    // Registros EI con transectos: una fila por transecto con datos
+    // (antes el CSV solo exportaba el nivel superior = T1 y se perdían T2/T3)
+    if (d.transectos) {
+      ['T1', 'T2', 'T3'].forEach(function(t) {
+        var dt = d.transectos[t];
+        if (dt) lines.push(filaCSV(r, dt, t).map(_csvEscape).join(','));
+      });
+    } else {
+      lines.push(filaCSV(r, d, r.transecto || '').map(_csvEscape).join(','));
+    }
   });
 
   var csv = '\uFEFF' + lines.join('\r\n'); // BOM for Excel UTF-8
@@ -8862,7 +9066,7 @@ function renderDashboard() {
     var tieneEI = regs.some(function(r) { return r.unidad === u && r.tipo === 'EI'; });
     if (!tieneEI) sinEI.push(u);
   });
-  if (sinEI.length > 0) html += '<div class="dash-alert">📋 ' + sinEI.length + ' unidades sin Evaluación Intensa: ' + sinEI.slice(0, 5).join(', ') + (sinEI.length > 5 ? '...' : '') + '</div>';
+  if (sinEI.length > 0) html += '<div class="dash-alert">📋 ' + sinEI.length + ' unidades sin Evaluación Intensa: ' + escapeHtml(sinEI.slice(0, 5).join(', ')) + (sinEI.length > 5 ? '...' : '') + '</div>';
   html += '</div>';
 
   content.innerHTML = html;
@@ -9020,7 +9224,9 @@ function filtrarTimeline() {
   if (desde) regs = regs.filter(function(r) { return r.fecha >= desde; });
   if (hasta) regs = regs.filter(function(r) { return r.fecha <= hasta; });
 
-  regs.sort(function(a, b) { return b.id - a.id; });
+  // Copiar antes de ordenar: para admin, misRegistros() devuelve el array
+  // global y ordenarlo en sitio alteraba el orden persistido de los registros
+  regs = regs.slice().sort(function(a, b) { return b.id - a.id; });
 
   var lista = document.getElementById('tl-lista');
   if (regs.length === 0) {
@@ -9478,7 +9684,7 @@ function renderGaleria() {
   regs.forEach(function(r) { if (unidades.indexOf(r.unidad) < 0) unidades.push(r.unidad); });
 
   html += '<div class="gal-filters">';
-  html += '<select id="gal-f-unidad" onchange="filtrarGaleria()"><option value="">Unidad</option>' + unidades.map(function(u) { return '<option>' + u + '</option>'; }).join('') + '</select>';
+  html += '<select id="gal-f-unidad" onchange="filtrarGaleria()"><option value="">Unidad</option>' + unidades.map(function(u) { return '<option>' + escapeHtml(u) + '</option>'; }).join('') + '</select>';
   html += '<select id="gal-f-tipo" onchange="filtrarGaleria()"><option value="">Tipo</option><option>VP</option><option>EL</option><option>EI</option></select>';
   html += '<input type="date" id="gal-f-fecha" onchange="filtrarGaleria()">';
   html += '</div>';
@@ -9569,12 +9775,12 @@ function filtrarGaleria() {
 
   var html = '';
   Object.keys(grupos).sort().forEach(function(unidad) {
-    html += '<div class="gal-group-title">' + unidad + ' (' + grupos[unidad].length + ')</div>';
+    html += '<div class="gal-group-title">' + escapeHtml(unidad) + ' (' + grupos[unidad].length + ')</div>';
     grupos[unidad].forEach(function(f, i) {
       var selected = galSeleccionadas.indexOf(f.codigo) >= 0;
-      html += '<div class="gal-item' + (selected ? ' selected' : '') + '" data-codigo="' + f.codigo + '">';
-      html += '<img id="gal-img-' + f.codigo.replace(/[^a-zA-Z0-9]/g, '_') + '" src="" alt="' + f.codigo + '" onclick="galAbrirFoto(\'' + f.codigo + '\')">';
-      html += '<div class="gal-check" onclick="event.stopPropagation();galToggleSel(\'' + f.codigo + '\',this.parentNode)">✓</div>';
+      html += '<div class="gal-item' + (selected ? ' selected' : '') + '" data-codigo="' + escapeHtml(f.codigo) + '">';
+      html += '<img id="gal-img-' + f.codigo.replace(/[^a-zA-Z0-9]/g, '_') + '" src="" alt="' + escapeHtml(f.codigo) + '" onclick="galAbrirFoto(\'' + escapeJsAttr(f.codigo) + '\')">';
+      html += '<div class="gal-check" onclick="event.stopPropagation();galToggleSel(\'' + escapeJsAttr(f.codigo) + '\',this.parentNode)">✓</div>';
       html += '</div>';
     });
   });
@@ -9665,20 +9871,26 @@ async function galDescargarSel() {
   }
   // ZIP
   var zip = new JSZip();
+  var noEncontradas = 0;
   for (var i = 0; i < galSeleccionadas.length; i++) {
-    var foto = await obtenerDeDB('fotos', galSeleccionadas[i]);
-    if (foto) {
-      var base64 = foto.data.split(',')[1];
-      zip.file(galSeleccionadas[i] + '.jpg', base64, {base64: true});
+    var cod = galSeleccionadas[i];
+    var info = (typeof fotoInfoDesdeCodigo === 'function' && fotoInfoDesdeCodigo(cod)) || {};
+    // Buscar en todas las fuentes, no solo el store local (ZIP incompleto)
+    var data = await buscarFotoData(cod, info.tipo, info.unidad).catch(function() { return null; });
+    if (data && data.indexOf('data:') === 0) {
+      zip.file(cod + '.jpg', data.split(',')[1], {base64: true});
+    } else {
+      noEncontradas++;
     }
   }
+  if (noEncontradas === galSeleccionadas.length) { showToast('No se pudo recuperar ninguna foto', 'error'); return; }
   zip.generateAsync({type: 'blob'}).then(function(blob) {
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'rapca_fotos_seleccionadas.zip';
     a.click();
   });
-  showToast('Descargando ZIP...', 'info');
+  showToast(noEncontradas > 0 ? 'Descargando ZIP (' + noEncontradas + ' fotos no disponibles)...' : 'Descargando ZIP...', 'info');
 }
 
 function galCompararSel() {
@@ -9914,38 +10126,48 @@ async function galDescargarTodas() {
   if (tipo) regs = regs.filter(function(r) { return r.tipo === tipo; });
   if (fecha) regs = regs.filter(function(r) { return r.fecha === fecha; });
 
-  var codigos = [];
+  var items = [], vistos = {};
   regs.forEach(function(r) {
     if (!r.datos) return;
     if (r.datos.fotos) {
       r.datos.fotos.split(',').forEach(function(f) {
         var cod = f.trim();
-        if (cod && codigos.indexOf(cod) < 0) codigos.push(cod);
+        if (cod && !vistos[cod]) { vistos[cod] = true; items.push({codigo: cod, tipo: r.tipo, unidad: r.unidad}); }
       });
     }
     if (r.datos.fotosComp) {
       r.datos.fotosComp.forEach(function(fc) {
-        if (fc.numero && codigos.indexOf(fc.numero) < 0) codigos.push(fc.numero);
+        if (fc.numero && !vistos[fc.numero]) { vistos[fc.numero] = true; items.push({codigo: fc.numero, tipo: r.tipo, unidad: r.unidad}); }
       });
     }
   });
 
-  if (codigos.length === 0) { showToast('No hay fotos para descargar', 'error'); return; }
+  if (items.length === 0) { showToast('No hay fotos para descargar', 'error'); return; }
 
-  showToast('Preparando ' + codigos.length + ' fotos...', 'info');
+  showToast('Preparando ' + items.length + ' fotos...', 'info');
   var zip = new JSZip();
-  for (var i = 0; i < codigos.length; i++) {
-    var foto = await obtenerDeDB('fotos', codigos[i]);
-    if (foto && foto.data) {
-      var base64 = foto.data.split(',')[1];
-      zip.file(codigos[i] + '.jpg', base64, {base64: true});
+  var noEncontradas = 0;
+  for (var i = 0; i < items.length; i++) {
+    // Buscar en todas las fuentes (local, precarga, pendientes, Cloudinary),
+    // igual que los thumbnails: antes solo se miraba el store local y el ZIP
+    // salía incompleto sin aviso
+    var data = await buscarFotoData(items[i].codigo, items[i].tipo, items[i].unidad).catch(function() { return null; });
+    if (data && data.indexOf('data:') === 0) {
+      zip.file(items[i].codigo + '.jpg', data.split(',')[1], {base64: true});
+    } else {
+      noEncontradas++;
     }
   }
+  if (noEncontradas === items.length) { showToast('No se pudo recuperar ninguna foto', 'error'); return; }
   zip.generateAsync({type: 'blob'}).then(function(blob) {
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'rapca_galeria_fotos.zip';
     a.click();
-    showToast('Descarga completada', 'success');
+    if (noEncontradas > 0) {
+      showToast('Descarga completada: ' + (items.length - noEncontradas) + ' fotos (' + noEncontradas + ' no disponibles)', 'info');
+    } else {
+      showToast('Descarga completada', 'success');
+    }
   });
 }

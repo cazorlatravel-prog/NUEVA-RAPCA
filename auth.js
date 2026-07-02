@@ -54,13 +54,12 @@ function iniciarSesion() {
       guardarUsuarioLocal(email, pass, data.nombre, data.rol);
       loginExito();
     } else {
-      // Servidor respondió pero credenciales incorrectas — mostrar error
-      // Intentar fallback local solo si el servidor rechaza explícitamente
-      var localOk = loginLocal(email, pass, errDiv);
-      if (!localOk) {
-        errDiv.textContent = data.error || 'Credenciales incorrectas';
-        errDiv.style.display = 'block';
-      }
+      // Servidor respondió y rechazó las credenciales: NO intentar el fallback
+      // local (permitía entrar con una contraseña antigua ya cambiada o con un
+      // usuario desactivado en el servidor). El acceso offline queda solo para
+      // cuando no hay conexión (rama catch).
+      errDiv.textContent = data.error || 'Credenciales incorrectas';
+      errDiv.style.display = 'block';
     }
   }).catch(function(err) {
     btn.disabled = false;

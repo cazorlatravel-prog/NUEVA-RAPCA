@@ -69,6 +69,42 @@ function abrirCamara(tipo, subtipo) {
     if (n > maxEnRegistros) maxEnRegistros = n;
   });
 
+  // Y en los borradores sin guardar de los 3 formularios: EL y EI comparten
+  // el prefijo 'EV', y una foto de un borrador EL podía colisionar (y
+  // sobrescribirse en IndexedDB) con una nueva foto EI de la misma unidad
+  ['vp', 'el', 'ei'].forEach(function(bt) {
+    var borr = safeParse('rapca_borrador_' + bt, null);
+    if (!borr) return;
+    function escanearFP(fp) {
+      if (!fp) return;
+      [].concat(fp['G'] || [], fp['W1'] || [], fp['W2'] || []).forEach(function(f) {
+        var codigo = typeof f === 'object' ? f.codigo : f;
+        var n = extraerNumDeCodigo(codigo);
+        if (n > maxEnRegistros) maxEnRegistros = n;
+      });
+    }
+    escanearFP(borr.fotosPagina);
+    // Borrador EI: fotos guardadas dentro de cada transecto
+    if (borr.transectosDatos) {
+      ['T1', 'T2', 'T3'].forEach(function(t) {
+        var dt = borr.transectosDatos[t];
+        if (!dt) return;
+        if (dt.fotos && typeof dt.fotos === 'string') {
+          dt.fotos.split(',').forEach(function(f) {
+            var n = extraerNumDeCodigo(f.trim());
+            if (n > maxEnRegistros) maxEnRegistros = n;
+          });
+        }
+        if (dt.fotosComp && Array.isArray(dt.fotosComp)) {
+          dt.fotosComp.forEach(function(fc) {
+            var n = extraerNumDeCodigo(fc.numero || '');
+            if (n > maxEnRegistros) maxEnRegistros = n;
+          });
+        }
+      });
+    }
+  });
+
   // Usar el mayor entre el contador localStorage y el máximo en registros
   // Si se reiniciaron manualmente, ignorar registros anteriores
   var contadorLocal = contadores[contKey] || 0;

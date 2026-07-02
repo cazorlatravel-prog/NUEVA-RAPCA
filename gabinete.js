@@ -2,6 +2,17 @@
 // GABINETE / OFICINA - Funciones de analisis y exportacion
 // ============================================================
 
+// Devuelve las muestras de un registro EI: sus transectos con datos
+// (registros nuevos con datos.transectos) o el propio nivel superior
+// (registros antiguos, donde todo era un único transecto)
+function _muestrasEI(d) {
+  if (!d) return [];
+  if (d.transectos) {
+    return ['T1', 'T2', 'T3'].map(function(t) { return d.transectos[t]; }).filter(Boolean);
+  }
+  return [d];
+}
+
 // ----------------------------------------------------------
 // 1. Dashboard de completitud por unidad
 // ----------------------------------------------------------
@@ -125,32 +136,34 @@ function mostrarEstadisticasZona() {
   var palatablesMediaSum = 0, palatablesMediaCount = 0;
 
   ei.forEach(function(r) {
-    var d = r.datos;
-    if (!d) return;
-    // Herbaceas
-    if (d.herbaceas && Array.isArray(d.herbaceas)) {
-      d.herbaceas.forEach(function(v) {
-        if (v !== null && v !== undefined && v !== '') {
-          herbStats.sum += parseFloat(v) || 0;
-          herbStats.count++;
-        }
-      });
-    }
-    // Matorral volume
-    if (d.matorral && d.matorral.volumen) {
-      var vol = parseFloat(d.matorral.volumen);
-      if (!isNaN(vol)) { matVolSum += vol; matVolCount++; }
-    }
-    // Plantas media
-    if (d.plantasMedia && d.plantasMedia !== '\u2014') {
-      var pm = parseFloat(d.plantasMedia);
-      if (!isNaN(pm)) { plantasMediaSum += pm; plantasMediaCount++; }
-    }
-    // Palatables media
-    if (d.palatablesMedia && d.palatablesMedia !== '\u2014') {
-      var pam = parseFloat(d.palatablesMedia);
-      if (!isNaN(pam)) { palatablesMediaSum += pam; palatablesMediaCount++; }
-    }
+    // Agregar sobre TODOS los transectos con datos (antes solo se le\u00eda el
+    // nivel superior = T1 y se ignoraban T2/T3 en registros nuevos)
+    _muestrasEI(r.datos).forEach(function(d) {
+      // Herbaceas
+      if (d.herbaceas && Array.isArray(d.herbaceas)) {
+        d.herbaceas.forEach(function(v) {
+          if (v !== null && v !== undefined && v !== '') {
+            herbStats.sum += parseFloat(v) || 0;
+            herbStats.count++;
+          }
+        });
+      }
+      // Matorral volume
+      if (d.matorral && d.matorral.volumen) {
+        var vol = parseFloat(d.matorral.volumen);
+        if (!isNaN(vol)) { matVolSum += vol; matVolCount++; }
+      }
+      // Plantas media
+      if (d.plantasMedia && d.plantasMedia !== '\u2014') {
+        var pm = parseFloat(d.plantasMedia);
+        if (!isNaN(pm)) { plantasMediaSum += pm; plantasMediaCount++; }
+      }
+      // Palatables media
+      if (d.palatablesMedia && d.palatablesMedia !== '\u2014') {
+        var pam = parseFloat(d.palatablesMedia);
+        if (!isNaN(pam)) { palatablesMediaSum += pam; palatablesMediaCount++; }
+      }
+    });
   });
 
   var html = '<div style="margin-top:12px">';
@@ -296,17 +309,18 @@ function descargarInformeZona() {
   // EI stats
   var herbSum = 0, herbCount = 0, matVolSum = 0, matVolCount = 0;
   ei.forEach(function(r) {
-    var d = r.datos;
-    if (!d) return;
-    if (d.herbaceas && Array.isArray(d.herbaceas)) {
-      d.herbaceas.forEach(function(v) {
-        if (v !== null && v !== undefined && v !== '') { herbSum += parseFloat(v) || 0; herbCount++; }
-      });
-    }
-    if (d.matorral && d.matorral.volumen) {
-      var vol = parseFloat(d.matorral.volumen);
-      if (!isNaN(vol)) { matVolSum += vol; matVolCount++; }
-    }
+    // Agregar sobre todos los transectos con datos, no solo T1
+    _muestrasEI(r.datos).forEach(function(d) {
+      if (d.herbaceas && Array.isArray(d.herbaceas)) {
+        d.herbaceas.forEach(function(v) {
+          if (v !== null && v !== undefined && v !== '') { herbSum += parseFloat(v) || 0; herbCount++; }
+        });
+      }
+      if (d.matorral && d.matorral.volumen) {
+        var vol = parseFloat(d.matorral.volumen);
+        if (!isNaN(vol)) { matVolSum += vol; matVolCount++; }
+      }
+    });
   });
 
   // Build printable HTML
@@ -494,8 +508,7 @@ function ejecutarExportCSV() {
 
   var lines = [headers.map(_csvEscape).join(',')];
 
-  regs.forEach(function(r) {
-    var d = r.datos || {};
+  function filaCSV(r, d, transectoLabel) {
     var pastoreo = d.pastoreo || [];
     var obsPast = '';
     if (d.observacionPastoreo) {
@@ -512,13 +525,13 @@ function ejecutarExportCSV() {
 
     var nFotosComp = (d.fotosComp && Array.isArray(d.fotosComp)) ? d.fotosComp.length : 0;
 
-    var row = [
+    return [
       r.id,
       r.tipo,
       r.fecha,
       r.zona || '',
       r.unidad || '',
-      r.transecto || '',
+      transectoLabel,
       r.operador_nombre || '',
       r.operador_email || '',
       r.lat != null ? r.lat : '',
@@ -536,8 +549,20 @@ function ejecutarExportCSV() {
       d.herbaceasMedia || '',
       (d.matorral && d.matorral.volumen) ? d.matorral.volumen : ''
     ];
+  }
 
-    lines.push(row.map(_csvEscape).join(','));
+  regs.forEach(function(r) {
+    var d = r.datos || {};
+    // Registros EI con transectos: una fila por transecto con datos
+    // (antes el CSV solo exportaba el nivel superior = T1 y se perdían T2/T3)
+    if (d.transectos) {
+      ['T1', 'T2', 'T3'].forEach(function(t) {
+        var dt = d.transectos[t];
+        if (dt) lines.push(filaCSV(r, dt, t).map(_csvEscape).join(','));
+      });
+    } else {
+      lines.push(filaCSV(r, d, r.transecto || '').map(_csvEscape).join(','));
+    }
   });
 
   var csv = '\uFEFF' + lines.join('\r\n'); // BOM for Excel UTF-8

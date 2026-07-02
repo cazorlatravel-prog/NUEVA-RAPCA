@@ -22,6 +22,17 @@ function programarReintento(registro, intento) {
 
 async function procesarReintentos() {
   if (syncRetryCola.length === 0) return;
+  // No competir con una sincronización en curso ni quemar reintentos offline:
+  // volver a intentarlo más tarde manteniendo la cola intacta
+  if (sincronizando || !navigator.onLine) {
+    if (!syncRetryTimer) {
+      syncRetryTimer = setTimeout(function() {
+        syncRetryTimer = null;
+        procesarReintentos();
+      }, 5000);
+    }
+    return;
+  }
   var cola = syncRetryCola.slice();
   syncRetryCola = [];
 
@@ -29,6 +40,9 @@ async function procesarReintentos() {
     var item = cola[i];
     var r = item.registro;
     var intento = item.intento;
+
+    // Ya sincronizado por otra vía (p. ej. sincronizar() lo procesó): saltar
+    if (r.enviado) continue;
 
     r.syncEstado = 'sincronizando';
     actualizarIndicadorSync();
@@ -57,6 +71,7 @@ async function procesarReintentos() {
           if (result.ok) {
             r.enviado = true;
             r.syncEstado = 'sincronizado';
+            guardarRegistros();
             console.log('Reintento exitoso para registro', r.id, 'en intento', intento + 1);
           } else {
             r.syncEstado = 'error';
@@ -152,9 +167,10 @@ async function sincronizar() {
   var yaReautenticado = false;
   for (var i = 0; i < pendientes.length; i++) {
     var r = pendientes[i];
-    // Intentar Google Forms
+    // Intentar Google Forms (solo una vez por registro: con mode no-cors la
+    // respuesta es opaca y reenviarlo en cada reintento duplica filas en la hoja)
     try {
-      if (GOOGLE_FORM_URL) {
+      if (GOOGLE_FORM_URL && !r.enviadoForm) {
         var formData = new FormData();
         formData.append('entry.tipo', r.tipo);
         formData.append('entry.fecha', r.fecha);
@@ -163,6 +179,7 @@ async function sincronizar() {
         formData.append('entry.transecto', r.transecto);
         formData.append('entry.datos', JSON.stringify(r.datos));
         await fetch(GOOGLE_FORM_URL, {method: 'POST', body: formData, mode: 'no-cors'});
+        r.enviadoForm = true;
       }
     } catch(e) {}
 
@@ -192,6 +209,9 @@ async function sincronizar() {
             r.enviado = true;
             r.syncEstado = 'sincronizado';
             exitos++;
+            // Persistir cada éxito al momento: si la app se cierra a mitad
+            // de la cola, no se pierde el estado y no se reenvía
+            guardarRegistros();
           } else {
             r.syncEstado = 'error';
             programarReintento(r, 0);
@@ -466,9 +486,11 @@ async function cargarRegistrosServidor() {
             operador_nombre: sr.operador_nombre || sr.email
           });
         } else {
-          // Marcar como enviado si ya existe localmente
+          // Marcar como enviado si ya existe localmente, PERO nunca pisar
+          // registros con cambios locales pendientes de subir (enviado === false),
+          // p. ej. ediciones hechas offline que aún no se han sincronizado.
           var idx = registros.findIndex(function(r) { return r.id === localId; });
-          if (idx >= 0) {
+          if (idx >= 0 && registros[idx].enviado !== false) {
             registros[idx].enviado = true;
             registros[idx].syncEstado = 'sincronizado';
           }
@@ -479,13 +501,14 @@ async function cargarRegistrosServidor() {
       reconstruirContadores();
       actualizarIndicadorSync();
 
-      // Actualizar panel admin si existe
+      // Actualizar panel admin si existe (escapando datos de otros operadores)
       var div = document.getElementById('admin-server-records');
       if (div) {
-        div.innerHTML = '<p>' + data.registros.length + ' registros en servidor</p>';
+        var htmlSrv = '<p>' + data.registros.length + ' registros en servidor</p>';
         data.registros.forEach(function(r) {
-          div.innerHTML += '<div class="card" style="font-size:12px"><strong>' + r.tipo + '</strong> ' + (r.unidad || '') + ' · ' + r.fecha + ' · <small>' + r.email + '</small></div>';
+          htmlSrv += '<div class="card" style="font-size:12px"><strong>' + escapeHtml(r.tipo) + '</strong> ' + escapeHtml(r.unidad || '') + ' · ' + escapeHtml(r.fecha) + ' · <small>' + escapeHtml(r.email) + '</small></div>';
         });
+        div.innerHTML = htmlSrv;
       }
     }
   } catch(e) {
@@ -522,16 +545,20 @@ var subiendoFotosAuto = false;
 var subiendoFotosAutoTimer = null;
 async function subirFotosPendientesAuto() {
   if (!db || subiendoFotosAuto) return;
-  var pendientes = await obtenerTodosDB('subidas_pendientes');
-  if (pendientes.length === 0) return;
+  // Sin token válido no hay nada que subir (evita TypeError y prompts espontáneos)
+  if (!sesion || !sesion.token || sesion.token.startsWith('local_')) return;
+  // Poner el flag ANTES de cualquier await: dos eventos 'online' casi simultáneos
+  // pasaban ambos el guard y subían la misma lista de fotos por duplicado
   subiendoFotosAuto = true;
-  // Safety timeout: si después de 2 min por foto sigue bloqueado, liberar el flag
-  subiendoFotosAutoTimer = setTimeout(function() {
-    console.warn('subirFotosPendientesAuto: timeout de seguridad alcanzado, liberando flag');
-    subiendoFotosAuto = false;
-    subiendoFotosAutoTimer = null;
-  }, Math.max(120000, pendientes.length * 30000)); // mín 2min, o 30s por foto
   try {
+    var pendientes = await obtenerTodosDB('subidas_pendientes');
+    if (pendientes.length === 0) return;
+    // Safety timeout: si después de 2 min por foto sigue bloqueado, liberar el flag
+    subiendoFotosAutoTimer = setTimeout(function() {
+      console.warn('subirFotosPendientesAuto: timeout de seguridad alcanzado, liberando flag');
+      subiendoFotosAuto = false;
+      subiendoFotosAutoTimer = null;
+    }, Math.max(120000, pendientes.length * 30000)); // mín 2min, o 30s por foto
     for (var i = 0; i < pendientes.length; i++) {
       var foto = pendientes[i];
       try {
@@ -563,8 +590,9 @@ async function subirFotosPendientesAuto() {
 // --- Sync automático al reconectar ---
 window.addEventListener('online', function() {
   showToast('Conexión recuperada. Sincronizando...', 'info');
+  // sincronizarAuto ya lanza la subida de fotos pendientes; llamarla aquí
+  // de nuevo provocaba dos subidas concurrentes de las mismas fotos
   setTimeout(function() {
     sincronizarAuto();
-    subirFotosPendientesAuto();
   }, 2000);
 });

@@ -2,6 +2,21 @@
 // RAPCA Campo — map.js — Mapa, KML, GPS, exportaciones geo
 // ============================================================
 
+// Escapa texto para XML (exportaciones KML/GPX): una unidad con '&' o '<'
+// generaba archivos inválidos que Google Earth/GPS rechazan
+function escapeXml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+// Escapa una cadena para usarla dentro de un literal JS con comillas simples
+// en un atributo HTML inline (escapeHtml solo no basta: el parser HTML
+// decodifica &#39; de vuelta a comilla dentro del atributo)
+function escapeJsAttr(s) {
+  return escapeHtml(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+}
+
 // Capa persistente de waypoints comparativos
 var capaWaypointsPersist = null;
 // Capa de infraestructuras KML
@@ -112,7 +127,7 @@ function actualizarMarcadores() {
           container.dataset.loaded = '1';
           obtenerDeDB('fotos', codigo).then(function(f) {
             if (f && container) {
-              container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeHtml(codigo) + '\')">';
+              container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeJsAttr(codigo) + '\')">';
             } else if (container) {
               container.innerHTML = '<span style="color:#888;font-size:11px">' + escapeHtml(codigo) + '</span>';
             }
@@ -169,7 +184,7 @@ function actualizarMarcadores() {
             container.dataset.loaded = '1';
             obtenerDeDB('fotos', codigo).then(function(f) {
               if (f && container) {
-                container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeHtml(codigo) + '\')">';
+                container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeJsAttr(codigo) + '\')">';
               } else if (container) {
                 container.innerHTML = '<span style="color:#888;font-size:11px">' + escapeHtml(codigo) + '</span>';
               }
@@ -249,6 +264,14 @@ function detenerGPSMapa() {
   }
   if (gpsMapMarker && mapa) { mapa.removeLayer(gpsMapMarker); gpsMapMarker = null; }
   if (gpsMapCircle && mapa) { mapa.removeLayer(gpsMapCircle); gpsMapCircle = null; }
+  // Detener también el watch del panel de coordenadas: seguía vivo en
+  // segundo plano (gastando batería) al salir del mapa con el panel abierto
+  if (typeof gpsWatchId !== 'undefined' && gpsWatchId) {
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId = null;
+    var gpsPanel = document.getElementById('gps-panel');
+    if (gpsPanel) gpsPanel.classList.remove('visible');
+  }
 }
 
 function miPosicion() {
@@ -392,7 +415,7 @@ function agregarWaypoint() {
   if (!gpsPos) { showToast('Esperando GPS...', 'error'); return; }
   var name = prompt('Nombre del waypoint:');
   if (!name) return;
-  L.marker([gpsPos.lat, gpsPos.lon]).addTo(mapa).bindPopup('<strong>' + name + '</strong><br>' + formatCoordNW(gpsPos.lat, gpsPos.lon)).openPopup();
+  L.marker([gpsPos.lat, gpsPos.lon]).addTo(mapa).bindPopup('<strong>' + escapeHtml(name) + '</strong><br>' + formatCoordNW(gpsPos.lat, gpsPos.lon)).openPopup();
   showToast('Waypoint añadido', 'success');
 }
 
@@ -467,7 +490,7 @@ function renderAttrTable() {
   var cols = Object.keys(attrData[0]);
   thead.innerHTML = '<tr>' + cols.map(function(c) { return '<th onclick="ordenarAttrTable(\'' + c + '\')">' + c + '</th>'; }).join('') + '</tr>';
   tbody.innerHTML = attrData.map(function(row) {
-    return '<tr>' + cols.map(function(c) { return '<td>' + (row[c] || '') + '</td>'; }).join('') + '</tr>';
+    return '<tr>' + cols.map(function(c) { return '<td>' + escapeHtml(row[c] || '') + '</td>'; }).join('') + '</tr>';
   }).join('');
 }
 
@@ -763,7 +786,7 @@ function renderKMLPanel() {
       '<div class="kml-layer-header">' +
         '<label style="display:flex;align-items:center;gap:4px;flex:1;min-width:0">' +
           '<input type="checkbox" checked onchange="toggleKMLLayer(' + idx + ',this.checked)" style="width:16px;height:16px">' +
-          '<span style="font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📂 ' + capa.nombre + '</span>' +
+          '<span style="font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📂 ' + escapeHtml(capa.nombre) + '</span>' +
         '</label>' +
         '<button onclick="removeKMLLayer(' + idx + ')" style="background:none;border:none;color:#e74c3c;font-size:14px;cursor:pointer;padding:0">✕</button>' +
       '</div>' +
@@ -775,7 +798,7 @@ function renderKMLPanel() {
       (capa.attrFields.length > 0 ?
         '<div class="kml-layer-controls">' +
           '<label style="font-size:10px;display:flex;align-items:center;gap:4px">Popup: <select onchange="updateKMLPopupField(' + idx + ',this.value)" style="font-size:10px;flex:1;min-width:0">' +
-            capa.attrFields.map(function(f) { return '<option value="' + f + '"' + (f === capa.popupField ? ' selected' : '') + '>' + f + '</option>'; }).join('') +
+            capa.attrFields.map(function(f) { return '<option value="' + escapeHtml(f) + '"' + (f === capa.popupField ? ' selected' : '') + '>' + escapeHtml(f) + '</option>'; }).join('') +
           '</select></label>' +
         '</div>' : '') +
     '';
@@ -897,7 +920,7 @@ function exportarKML() {
   var regs = misRegistros().filter(function(r) { return r.lat && r.lon; });
   var kml = '<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>RAPCA Registros</name>';
   regs.forEach(function(r) {
-    kml += '<Placemark><name>' + r.tipo + ' - ' + r.unidad + '</name><description>' + r.fecha + '</description><Point><coordinates>' + r.lon + ',' + r.lat + ',0</coordinates></Point></Placemark>';
+    kml += '<Placemark><name>' + escapeXml(r.tipo + ' - ' + r.unidad) + '</name><description>' + escapeXml(r.fecha) + '</description><Point><coordinates>' + r.lon + ',' + r.lat + ',0</coordinates></Point></Placemark>';
   });
   kml += '</Document></kml>';
   descargarArchivo(kml, 'rapca_registros.kml', 'application/vnd.google-earth.kml+xml');
@@ -952,7 +975,7 @@ function exportarGPX() {
   var regs = misRegistros().filter(function(r) { return r.lat && r.lon; });
   var gpx = '<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="RAPCA Campo">';
   regs.forEach(function(r) {
-    gpx += '<wpt lat="' + r.lat + '" lon="' + r.lon + '"><name>' + r.tipo + ' - ' + r.unidad + '</name><desc>' + r.fecha + '</desc></wpt>';
+    gpx += '<wpt lat="' + r.lat + '" lon="' + r.lon + '"><name>' + escapeXml(r.tipo + ' - ' + r.unidad) + '</name><desc>' + escapeXml(r.fecha) + '</desc></wpt>';
   });
   gpx += '</gpx>';
   descargarArchivo(gpx, 'rapca_registros.gpx', 'application/gpx+xml');
@@ -983,7 +1006,7 @@ function filtrarOperadorMapa() {
   var colores = {VP: '#88d8b0', EL: '#2ecc71', EI: '#fd9853'};
   regs.forEach(function(r) {
     var marker = L.circleMarker([r.lat, r.lon], {radius: 8, fillColor: colores[r.tipo], color: '#fff', weight: 2, fillOpacity: 0.9});
-    marker.bindPopup(r.tipo + ' - ' + r.unidad);
+    marker.bindPopup(escapeHtml(r.tipo + ' - ' + r.unidad));
     mapaMarkers.addLayer(marker);
   });
 }
@@ -1065,7 +1088,7 @@ function cargarWaypointsPersistentes() {
           container.dataset.loaded = '1';
           obtenerDeDB('fotos', codigo).then(function(f) {
             if (f && f.data && container) {
-              container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeHtml(codigo) + '\')">';
+              container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeJsAttr(codigo) + '\')">';
             }
           }).catch(function() {});
         });

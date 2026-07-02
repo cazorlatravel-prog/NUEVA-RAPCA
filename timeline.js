@@ -49,7 +49,9 @@ function filtrarTimeline() {
   if (desde) regs = regs.filter(function(r) { return r.fecha >= desde; });
   if (hasta) regs = regs.filter(function(r) { return r.fecha <= hasta; });
 
-  regs.sort(function(a, b) { return b.id - a.id; });
+  // Copiar antes de ordenar: para admin, misRegistros() devuelve el array
+  // global y ordenarlo en sitio alteraba el orden persistido de los registros
+  regs = regs.slice().sort(function(a, b) { return b.id - a.id; });
 
   var lista = document.getElementById('tl-lista');
   if (regs.length === 0) {
