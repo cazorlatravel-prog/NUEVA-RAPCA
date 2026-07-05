@@ -5,6 +5,7 @@
 //   4) node e2e-rapca.js
 //
 // Pruebas de uso end-to-end de RAPCA Campo con Playwright/Chromium
+// Pruebas de uso end-to-end de RAPCA Campo con Playwright/Chromium
 const { chromium } = require('playwright');
 
 const BASE = 'http://127.0.0.1:8899/index.html';
@@ -248,17 +249,35 @@ function ok(nombre, cond, detalle) {
   console.log('\n== 6. Mapa: centrado en posición real y seguimiento ==');
   const leafletCargado = await page.waitForFunction(() => typeof L !== 'undefined', { timeout: 20000 }).then(() => true).catch(() => false);
   ok('Leaflet (CDN) cargado', leafletCargado);
+  // Simular una posición VIEJA y lejana en caché: el mapa NO debe centrarse en ella
+  await page.evaluate(() => {
+    gpsPos = { lat: 40.0, lon: -4.0, accuracy: 10, ts: Date.now() - 600000 };
+  });
   await page.evaluate(() => irPagina('mapa'));
   await page.waitForTimeout(3000);
   const centro1 = await page.evaluate(() => {
     var c = mapa.getCenter();
     return { lat: c.lat, lon: c.lng, zoom: mapa.getZoom(), marker: !!gpsMapMarker, seguir: gpsMapSeguir };
   });
-  ok('Mapa centrado en la posición GPS real',
+  ok('Mapa centrado en la posición GPS real (ignora la posición vieja en caché)',
     Math.abs(centro1.lat - 37.90) < 0.01 && Math.abs(centro1.lon + 3.10) < 0.01,
     JSON.stringify(centro1));
   ok('Marcador de posición creado', centro1.marker);
   ok('Zoom de trabajo aplicado (>=15)', centro1.zoom >= 15, 'zoom=' + centro1.zoom);
+
+  // Fix impreciso repentino (red/wifi, ±2000m): el marcador NO debe saltar
+  await context.setGeolocation({ latitude: 37.80, longitude: -3.30, accuracy: 2000 });
+  await page.waitForTimeout(3000);
+  const trasFixMalo = await page.evaluate(() => {
+    var p = gpsMapMarker.getLatLng();
+    return { lat: p.lat, lon: p.lng };
+  });
+  ok('Un fix impreciso (±2000m) no desplaza el marcador',
+    Math.abs(trasFixMalo.lat - 37.90) < 0.01 && Math.abs(trasFixMalo.lon + 3.10) < 0.01,
+    JSON.stringify(trasFixMalo));
+  // Restaurar fix preciso para las siguientes pruebas
+  await context.setGeolocation({ latitude: 37.90, longitude: -3.10, accuracy: 10 });
+  await page.waitForTimeout(2000);
 
   // Simular movimiento: el mapa debe seguir
   await context.setGeolocation({ latitude: 37.95, longitude: -3.05, accuracy: 10 });

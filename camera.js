@@ -653,7 +653,7 @@ function iniciarOverlayCamara() {
   // GPS para overlay
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(function(pos) {
-      gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude, accuracy: pos.coords.accuracy};
+      gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude, accuracy: pos.coords.accuracy, ts: pos.timestamp || Date.now()};
 
       // Mostrar coordenadas según config
       if (cfg.tipoCoordenadas === 'geograficas') {

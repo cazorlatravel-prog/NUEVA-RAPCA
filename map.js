@@ -93,19 +93,25 @@ function initMapa() {
   centrarMapaEnGPS();
 }
 
-// Centrar el mapa en la posición GPS actual (última conocida o nueva lectura)
+// Centrar el mapa en la posición GPS actual.
+// Solo se reutiliza la última posición conocida si es RECIENTE y PRECISA:
+// una posición de hace minutos (o un fix de red/wifi con error de cientos
+// de metros) desplazaba el centrado lejos de la ubicación real.
 function centrarMapaEnGPS() {
   if (!mapa) return;
-  if (gpsPos) {
+  var fresca = gpsPos && gpsPos.ts && (Date.now() - gpsPos.ts) < 20000 &&
+               (typeof gpsPos.accuracy !== 'number' || gpsPos.accuracy <= 100);
+  if (fresca) {
     mapa.setView([gpsPos.lat, gpsPos.lon], Math.max(mapa.getZoom(), 15));
     return;
   }
   if (!navigator.geolocation) return;
   navigator.geolocation.getCurrentPosition(function(pos) {
-    gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude};
+    gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude,
+              accuracy: pos.coords.accuracy, ts: pos.timestamp || Date.now()};
     // Solo centrar si el usuario no ha movido el mapa mientras tanto
     if (mapa && gpsMapSeguir) mapa.setView([gpsPos.lat, gpsPos.lon], 16);
-  }, function() {}, {enableHighAccuracy: true, timeout: 10000, maximumAge: 60000});
+  }, function() {}, {enableHighAccuracy: true, timeout: 12000, maximumAge: 0});
 }
 
 function actualizarMarcadores() {
@@ -208,17 +214,36 @@ function actualizarMarcadores() {
   attrData = regs.map(function(r) { return {tipo: r.tipo, unidad: r.unidad, zona: r.zona, fecha: r.fecha, operador: r.operador_nombre, coordenadas: r.lat ? formatCoordNW(r.lat, r.lon) : '—'}; });
 }
 
+// Último fix aceptado por el tracking del mapa (para filtrar saltos malos)
+var gpsMapUltimoFix = null;
+
 function iniciarGPSMapa() {
   if (!navigator.geolocation || !mapa) return;
   // Limpiar watch anterior si existe
   if (gpsMapWatchId) navigator.geolocation.clearWatch(gpsMapWatchId);
+  gpsMapUltimoFix = null;
 
   gpsMapWatchId = navigator.geolocation.watchPosition(function(pos) {
-    gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude};
-    var latlng = [pos.coords.latitude, pos.coords.longitude];
     var accuracy = pos.coords.accuracy || 30;
+    var ahora = pos.timestamp || Date.now();
+
+    // Filtro de calidad: Android alterna fixes GPS precisos con fixes de
+    // red/wifi de cientos de metros de error. Si hace un momento teníamos
+    // un fix mucho más preciso, ignorar el salto malo (el marcador se
+    // quedaba desplazado o brincaba lejos de la posición real).
+    if (gpsMapUltimoFix && accuracy > 100 &&
+        (ahora - gpsMapUltimoFix.ts) < 15000 &&
+        accuracy > gpsMapUltimoFix.accuracy * 3) {
+      return;
+    }
+    gpsMapUltimoFix = {accuracy: accuracy, ts: ahora};
+
+    gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude,
+              accuracy: accuracy, ts: ahora};
+    var latlng = [pos.coords.latitude, pos.coords.longitude];
     var heading = pos.coords.heading;
     var esPrimerFix = !gpsMapMarker;
+    var popupTxt = 'Mi posición (±' + Math.round(accuracy) + ' m)';
 
     if (!gpsMapMarker) {
       // Crear marcador con punto azul pulsante
@@ -233,11 +258,14 @@ function iniciarGPSMapa() {
         iconAnchor: [9, 9]
       });
       gpsMapMarker = L.marker(latlng, {icon: icon, zIndexOffset: 9999}).addTo(mapa);
-      gpsMapMarker.bindPopup('Mi posición');
+      gpsMapMarker.bindPopup(popupTxt);
       // Círculo de precisión
       gpsMapCircle = L.circle(latlng, {radius: accuracy, color: '#3498db', fillColor: '#3498db', fillOpacity: 0.08, weight: 1, opacity: 0.3}).addTo(mapa);
+      // Si el primer fix es impreciso (red/wifi), avisar de que está afinando
+      if (accuracy > 100) showToast('GPS afinando posición (±' + Math.round(accuracy) + ' m)...', 'info');
     } else {
       gpsMapMarker.setLatLng(latlng);
+      gpsMapMarker.setPopupContent(popupTxt);
       gpsMapCircle.setLatLng(latlng);
       gpsMapCircle.setRadius(accuracy);
     }
@@ -260,7 +288,7 @@ function iniciarGPSMapa() {
     }
   }, function(err) {
     if (err.code === 1) showToast('GPS: permiso denegado', 'error');
-  }, {enableHighAccuracy: true, maximumAge: 3000, timeout: 10000});
+  }, {enableHighAccuracy: true, maximumAge: 0, timeout: 15000});
 }
 
 function detenerGPSMapa() {
@@ -292,9 +320,10 @@ function miPosicion() {
   } else {
     showToast('Obteniendo posición...', 'info');
     navigator.geolocation.getCurrentPosition(function(pos) {
-      gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude};
+      gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude,
+                accuracy: pos.coords.accuracy, ts: pos.timestamp || Date.now()};
       if (mapa) mapa.setView([gpsPos.lat, gpsPos.lon], 16);
-    }, function() { showToast('No se pudo obtener posición', 'error'); }, {enableHighAccuracy: true});
+    }, function() { showToast('No se pudo obtener posición', 'error'); }, {enableHighAccuracy: true, maximumAge: 0, timeout: 12000});
   }
 }
 
@@ -308,7 +337,8 @@ function toggleGPS() {
   panel.classList.add('visible');
   if (!navigator.geolocation) return;
   gpsWatchId = navigator.geolocation.watchPosition(function(pos) {
-    gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude};
+    gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude,
+              accuracy: pos.coords.accuracy, ts: pos.timestamp || Date.now()};
     var coordNW = formatCoordNW(pos.coords.latitude, pos.coords.longitude);
     document.getElementById('gps-lat').textContent = coordNW.split('  ')[0];
     document.getElementById('gps-lon').textContent = coordNW.split('  ')[1];

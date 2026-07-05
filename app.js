@@ -762,7 +762,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // GPS inicial con precisión
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(function(pos) {
-      gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude, accuracy: pos.coords.accuracy};
+      gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude, accuracy: pos.coords.accuracy, ts: pos.timestamp || Date.now()};
       if (typeof mostrarPrecisionGPS === 'function') mostrarPrecisionGPS();
     }, function() {}, {enableHighAccuracy: true, timeout: 10000, maximumAge: 60000});
   }
