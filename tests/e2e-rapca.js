@@ -290,6 +290,25 @@ function ok(nombre, cond, detalle) {
     Math.abs(centro2.lat - 37.95) < 0.01 && Math.abs(centro2.lon + 3.05) < 0.01,
     JSON.stringify(centro2));
 
+  // Indicador en vivo de precisión GPS visible y actualizado
+  const gpsInfo = await page.evaluate(() => {
+    var el = document.getElementById('map-gps-info');
+    return el ? el.textContent : null;
+  });
+  ok('Indicador GPS en vivo muestra la precisión (±m)', !!gpsInfo && /±\d+ m/.test(gpsInfo), String(gpsInfo));
+
+  // El tracking sigue vivo: otro movimiento vuelve a reubicar el marcador
+  await context.setGeolocation({ latitude: 37.97, longitude: -3.02, accuracy: 8 });
+  await page.waitForTimeout(3000);
+  const centro3 = await page.evaluate(() => {
+    var p = gpsMapMarker.getLatLng();
+    return { lat: p.lat, lon: p.lng };
+  });
+  ok('La posición se sigue actualizando en tiempo real (2º movimiento)',
+    Math.abs(centro3.lat - 37.97) < 0.01 && Math.abs(centro3.lon + 3.02) < 0.01,
+    JSON.stringify(centro3));
+  await context.setGeolocation({ latitude: 37.95, longitude: -3.05, accuracy: 10 });
+
   // Arrastrar el mapa desactiva el seguimiento
   await page.mouse.move(200, 400);
   await page.mouse.down();

@@ -4582,6 +4582,7 @@ function initMapa() {
     gpsMapSeguir = true;
     if (!gpsMapWatchId) iniciarGPSMapa();
     centrarMapaEnGPS();
+    solicitarWakeLockMapa();
     return;
   }
   var mapDiv = document.getElementById('map-container');
@@ -4622,11 +4623,50 @@ function initMapa() {
   cargarWaypointsPersistentes();
   cargarInfraKMLGuardada();
 
+  // Indicador en vivo de estado GPS (precisión y velocidad)
+  var gpsInfoControl = L.control({position: 'bottomleft'});
+  gpsInfoControl.onAdd = function() {
+    var div = L.DomUtil.create('div');
+    div.id = 'map-gps-info';
+    div.style.cssText = 'background:rgba(255,255,255,.92);padding:4px 10px;border-radius:14px;font-size:12px;font-weight:700;color:#333;box-shadow:0 1px 4px rgba(0,0,0,.3)';
+    div.textContent = '📡 Buscando GPS...';
+    return div;
+  };
+  gpsInfoControl.addTo(mapa);
+
   // Iniciar tracking GPS automático del operador
   gpsMapSeguir = true;
   iniciarGPSMapa();
   centrarMapaEnGPS();
+  solicitarWakeLockMapa();
 }
+
+// --- Wake Lock: mantener la pantalla encendida mientras el mapa está abierto.
+// Con la pantalla apagada Android congela el GPS y la posición deja de
+// actualizarse en tiempo real.
+var mapWakeLock = null;
+function solicitarWakeLockMapa() {
+  if (!('wakeLock' in navigator)) return;
+  navigator.wakeLock.request('screen').then(function(wl) {
+    mapWakeLock = wl;
+  }).catch(function() { /* denegado o batería baja: seguir sin wake lock */ });
+}
+function liberarWakeLockMapa() {
+  if (mapWakeLock) {
+    try { mapWakeLock.release(); } catch(e) {}
+    mapWakeLock = null;
+  }
+}
+
+// Al volver del segundo plano, Android puede haber dormido el watch de GPS
+// y liberado el wake lock: relanzar ambos si el mapa sigue abierto
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState !== 'visible') return;
+  var mapaPage = document.getElementById('mapa-page');
+  if (!mapa || !mapaPage || !mapaPage.classList.contains('active')) return;
+  iniciarGPSMapa();
+  solicitarWakeLockMapa();
+});
 
 // Centrar el mapa en la posición GPS actual.
 // Solo se reutiliza la última posición conocida si es RECIENTE y PRECISA:
@@ -4757,6 +4797,8 @@ function iniciarGPSMapa() {
   // Limpiar watch anterior si existe
   if (gpsMapWatchId) navigator.geolocation.clearWatch(gpsMapWatchId);
   gpsMapUltimoFix = null;
+  var gpsInfoIni = document.getElementById('map-gps-info');
+  if (gpsInfoIni) gpsInfoIni.textContent = '📡 Buscando GPS...';
 
   gpsMapWatchId = navigator.geolocation.watchPosition(function(pos) {
     var accuracy = pos.coords.accuracy || 30;
@@ -4794,6 +4836,8 @@ function iniciarGPSMapa() {
       });
       gpsMapMarker = L.marker(latlng, {icon: icon, zIndexOffset: 9999}).addTo(mapa);
       gpsMapMarker.bindPopup(popupTxt);
+      // Deslizamiento suave del punto entre actualizaciones (tiempo real fluido)
+      if (gpsMapMarker._icon) gpsMapMarker._icon.style.transition = 'transform 0.5s linear';
       // Círculo de precisión
       gpsMapCircle = L.circle(latlng, {radius: accuracy, color: '#3498db', fillColor: '#3498db', fillOpacity: 0.08, weight: 1, opacity: 0.3}).addTo(mapa);
       // Si el primer fix es impreciso (red/wifi), avisar de que está afinando
@@ -4803,6 +4847,16 @@ function iniciarGPSMapa() {
       gpsMapMarker.setPopupContent(popupTxt);
       gpsMapCircle.setLatLng(latlng);
       gpsMapCircle.setRadius(accuracy);
+    }
+
+    // Actualizar el indicador en vivo (precisión + velocidad al moverse)
+    var gpsInfo = document.getElementById('map-gps-info');
+    if (gpsInfo) {
+      var txt = '📡 ±' + Math.round(accuracy) + ' m';
+      if (typeof pos.coords.speed === 'number' && !isNaN(pos.coords.speed) && pos.coords.speed > 0.5) {
+        txt += ' · ' + (pos.coords.speed * 3.6).toFixed(1) + ' km/h';
+      }
+      gpsInfo.textContent = txt;
     }
 
     // Flecha de dirección
@@ -4823,10 +4877,13 @@ function iniciarGPSMapa() {
     }
   }, function(err) {
     if (err.code === 1) showToast('GPS: permiso denegado', 'error');
-  }, {enableHighAccuracy: true, maximumAge: 0, timeout: 15000});
+    // Sin timeout: los errores TIMEOUT espurios degradaban el tracking
+    // continuo en algunos Android; el watch espera lo que haga falta
+  }, {enableHighAccuracy: true, maximumAge: 0});
 }
 
 function detenerGPSMapa() {
+  liberarWakeLockMapa();
   if (gpsMapWatchId) {
     navigator.geolocation.clearWatch(gpsMapWatchId);
     gpsMapWatchId = null;
