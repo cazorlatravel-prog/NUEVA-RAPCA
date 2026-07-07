@@ -266,12 +266,19 @@ function actualizarMarcadores() {
 
 // Último fix aceptado por el tracking del mapa (para filtrar saltos malos)
 var gpsMapUltimoFix = null;
+// Detección de ubicación aproximada: si tras un rato de tracking el navegador
+// sigue sin dar precisión buena, es casi seguro que tiene el permiso de
+// ubicación en modo "aproximada" (típico en Chrome Android 12+) y la posición
+// sale desplazada cientos de metros. Se avisa una vez por sesión.
+var gpsMapPrimerFixTs = null;
+var gpsMapAvisoImpreciso = false;
 
 function iniciarGPSMapa() {
   if (!navigator.geolocation || !mapa) return;
   // Limpiar watch anterior si existe
   if (gpsMapWatchId) navigator.geolocation.clearWatch(gpsMapWatchId);
   gpsMapUltimoFix = null;
+  gpsMapPrimerFixTs = null;
   var gpsInfoIni = document.getElementById('map-gps-info');
   if (gpsInfoIni) gpsInfoIni.textContent = '📡 Buscando GPS...';
 
@@ -289,6 +296,18 @@ function iniciarGPSMapa() {
       return;
     }
     gpsMapUltimoFix = {accuracy: accuracy, ts: ahora};
+
+    // Aviso de ubicación aproximada: 25s de tracking y seguimos sin bajar
+    // de ±150m → el navegador no tiene concedida la "ubicación precisa"
+    if (!gpsMapPrimerFixTs) gpsMapPrimerFixTs = ahora;
+    if (!gpsMapAvisoImpreciso && accuracy > 150 && (ahora - gpsMapPrimerFixTs) > 25000) {
+      gpsMapAvisoImpreciso = true;
+      showToast('⚠️ Este navegador está dando ubicación APROXIMADA (±' + Math.round(accuracy) +
+        ' m). Activa "Usar ubicación precisa" en Ajustes → Aplicaciones → (tu navegador) → Permisos → Ubicación.', 'error', 12000);
+    } else if (accuracy <= 100) {
+      // Con precisión buena ya no tiene sentido avisar en esta sesión
+      gpsMapAvisoImpreciso = true;
+    }
 
     gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude,
               accuracy: accuracy, ts: ahora};

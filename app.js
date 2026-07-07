@@ -213,14 +213,14 @@ function cargarFotoHD(codigo, tipo, unidad) {
 }
 
 // --- UI: Toast, Vibrar, Utilidades ---
-function showToast(msg, tipo) {
+function showToast(msg, tipo, duracionMs) {
   var container = document.getElementById('toast-container');
   var toast = document.createElement('div');
   toast.className = 'toast toast-' + (tipo || 'info');
   toast.textContent = msg;
   container.appendChild(toast);
   setTimeout(function() { toast.classList.add('show'); }, 10);
-  setTimeout(function() { toast.classList.remove('show'); setTimeout(function() { toast.remove(); }, 300); }, 3000);
+  setTimeout(function() { toast.classList.remove('show'); setTimeout(function() { toast.remove(); }, 300); }, duracionMs || 3000);
 }
 
 function vibrar(ms) { if (navigator.vibrate) navigator.vibrate(ms || 15); }
