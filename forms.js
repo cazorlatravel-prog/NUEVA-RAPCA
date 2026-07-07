@@ -38,6 +38,12 @@ function guardarBorrador(tipo) {
   // Observacion
   data.observacion = obtenerObservacion(prefix);
 
+  // Matorralizacion (EL; en EI va dentro de cada transecto)
+  if (tipo !== 'EI') {
+    var matBorr = recogerMatorral(prefix);
+    if (matBorr) data.matorral = matBorr;
+  }
+
   // Fotos
   data.fotosPagina = JSON.parse(JSON.stringify(fotosPagina));
 
@@ -90,6 +96,9 @@ function cargarBorrador(tipo) {
       }
     }
   }
+
+  // Matorralizacion
+  if (data.matorral) aplicarMatorral(prefix, data.matorral);
 
   // Fotos: restaurar y renderizar previews (antes quedaban restauradas pero
   // invisibles: se adjuntaban al guardar sin que el usuario pudiera verlas)
@@ -238,6 +247,8 @@ function initFormEL() {
   document.getElementById('el-observaciones').value = '';
   generarPastoreo('el-pastoreo-container', 'el');
   generarObservacion('el-obs-container', 'el');
+  generarMatorral('el');
+  document.getElementById('el-mat-resultado').style.display = 'none';
   fotosPagina = {};
   document.getElementById('el-fotos-preview').innerHTML = '';
   if (editandoRegistro && editandoRegistro.tipo === 'EL') {
@@ -352,19 +363,58 @@ function generarHerbaceas() {
   document.getElementById('ev-herbaceas-container').innerHTML = html;
 }
 
-function generarMatorral() {
+// Genera los campos de matorralización para el prefijo dado ('ev' en EI,
+// 'el' en Evaluación Ligera). Sin argumento mantiene el comportamiento EI.
+function generarMatorral(prefix) {
+  prefix = prefix || 'ev';
   var html = '';
   for (var m = 1; m <= 2; m++) {
     html += '<div class="mat-punto"><h4>Punto ' + m + '</h4>';
     html += '<div class="form-row">';
-    html += '<div class="form-group"><label>Cobertura (%)</label><input type="number" id="ev-mat' + m + 'cob" min="0" max="100" oninput="actualizarResumenMatorral()"></div>';
-    html += '<div class="form-group"><label>Altura (cm)</label><input type="number" id="ev-mat' + m + 'alt" min="0" oninput="actualizarResumenMatorral()"></div>';
+    html += '<div class="form-group"><label>Cobertura (%)</label><input type="number" id="' + prefix + '-mat' + m + 'cob" min="0" max="100" oninput="actualizarResumenMatorral(\'' + prefix + '\')"></div>';
+    html += '<div class="form-group"><label>Altura (cm)</label><input type="number" id="' + prefix + '-mat' + m + 'alt" min="0" oninput="actualizarResumenMatorral(\'' + prefix + '\')"></div>';
     html += '</div>';
-    html += '<div class="form-group"><label>Especie</label><div class="autocomplete-wrap"><input type="text" id="ev-mat' + m + 'esp" placeholder="Especie..." oninput="autocompletarEspecie(this)" style="font-style:italic">';
-    html += '<div class="autocomplete-list" id="ev-mat' + m + 'esp-ac"></div></div></div>';
+    html += '<div class="form-group"><label>Especie</label><div class="autocomplete-wrap"><input type="text" id="' + prefix + '-mat' + m + 'esp" placeholder="Especie..." oninput="autocompletarEspecie(this)" style="font-style:italic">';
+    html += '<div class="autocomplete-list" id="' + prefix + '-mat' + m + 'esp-ac"></div></div></div>';
     html += '</div>';
   }
-  document.getElementById('ev-matorral-container').innerHTML = html;
+  document.getElementById(prefix + '-matorral-container').innerHTML = html;
+}
+
+// Lee los campos de matorralización del formulario (null si no existen)
+function recogerMatorral(prefix) {
+  prefix = prefix || 'ev';
+  if (!document.getElementById(prefix + '-mat1cob')) return null;
+  var m = {
+    punto1: {
+      cobertura: parseFloat(document.getElementById(prefix + '-mat1cob').value) || 0,
+      altura: parseFloat(document.getElementById(prefix + '-mat1alt').value) || 0,
+      especie: document.getElementById(prefix + '-mat1esp').value
+    },
+    punto2: {
+      cobertura: parseFloat(document.getElementById(prefix + '-mat2cob').value) || 0,
+      altura: parseFloat(document.getElementById(prefix + '-mat2alt').value) || 0,
+      especie: document.getElementById(prefix + '-mat2esp').value
+    }
+  };
+  m.mediaCob = (m.punto1.cobertura + m.punto2.cobertura) / 2;
+  m.mediaAlt = (m.punto1.altura + m.punto2.altura) / 2;
+  m.volumen = ((m.mediaCob / 100) * (m.mediaAlt / 100) * 10000).toFixed(2);
+  return m;
+}
+
+// Vuelca un objeto matorral en los campos del formulario
+function aplicarMatorral(prefix, m) {
+  prefix = prefix || 'ev';
+  if (!m || !document.getElementById(prefix + '-mat1cob')) return;
+  var p1 = m.punto1 || {}, p2 = m.punto2 || {};
+  document.getElementById(prefix + '-mat1cob').value = p1.cobertura || '';
+  document.getElementById(prefix + '-mat1alt').value = p1.altura || '';
+  document.getElementById(prefix + '-mat1esp').value = p1.especie || '';
+  document.getElementById(prefix + '-mat2cob').value = p2.cobertura || '';
+  document.getElementById(prefix + '-mat2alt').value = p2.altura || '';
+  document.getElementById(prefix + '-mat2esp').value = p2.especie || '';
+  actualizarResumenMatorral(prefix);
 }
 
 function calcMediaPlanta(p) {
@@ -419,9 +469,10 @@ function calcMediaHerbaceas() {
   if (inline) inline.textContent = media;
 }
 
-function actualizarResumenMatorral() {
-  var e1 = document.getElementById('ev-mat1cob'), e2 = document.getElementById('ev-mat2cob');
-  var e3 = document.getElementById('ev-mat1alt'), e4 = document.getElementById('ev-mat2alt');
+function actualizarResumenMatorral(prefix) {
+  prefix = prefix || 'ev';
+  var e1 = document.getElementById(prefix + '-mat1cob'), e2 = document.getElementById(prefix + '-mat2cob');
+  var e3 = document.getElementById(prefix + '-mat1alt'), e4 = document.getElementById(prefix + '-mat2alt');
   if (!e1 || !e2 || !e3 || !e4) return;
   var c1 = parseFloat(e1.value) || 0;
   var c2 = parseFloat(e2.value) || 0;
@@ -430,10 +481,10 @@ function actualizarResumenMatorral() {
   var mediaCob = (c1 + c2) / 2;
   var mediaAlt = (a1 + a2) / 2;
   var volumen = (mediaCob / 100) * (mediaAlt / 100) * 10000;
-  var elCob = document.getElementById('ev-mat-cob-media');
-  var elAlt = document.getElementById('ev-mat-alt-media');
-  var elVol = document.getElementById('ev-mat-volumen');
-  var elRes = document.getElementById('ev-mat-resultado');
+  var elCob = document.getElementById(prefix + '-mat-cob-media');
+  var elAlt = document.getElementById(prefix + '-mat-alt-media');
+  var elVol = document.getElementById(prefix + '-mat-volumen');
+  var elRes = document.getElementById(prefix + '-mat-resultado');
   if (elCob) elCob.textContent = mediaCob.toFixed(1);
   if (elAlt) elAlt.textContent = mediaAlt.toFixed(1);
   if (elVol) elVol.textContent = volumen.toFixed(2) + ' m\u00B3/ha';
@@ -658,6 +709,7 @@ function guardarEL() {
     datos: {
       pastoreo: obtenerPastoreo('el'),
       observacionPastoreo: obtenerObservacion('el'),
+      matorral: recogerMatorral('el'),
       fotos: fotos.join(', '),
       fotosComp: fotosComp,
       observaciones: document.getElementById('el-observaciones').value
@@ -751,21 +803,7 @@ function recogerDatosEI() {
     var v = document.getElementById('ev-herb' + h).value;
     herbaceas.push(v !== '' ? parseInt(v) : null);
   }
-  var matorral = {
-    punto1: {
-      cobertura: parseFloat(document.getElementById('ev-mat1cob').value) || 0,
-      altura: parseFloat(document.getElementById('ev-mat1alt').value) || 0,
-      especie: document.getElementById('ev-mat1esp').value
-    },
-    punto2: {
-      cobertura: parseFloat(document.getElementById('ev-mat2cob').value) || 0,
-      altura: parseFloat(document.getElementById('ev-mat2alt').value) || 0,
-      especie: document.getElementById('ev-mat2esp').value
-    }
-  };
-  matorral.mediaCob = (matorral.punto1.cobertura + matorral.punto2.cobertura) / 2;
-  matorral.mediaAlt = (matorral.punto1.altura + matorral.punto2.altura) / 2;
-  matorral.volumen = ((matorral.mediaCob / 100) * (matorral.mediaAlt / 100) * 10000).toFixed(2);
+  var matorral = recogerMatorral('ev');
 
   return {
     pastoreo: obtenerPastoreo('ev'),

@@ -105,10 +105,26 @@ function ok(nombre, cond, detalle) {
     var btn = document.querySelector('#el-pastoreo-container .pastoreo-btn[data-punto="1"][data-val="PM"]');
     if (btn) btn.click();
   });
+  // Matorralización en EL (campos nuevos, iguales que en EI)
+  const matEL = await page.evaluate(() => {
+    var c = document.getElementById('el-mat1cob');
+    if (!c) return null;
+    c.value = '40';
+    document.getElementById('el-mat1alt').value = '80';
+    document.getElementById('el-mat1esp').value = 'Cistus sp.';
+    actualizarResumenMatorral('el');
+    return document.getElementById('el-mat-volumen').textContent;
+  });
+  ok('EL tiene campos de matorralización y calcula el volumen', matEL === '800.00 m³/ha', String(matEL));
   await page.evaluate(() => guardarEL());
   await page.waitForTimeout(500);
   let nEL = await page.evaluate(() => registros.filter(r => r.tipo === 'EL').length);
   ok('Ficha EL guardada', nEL === 1, 'hay ' + nEL);
+  const matGuardado = await page.evaluate(() => {
+    var r = registros.find(x => x.tipo === 'EL');
+    return r.datos.matorral ? r.datos.matorral.volumen : null;
+  });
+  ok('El matorral de EL se guarda en la ficha', matGuardado === '800.00', String(matGuardado));
 
   // Intentar duplicado mismo día + unidad
   await page.evaluate(() => irPagina('el'));
@@ -321,6 +337,12 @@ function ok(nombre, cond, detalle) {
   await page.waitForTimeout(300);
   const seguirTrasBoton = await page.evaluate(() => gpsMapSeguir);
   ok('El botón 📍 reactiva el seguimiento', seguirTrasBoton === true);
+
+  // Toggle de etiquetas de waypoints no lanza errores
+  const toggleOK = await page.evaluate(() => {
+    try { toggleEtiquetasWP(); toggleEtiquetasWP(); return true; } catch (e) { return String(e); }
+  });
+  ok('Botón 🏷️ de nombres de waypoints funciona', toggleOK === true, String(toggleOK));
 
   console.log('\n== 7. Borrador: persistencia al recargar ==');
   await page.evaluate(() => irPagina('menu'));

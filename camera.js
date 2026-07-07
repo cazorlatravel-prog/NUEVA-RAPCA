@@ -882,9 +882,34 @@ function geocodificarInverso(lat, lon, callback) {
     .catch(function() { callback({municipio: '', provincia: '', cp: ''}); });
 }
 
+var _capturandoFoto = false;
+
 function capturarFoto() {
+  // Ignorar pulsaciones repetidas mientras se procesa la captura anterior:
+  // takePhoto tarda 1-3s en algunos móviles, parecía que el botón no
+  // respondía y el usuario pulsaba varias veces
+  if (_capturandoFoto) return;
+  _capturandoFoto = true;
   vibrar(30);
+
   var video = document.getElementById('camera-video');
+  var btnCap = document.querySelector('.cam-btn-capture');
+  if (btnCap) btnCap.style.opacity = '0.4';
+
+  var entregado = false;
+  function entregar(fuente, fw, fh) {
+    if (entregado) return;
+    entregado = true;
+    _capturandoFoto = false;
+    if (btnCap) btnCap.style.opacity = '';
+    _renderizarFotoFinal(fuente, fw, fh);
+  }
+
+  // Red de seguridad: si takePhoto no entrega en 2.5s (pasa en algunos
+  // Android), capturar el frame del vídeo — el botón SIEMPRE responde
+  var fallbackTimer = setTimeout(function() {
+    entregar(video, video.videoWidth, video.videoHeight);
+  }, 2500);
 
   // Intentar capturar a la RESOLUCIÓN NATIVA del sensor con ImageCapture.
   // El vídeo de previsualización es 1080p, pero takePhoto() entrega la foto
@@ -892,12 +917,14 @@ function capturarFoto() {
   if (imageCaptureObj && typeof imageCaptureObj.takePhoto === 'function') {
 
     var procesarBlob = function(blob) {
+      if (entregado) return; // ya respondió el fallback
       // createImageBitmap con orientación EXIF garantiza que la foto se
       // dibuje siempre derecha, independientemente de cómo el navegador
       // interprete la rotación del sensor (evita fotos giradas 90°).
       if (typeof createImageBitmap === 'function') {
         createImageBitmap(blob, {imageOrientation: 'from-image'}).then(function(bmp) {
-          _renderizarFotoFinal(bmp, bmp.width, bmp.height);
+          clearTimeout(fallbackTimer);
+          entregar(bmp, bmp.width, bmp.height);
           try { bmp.close(); } catch(e) {}
         }).catch(function() {
           procesarBlobConImagen(blob);
@@ -910,12 +937,14 @@ function capturarFoto() {
     var procesarBlobConImagen = function(blob) {
       var img = new Image();
       img.onload = function() {
-        _renderizarFotoFinal(img, img.naturalWidth, img.naturalHeight);
+        clearTimeout(fallbackTimer);
+        entregar(img, img.naturalWidth, img.naturalHeight);
         try { URL.revokeObjectURL(img.src); } catch(e) {}
       };
       img.onerror = function() {
         // Si falla la carga del blob, usar el frame del vídeo
-        _renderizarFotoFinal(video, video.videoWidth, video.videoHeight);
+        clearTimeout(fallbackTimer);
+        entregar(video, video.videoWidth, video.videoHeight);
       };
       img.src = URL.createObjectURL(blob);
     };
@@ -925,10 +954,12 @@ function capturarFoto() {
         // Reintentar sin opciones por si las opciones no son válidas
         if (opciones && Object.keys(opciones).length > 0) {
           imageCaptureObj.takePhoto().then(procesarBlob).catch(function() {
-            _renderizarFotoFinal(video, video.videoWidth, video.videoHeight);
+            clearTimeout(fallbackTimer);
+            entregar(video, video.videoWidth, video.videoHeight);
           });
         } else {
-          _renderizarFotoFinal(video, video.videoWidth, video.videoHeight);
+          clearTimeout(fallbackTimer);
+          entregar(video, video.videoWidth, video.videoHeight);
         }
       });
     };
@@ -950,7 +981,8 @@ function capturarFoto() {
     }
 
   } else {
-    _renderizarFotoFinal(video, video.videoWidth, video.videoHeight);
+    clearTimeout(fallbackTimer);
+    entregar(video, video.videoWidth, video.videoHeight);
   }
 }
 

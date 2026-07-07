@@ -132,6 +132,10 @@ function cargarRegistroEnForm(r, prefix) {
       }
     }
   }
+  // Matorralizacion (EL; en EI la restaura restaurarDatosEI por transecto)
+  if (r.datos.matorral && typeof aplicarMatorral === 'function') {
+    aplicarMatorral(prefix, r.datos.matorral);
+  }
   // Restaurar fotos en fotosPagina y preview
   restaurarFotosRegistro(r, prefix);
 }
@@ -698,7 +702,9 @@ function exportarExcelRegistros() {
           fila['Herbáceas'] = datos.herbaceas.filter(function(n) { return n !== null; }).join(', ');
         }
         fila['Media Herbáceas'] = datos.herbaceasMedia || '';
-        // Matorral
+      }
+      // Matorral (EI por transecto; también EL desde ahora)
+      {
         if (datos.matorral) {
           var mat = datos.matorral;
           fila['Matorral P1 Cobertura'] = mat.punto1 ? mat.punto1.cobertura : '';

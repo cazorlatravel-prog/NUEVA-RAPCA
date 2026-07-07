@@ -31,6 +31,11 @@ var gpsMapWatchId = null;
 // Modo seguimiento: el mapa se recentra con cada actualización GPS.
 // Se desactiva al arrastrar el mapa manualmente; el botón 📍 lo reactiva.
 var gpsMapSeguir = true;
+// Centrado pendiente: al entrar en el mapa, el primer fix aceptado SIEMPRE
+// centra la vista (sin tener que pulsar el botón de posición)
+var gpsMapCentradoPendiente = true;
+// Mostrar etiquetas con el nombre del waypoint sobre las chinchetas
+var mapaEtiquetasWP = true;
 
 function initMapa() {
   // Leaflet se carga desde CDN: si aún no está disponible (offline sin caché
@@ -45,6 +50,7 @@ function initMapa() {
     // Reactivar tracking y centrado al volver a entrar en el mapa
     // (al salir de la página se detiene el GPS con detenerGPSMapa)
     gpsMapSeguir = true;
+    gpsMapCentradoPendiente = true;
     if (!gpsMapWatchId) iniciarGPSMapa();
     centrarMapaEnGPS();
     solicitarWakeLockMapa();
@@ -101,6 +107,7 @@ function initMapa() {
 
   // Iniciar tracking GPS automático del operador
   gpsMapSeguir = true;
+  gpsMapCentradoPendiente = true;
   iniciarGPSMapa();
   centrarMapaEnGPS();
   solicitarWakeLockMapa();
@@ -172,14 +179,14 @@ function actualizarMarcadores() {
     }
     marker.bindPopup(popupHtml, {minWidth: 140, maxWidth: 200});
     if (primerFoto) {
-      (function(regId, codigo) {
+      (function(regId, codigo, rTipo, rUnidad) {
         marker.on('popupopen', function() {
           var container = document.getElementById('popup-foto-' + regId);
           if (!container || container.dataset.loaded) return;
           container.dataset.loaded = '1';
-          obtenerDeDB('fotos', codigo).then(function(f) {
-            if (f && container) {
-              container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeJsAttr(codigo) + '\')">';
+          buscarFotoData(codigo, rTipo, rUnidad).then(function(data) {
+            if (data && container) {
+              container.innerHTML = '<img src="' + data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeJsAttr(codigo) + '\')">';
             } else if (container) {
               container.innerHTML = '<span style="color:#888;font-size:11px">' + escapeHtml(codigo) + '</span>';
             }
@@ -187,7 +194,7 @@ function actualizarMarcadores() {
             if (container) container.innerHTML = '';
           });
         });
-      })(r.id, primerFoto);
+      })(r.id, primerFoto, r.tipo, r.unidad);
     }
     mapaMarkers.addLayer(marker);
   }
@@ -229,14 +236,17 @@ function actualizarMarcadores() {
           escapeHtml(r.fecha) +
           '<div id="' + wPopupId + '" style="margin-top:6px;text-align:center"><span style="color:#888;font-size:11px">Cargando foto...</span></div>',
           {minWidth: 140, maxWidth: 200});
-        (function(popId, codigo) {
+        // Etiqueta con el nombre del waypoint sobre la chincheta
+        wMarker.bindTooltip(escapeHtml(foto.waypoint || 'W') + ' · ' + escapeHtml(r.unidad || ''),
+          {permanent: mapaEtiquetasWP, direction: 'top', offset: [0, -6], className: 'wp-label'});
+        (function(popId, codigo, rTipo, rUnidad) {
           wMarker.on('popupopen', function() {
             var container = document.getElementById(popId);
             if (!container || container.dataset.loaded) return;
             container.dataset.loaded = '1';
-            obtenerDeDB('fotos', codigo).then(function(f) {
-              if (f && container) {
-                container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeJsAttr(codigo) + '\')">';
+            buscarFotoData(codigo, rTipo, rUnidad).then(function(data) {
+              if (data && container) {
+                container.innerHTML = '<img src="' + data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeJsAttr(codigo) + '\')">';
               } else if (container) {
                 container.innerHTML = '<span style="color:#888;font-size:11px">' + escapeHtml(codigo) + '</span>';
               }
@@ -244,7 +254,7 @@ function actualizarMarcadores() {
               if (container) container.innerHTML = '';
             });
           });
-        })(wPopupId, foto.numero);
+        })(wPopupId, foto.numero, r.tipo, r.unidad);
         capaFotosComp.addLayer(wMarker);
       }
     }
@@ -335,16 +345,31 @@ function iniciarGPSMapa() {
       }
     }
 
-    // Seguimiento: recentrar el mapa según te mueves
+    // Seguimiento: recentrar el mapa según te mueves. El primer fix tras
+    // abrir el mapa SIEMPRE centra la vista en la posición real.
     if (gpsMapSeguir && mapa) {
-      if (esPrimerFix) mapa.setView(latlng, Math.max(mapa.getZoom(), 16));
-      else mapa.panTo(latlng);
+      if (esPrimerFix || gpsMapCentradoPendiente) {
+        mapa.setView(latlng, Math.max(mapa.getZoom(), 16));
+      } else {
+        mapa.panTo(latlng);
+      }
+      gpsMapCentradoPendiente = false;
     }
   }, function(err) {
     if (err.code === 1) showToast('GPS: permiso denegado', 'error');
     // Sin timeout: los errores TIMEOUT espurios degradaban el tracking
     // continuo en algunos Android; el watch espera lo que haga falta
   }, {enableHighAccuracy: true, maximumAge: 0});
+}
+
+// Mostrar/ocultar los nombres de waypoint sobre las chinchetas
+function toggleEtiquetasWP() {
+  vibrar();
+  mapaEtiquetasWP = !mapaEtiquetasWP;
+  // Re-render de las capas con marcadores etiquetados
+  actualizarMarcadores();
+  cargarWaypointsPersistentes();
+  showToast(mapaEtiquetasWP ? 'Nombres de waypoints visibles' : 'Nombres de waypoints ocultos', 'info');
 }
 
 function detenerGPSMapa() {
@@ -1173,19 +1198,31 @@ function cargarWaypointsPersistentes() {
         {minWidth: 140, maxWidth: 200}
       );
 
-      // Lazy load foto
-      (function(pId, codigo) {
+      // Etiqueta con el nombre del waypoint sobre la chincheta
+      var labelTxt = escapeHtml(wp.waypoint || '') + (wp.unidad ? ' · ' + escapeHtml(wp.unidad) : '');
+      if (labelTxt) {
+        marker.bindTooltip(labelTxt, {permanent: mapaEtiquetasWP, direction: 'top', offset: [0, -8], className: 'wp-label'});
+      }
+
+      // Lazy load foto (todas las fuentes: local, precarga, pendientes, Cloudinary)
+      (function(pId, codigo, wTipo, wUnidad) {
         marker.on('popupopen', function() {
           var container = document.getElementById(pId);
           if (!container || container.dataset.loaded) return;
           container.dataset.loaded = '1';
-          obtenerDeDB('fotos', codigo).then(function(f) {
-            if (f && f.data && container) {
-              container.innerHTML = '<img src="' + f.data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeJsAttr(codigo) + '\')">';
+          container.innerHTML = '<span style="color:#888;font-size:11px">Cargando foto...</span>';
+          buscarFotoData(codigo, wTipo, wUnidad).then(function(data) {
+            if (!container) return;
+            if (data) {
+              container.innerHTML = '<img src="' + data + '" style="width:100%;max-width:180px;border-radius:6px;cursor:pointer" onclick="abrirLightboxFoto(this.src,\'' + escapeJsAttr(codigo) + '\')">';
+            } else {
+              container.innerHTML = '<span style="color:#888;font-size:11px">Foto no disponible</span>';
             }
-          }).catch(function() {});
+          }).catch(function() {
+            if (container) container.innerHTML = '';
+          });
         });
-      })(popupId, wp.codigo);
+      })(popupId, wp.codigo, wp.tipo, wp.unidad);
 
       capaWaypointsPersist.addLayer(marker);
     });

@@ -307,8 +307,11 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 .camera-overlay .cam-coords{font-size:11px;opacity:.9}
 .camera-minimap{position:absolute;bottom:10px;left:10px;width:120px;height:90px;border-radius:6px;overflow:hidden;border:2px solid #fff;z-index:1;opacity:.85}
 .camera-controls{display:flex;align-items:center;justify-content:space-around;padding:16px;background:#111}
-.camera-controls .cam-btn{width:64px;height:64px;border-radius:50%;border:4px solid #fff;background:transparent;cursor:pointer}
+.camera-controls .cam-btn{width:64px;height:64px;border-radius:50%;border:4px solid #fff;background:transparent;cursor:pointer;touch-action:manipulation}
 .camera-controls .cam-btn-capture{background:#fff}
+.camera-controls .cam-btn-capture:active{transform:scale(.88);background:#ddd}
+/* Etiqueta permanente con el nombre del waypoint sobre la chincheta */
+.wp-label{background:rgba(255,255,255,.92);border:1px solid #999;border-radius:8px;padding:1px 7px;font-size:11px;font-weight:700;color:#333;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .camera-controls .cam-btn-cancel,.camera-controls .cam-btn-switch{width:44px;height:44px;border:none;background:rgba(255,255,255,.2);color:#fff;border-radius:50%;font-size:20px;cursor:pointer}
 
 /* === FOCUS INDICATOR (tap-to-focus) === */
@@ -559,6 +562,17 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     <div class="section-title" style="color:var(--c-el);border-color:var(--c-el)">Observación Pastoreo</div>
     <div id="el-obs-container"></div>
 
+    <div class="section-title" style="color:var(--c-el);border-color:var(--c-el)">Matorralización</div>
+    <div id="el-matorral-container"></div>
+    <div class="mat-resultado" id="el-mat-resultado" style="display:none">
+      <small>Volumen matorral</small>
+      <div class="vol" id="el-mat-volumen">— m³/ha</div>
+      <div style="font-size:12px;margin-top:4px">
+        <span>Cob media: <strong id="el-mat-cob-media">—</strong>%</span> ·
+        <span>Alt media: <strong id="el-mat-alt-media">—</strong> cm</span>
+      </div>
+    </div>
+
     <div class="section-title" style="color:var(--c-el);border-color:var(--c-el)">Fotos</div>
     <div class="foto-section">
       <div class="foto-btns">
@@ -692,6 +706,7 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
   </div>
   <div class="map-controls">
     <button class="btn" onclick="miPosicion()">📍</button>
+    <button class="btn" onclick="toggleEtiquetasWP()" title="Nombres de waypoints">🏷️</button>
     <button class="btn" onclick="toggleCapas()">🗂️</button>
   </div>
   <div class="gps-panel" id="gps-panel">
@@ -905,7 +920,7 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
   <div class="camera-video-wrap">
     <video id="camera-video" autoplay playsinline></video>
     <!-- Ghost overlay para fotos comparativas -->
-    <img id="ghost-overlay" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.35;pointer-events:none;display:none;z-index:2">
+    <img id="ghost-overlay" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0.35;pointer-events:none;display:none;z-index:2">
     <div class="camera-overlay">
       <div class="cam-compass" id="cam-compass">N 0°</div>
       <div class="cam-coords" id="cam-coords">—</div>
