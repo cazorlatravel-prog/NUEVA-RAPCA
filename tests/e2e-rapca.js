@@ -5,7 +5,6 @@
 //   4) node e2e-rapca.js
 //
 // Pruebas de uso end-to-end de RAPCA Campo con Playwright/Chromium
-// Pruebas de uso end-to-end de RAPCA Campo con Playwright/Chromium
 const { chromium } = require('playwright');
 
 const BASE = 'http://127.0.0.1:8899/index.html';
@@ -153,6 +152,20 @@ function ok(nombre, cond, detalle) {
     document.querySelector('.transecto-tab[data-t="T1"]').classList.contains('active'));
   ok('Pestaña T1 marcada como activa', tabActivaT1);
 
+  // Contador de testeos: 1 nota introducida → "1 / 20"
+  const testeos1 = await page.evaluate(() => document.getElementById('ev-plantas-testeos').textContent);
+  ok('Contador Nº testeos refleja las notas introducidas', testeos1 === '1 / 20', String(testeos1));
+  // Al completar 20 notas se pone verde
+  const testeos20 = await page.evaluate(() => {
+    for (var i = 2; i <= 10; i++) { document.getElementById('ev-planta1-n' + i).value = '2'; }
+    calcMediaPlanta(1);
+    for (var i = 1; i <= 10; i++) { document.getElementById('ev-planta2-n' + i).value = '3'; }
+    calcMediaPlanta(2);
+    var el = document.getElementById('ev-plantas-testeos');
+    return { txt: el.textContent, color: el.style.color };
+  });
+  ok('Contador llega a 20 / 20 y se pone verde', testeos20.txt === '20 / 20' && testeos20.color === 'rgb(39, 174, 96)', JSON.stringify(testeos20));
+
   await page.evaluate(() => guardarEI());
   await page.waitForTimeout(600);
   let nEI = await page.evaluate(() => registros.filter(r => r.tipo === 'EI').length);
@@ -174,6 +187,8 @@ function ok(nombre, cond, detalle) {
     return sel === 0 && obs === '' && planta === '';
   });
   ok('T2 empieza limpio (pastoreo/observaciones/plantas propios)', t2Limpio);
+  const testeosT2 = await page.evaluate(() => document.getElementById('ev-plantas-testeos').textContent);
+  ok('El contador de testeos se reinicia en T2', testeosT2 === '0 / 20', String(testeosT2));
 
   // T2: pastoreo distinto
   await page.evaluate(() => {

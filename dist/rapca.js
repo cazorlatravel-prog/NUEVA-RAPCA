@@ -1431,6 +1431,24 @@ function calcMediaGeneralPlantas() {
     if (m !== '\u2014') { sum += parseFloat(m); count++; }
   }
   document.getElementById('ev-plantas-media').textContent = count > 0 ? (sum / count).toFixed(2) : '\u2014';
+  actualizarContadorTesteos();
+}
+
+// Cuenta las notas de planta introducidas en el transecto actual.
+// El protocolo exige 20 testeos por transecto: el contador se pone
+// verde al alcanzarlos para que el operador sepa que ha terminado.
+function actualizarContadorTesteos() {
+  var el = document.getElementById('ev-plantas-testeos');
+  if (!el) return;
+  var n = 0;
+  for (var p = 1; p <= 10; p++) {
+    for (var i = 1; i <= 10; i++) {
+      var sel = document.getElementById('ev-planta' + p + '-n' + i);
+      if (sel && sel.value !== '') n++;
+    }
+  }
+  el.textContent = n + ' / 20';
+  el.style.color = n >= 20 ? '#27ae60' : '#e67e22';
 }
 
 function calcMediaPalatable(p) {
@@ -1608,6 +1626,8 @@ function limpiarFormEI() {
   var fotoGrid = document.getElementById('ev-fotos-preview');
   if (fotoGrid) fotoGrid.innerHTML = '';
   if (typeof actualizarBtnEliminarFotos === 'function') actualizarBtnEliminarFotos('ev');
+  // Reiniciar contador de testeos
+  actualizarContadorTesteos();
 }
 
 // ============================================================
@@ -1879,6 +1899,8 @@ function restaurarDatosEI(datos) {
   document.getElementById('ev-herbaceas-media').textContent = datos.herbaceasMedia || '—';
   var herbInline = document.getElementById('ev-herbaceas-media-inline');
   if (herbInline) herbInline.textContent = datos.herbaceasMedia || '—';
+  // Contador de testeos del transecto restaurado
+  actualizarContadorTesteos();
   // Restaurar las fotos propias del transecto (cada transecto tiene las suyas)
   restaurarFotosEI(datos);
 }
