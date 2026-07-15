@@ -38,10 +38,12 @@ function guardarBorrador(tipo) {
   // Observacion
   data.observacion = obtenerObservacion(prefix);
 
-  // Matorralizacion (EL; en EI va dentro de cada transecto)
+  // Matorralizacion (EL; en EI va dentro de cada transecto).
+  // Solo si el operador introdujo algo: un matorral de ceros haría
+  // aparecer el panel de volumen "0.00" al restaurar el borrador
   if (tipo !== 'EI') {
     var matBorr = recogerMatorral(prefix);
-    if (matBorr) data.matorral = matBorr;
+    if (matBorr && !_matorralSinDatos(matBorr)) data.matorral = matBorr;
   }
 
   // Fotos
@@ -274,6 +276,7 @@ function initFormEI() {
   generarPalatables();
   generarHerbaceas();
   generarMatorral();
+  actualizarContadorTesteos();
   fotosPagina = {};
   document.getElementById('ev-fotos-preview').innerHTML = '';
   transectoActual = 'T1';
@@ -401,6 +404,14 @@ function recogerMatorral(prefix) {
   m.mediaAlt = (m.punto1.altura + m.punto2.altura) / 2;
   m.volumen = ((m.mediaCob / 100) * (m.mediaAlt / 100) * 10000).toFixed(2);
   return m;
+}
+
+// ¿El matorral no tiene ningún dato introducido? (todo ceros/vacío)
+function _matorralSinDatos(m) {
+  if (!m) return true;
+  var p1 = m.punto1 || {}, p2 = m.punto2 || {};
+  return !p1.cobertura && !p1.altura && !p1.especie &&
+         !p2.cobertura && !p2.altura && !p2.especie;
 }
 
 // Vuelca un objeto matorral en los campos del formulario
@@ -729,7 +740,7 @@ function guardarEL() {
     datos: {
       pastoreo: obtenerPastoreo('el'),
       observacionPastoreo: obtenerObservacion('el'),
-      matorral: recogerMatorral('el'),
+      matorral: (_matorralSinDatos(recogerMatorral('el')) ? null : recogerMatorral('el')),
       fotos: fotos.join(', '),
       fotosComp: fotosComp,
       observaciones: document.getElementById('el-observaciones').value

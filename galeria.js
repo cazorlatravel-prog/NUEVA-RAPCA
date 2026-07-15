@@ -80,6 +80,13 @@ function filtrarGaleria() {
   var tipo = document.getElementById('gal-f-tipo').value;
   var fecha = document.getElementById('gal-f-fecha').value;
 
+  // Pestaña Pre-caché: mostrar las fotos precargadas offline (antes esta
+  // pestaña enseñaba lo mismo que "Todas" — no estaba implementada)
+  if (galTab === 'precache') {
+    galRenderPrecache(grid, unidad);
+    return;
+  }
+
   if (unidad) regs = regs.filter(function(r) { return r.unidad === unidad; });
   if (tipo) regs = regs.filter(function(r) { return r.tipo === tipo; });
   if (fecha) regs = regs.filter(function(r) { return r.fecha === fecha; });
@@ -153,6 +160,57 @@ function filtrarGaleria() {
     });
   });
   galActualizarUI();
+}
+
+// Render de la pestaña Pre-caché: fotos descargadas para uso offline
+function galRenderPrecache(grid, unidadFiltro) {
+  if (!db) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#888;padding:30px">Almacenamiento no disponible</div>';
+    return;
+  }
+  obtenerTodosDB('fotos_precargadas').then(function(fotos) {
+    fotos = fotos || [];
+    if (unidadFiltro) fotos = fotos.filter(function(f) { return f.unidad === unidadFiltro; });
+    if (fotos.length === 0) {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#888;padding:30px">Sin fotos precargadas.<br><small>Descárgalas desde el menú Precarga offline.</small></div>';
+      return;
+    }
+    // Agrupar por unidad
+    var grupos = {};
+    fotos.forEach(function(f) {
+      var u = f.unidad || 'Sin unidad';
+      if (!grupos[u]) grupos[u] = [];
+      grupos[u].push(f);
+    });
+    var html = '';
+    Object.keys(grupos).sort().forEach(function(u) {
+      html += '<div class="gal-group-title">' + escapeHtml(u) + ' (' + grupos[u].length + ')</div>';
+      grupos[u].forEach(function(f) {
+        var imgId = 'gal-pc-' + String(f.codigo).replace(/[^a-zA-Z0-9]/g, '_');
+        html += '<div class="gal-item">';
+        html += '<img id="' + imgId + '" src="" alt="' + escapeHtml(f.codigo) + '" onclick="galAbrirFotoPrecache(\'' + escapeJsAttr(f.codigo) + '\')">';
+        html += '<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);color:#fff;font-size:10px;padding:1px 4px;text-align:center">' + escapeHtml((f.waypoint || 'G') + (f.fecha ? ' · ' + f.fecha : '')) + '</div>';
+        html += '</div>';
+      });
+    });
+    grid.innerHTML = html;
+    // Cargar los thumbnails (data URLs ya en local)
+    fotos.forEach(function(f) {
+      var img = document.getElementById('gal-pc-' + String(f.codigo).replace(/[^a-zA-Z0-9]/g, '_'));
+      if (img && f.data) img.src = f.data;
+    });
+    galActualizarUI();
+  }).catch(function(e) {
+    console.warn('Error listando precargadas:', e);
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#888;padding:30px">Error al leer las fotos precargadas</div>';
+  });
+}
+
+function galAbrirFotoPrecache(codigo) {
+  if (!db) return;
+  obtenerDeDB('fotos_precargadas', codigo).then(function(f) {
+    if (f && f.data) abrirLightboxFoto(f.data, codigo);
+  }).catch(function() {});
 }
 
 function galAbrirFoto(codigo) {
@@ -360,6 +418,18 @@ function galConfirmarEliminarLB(codigo) {
   // Refrescar galería si está visible
   var galGrid = document.getElementById('gal-grid');
   if (galGrid) filtrarGaleria();
+  // Quitar también la miniatura de los formularios abiertos: el lightbox
+  // puede abrirse desde el preview de VP/EL/EI y la miniatura quedaba
+  // huérfana como si la foto siguiera adjunta
+  ['vp', 'el', 'ev'].forEach(function(prefix) {
+    var grid = document.getElementById(prefix + '-fotos-preview');
+    if (!grid) return;
+    var imgs = grid.querySelectorAll('img');
+    for (var i = 0; i < imgs.length; i++) {
+      if (imgs[i].title === codigo || imgs[i].alt === codigo) imgs[i].remove();
+    }
+    if (typeof actualizarBtnEliminarFotos === 'function') actualizarBtnEliminarFotos(prefix);
+  });
 }
 
 function eliminarFotosDeCodigos(codigos) {

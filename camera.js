@@ -150,13 +150,8 @@ function abrirCamara(tipo, subtipo) {
   });
 }
 
-function cerrarCamara() {
-  if (camaraStream) {
-    camaraStream.getTracks().forEach(function(t) { t.stop(); });
-    camaraStream = null;
-  }
-  imageCaptureObj = null;
-  // Quitar listeners de orientación para evitar fugas
+// Detener sensor y listeners de la brújula (fuga de batería si quedan vivos)
+function detenerBrujula() {
   if (window._compassHandler) {
     window.removeEventListener('deviceorientationabsolute', window._compassHandler, true);
     window.removeEventListener('deviceorientation', window._compassHandler, true);
@@ -166,6 +161,15 @@ function cerrarCamara() {
     try { window._compassSensor.stop(); } catch(e) {}
     window._compassSensor = null;
   }
+}
+
+function cerrarCamara() {
+  if (camaraStream) {
+    camaraStream.getTracks().forEach(function(t) { t.stop(); });
+    camaraStream = null;
+  }
+  imageCaptureObj = null;
+  detenerBrujula();
   document.getElementById('camera-modal').classList.remove('open');
   if (miniMapaCamera) { miniMapaCamera.remove(); miniMapaCamera = null; }
   // Limpiar ghost
@@ -901,7 +905,13 @@ function capturarFoto() {
     if (entregado) return;
     entregado = true;
     _capturandoFoto = false;
+    clearTimeout(fallbackTimer);
     if (btnCap) btnCap.style.opacity = '';
+    // Si el usuario canceló la cámara mientras se procesaba la captura,
+    // descartar: abrir el preview aquí mostraría una foto "zombi" (frame
+    // negro de un vídeo parado) encima del formulario
+    var modal = document.getElementById('camera-modal');
+    if (!camaraStream || !modal || !modal.classList.contains('open')) return;
     _renderizarFotoFinal(fuente, fw, fh);
   }
 
@@ -951,14 +961,14 @@ function capturarFoto() {
 
     var tomarFoto = function(opciones) {
       imageCaptureObj.takePhoto(opciones).then(procesarBlob).catch(function() {
-        // Reintentar sin opciones por si las opciones no son válidas
-        if (opciones && Object.keys(opciones).length > 0) {
+        // Reintentar sin opciones por si las opciones no son válidas.
+        // imageCaptureObj puede ser null si el usuario canceló la cámara
+        // mientras takePhoto estaba pendiente.
+        if (imageCaptureObj && opciones && Object.keys(opciones).length > 0) {
           imageCaptureObj.takePhoto().then(procesarBlob).catch(function() {
-            clearTimeout(fallbackTimer);
             entregar(video, video.videoWidth, video.videoHeight);
           });
         } else {
-          clearTimeout(fallbackTimer);
           entregar(video, video.videoWidth, video.videoHeight);
         }
       });
@@ -1220,6 +1230,9 @@ function _renderizarFotoFinal(fuente, fw, fh) {
     camaraStream.getTracks().forEach(function(t) { t.stop(); });
     camaraStream = null;
   }
+  // Parar la brújula: el sensor a 10Hz seguía emitiendo (gastando batería)
+  // hasta la siguiente apertura de cámara. "Repetir" la reactiva vía abrirCamara.
+  detenerBrujula();
   document.getElementById('camera-modal').classList.remove('open');
   document.getElementById('preview-modal').classList.add('open');
 }
@@ -1302,7 +1315,11 @@ function cargarGhostFoto(tipo, subtipo) {
   // el prefijo del tipo actual y, p. ej., al hacer la EL nunca aparecía la
   // foto de la Visita Previa.
   function coincideGhost(codigo) {
-    return codigo && codigo.indexOf(unidad + '_') === 0 && codigo.indexOf('_' + subtipo + '_') > 0;
+    if (!codigo) return false;
+    // Exigir el segmento de tipo completo: evita que una unidad que sea
+    // prefijo de otra (p.ej. FINCA y FINCA_SUR) coja fotos ajenas
+    return codigo.indexOf(unidad + '_VP_' + subtipo + '_') === 0 ||
+           codigo.indexOf(unidad + '_EV_' + subtipo + '_') === 0;
   }
 
   function activarGhost(src) {

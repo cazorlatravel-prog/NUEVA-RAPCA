@@ -62,7 +62,6 @@ var transectosDatos = {T1:null,T2:null,T3:null};
 var editandoRegistro = null;
 var deferredPrompt = null;
 var db = null;
-var compassHeading = 0;
 var miniMapaCamera = null;
 var anotaciones = [];
 var medirActivo = false;
@@ -1034,10 +1033,12 @@ function guardarBorrador(tipo) {
   // Observacion
   data.observacion = obtenerObservacion(prefix);
 
-  // Matorralizacion (EL; en EI va dentro de cada transecto)
+  // Matorralizacion (EL; en EI va dentro de cada transecto).
+  // Solo si el operador introdujo algo: un matorral de ceros haría
+  // aparecer el panel de volumen "0.00" al restaurar el borrador
   if (tipo !== 'EI') {
     var matBorr = recogerMatorral(prefix);
-    if (matBorr) data.matorral = matBorr;
+    if (matBorr && !_matorralSinDatos(matBorr)) data.matorral = matBorr;
   }
 
   // Fotos
@@ -1270,6 +1271,7 @@ function initFormEI() {
   generarPalatables();
   generarHerbaceas();
   generarMatorral();
+  actualizarContadorTesteos();
   fotosPagina = {};
   document.getElementById('ev-fotos-preview').innerHTML = '';
   transectoActual = 'T1';
@@ -1397,6 +1399,14 @@ function recogerMatorral(prefix) {
   m.mediaAlt = (m.punto1.altura + m.punto2.altura) / 2;
   m.volumen = ((m.mediaCob / 100) * (m.mediaAlt / 100) * 10000).toFixed(2);
   return m;
+}
+
+// ¿El matorral no tiene ningún dato introducido? (todo ceros/vacío)
+function _matorralSinDatos(m) {
+  if (!m) return true;
+  var p1 = m.punto1 || {}, p2 = m.punto2 || {};
+  return !p1.cobertura && !p1.altura && !p1.especie &&
+         !p2.cobertura && !p2.altura && !p2.especie;
 }
 
 // Vuelca un objeto matorral en los campos del formulario
@@ -1725,7 +1735,7 @@ function guardarEL() {
     datos: {
       pastoreo: obtenerPastoreo('el'),
       observacionPastoreo: obtenerObservacion('el'),
-      matorral: recogerMatorral('el'),
+      matorral: (_matorralSinDatos(recogerMatorral('el')) ? null : recogerMatorral('el')),
       fotos: fotos.join(', '),
       fotosComp: fotosComp,
       observaciones: document.getElementById('el-observaciones').value
@@ -2216,13 +2226,8 @@ function abrirCamara(tipo, subtipo) {
   });
 }
 
-function cerrarCamara() {
-  if (camaraStream) {
-    camaraStream.getTracks().forEach(function(t) { t.stop(); });
-    camaraStream = null;
-  }
-  imageCaptureObj = null;
-  // Quitar listeners de orientación para evitar fugas
+// Detener sensor y listeners de la brújula (fuga de batería si quedan vivos)
+function detenerBrujula() {
   if (window._compassHandler) {
     window.removeEventListener('deviceorientationabsolute', window._compassHandler, true);
     window.removeEventListener('deviceorientation', window._compassHandler, true);
@@ -2232,6 +2237,15 @@ function cerrarCamara() {
     try { window._compassSensor.stop(); } catch(e) {}
     window._compassSensor = null;
   }
+}
+
+function cerrarCamara() {
+  if (camaraStream) {
+    camaraStream.getTracks().forEach(function(t) { t.stop(); });
+    camaraStream = null;
+  }
+  imageCaptureObj = null;
+  detenerBrujula();
   document.getElementById('camera-modal').classList.remove('open');
   if (miniMapaCamera) { miniMapaCamera.remove(); miniMapaCamera = null; }
   // Limpiar ghost
@@ -2967,7 +2981,13 @@ function capturarFoto() {
     if (entregado) return;
     entregado = true;
     _capturandoFoto = false;
+    clearTimeout(fallbackTimer);
     if (btnCap) btnCap.style.opacity = '';
+    // Si el usuario canceló la cámara mientras se procesaba la captura,
+    // descartar: abrir el preview aquí mostraría una foto "zombi" (frame
+    // negro de un vídeo parado) encima del formulario
+    var modal = document.getElementById('camera-modal');
+    if (!camaraStream || !modal || !modal.classList.contains('open')) return;
     _renderizarFotoFinal(fuente, fw, fh);
   }
 
@@ -3017,14 +3037,14 @@ function capturarFoto() {
 
     var tomarFoto = function(opciones) {
       imageCaptureObj.takePhoto(opciones).then(procesarBlob).catch(function() {
-        // Reintentar sin opciones por si las opciones no son válidas
-        if (opciones && Object.keys(opciones).length > 0) {
+        // Reintentar sin opciones por si las opciones no son válidas.
+        // imageCaptureObj puede ser null si el usuario canceló la cámara
+        // mientras takePhoto estaba pendiente.
+        if (imageCaptureObj && opciones && Object.keys(opciones).length > 0) {
           imageCaptureObj.takePhoto().then(procesarBlob).catch(function() {
-            clearTimeout(fallbackTimer);
             entregar(video, video.videoWidth, video.videoHeight);
           });
         } else {
-          clearTimeout(fallbackTimer);
           entregar(video, video.videoWidth, video.videoHeight);
         }
       });
@@ -3286,6 +3306,9 @@ function _renderizarFotoFinal(fuente, fw, fh) {
     camaraStream.getTracks().forEach(function(t) { t.stop(); });
     camaraStream = null;
   }
+  // Parar la brújula: el sensor a 10Hz seguía emitiendo (gastando batería)
+  // hasta la siguiente apertura de cámara. "Repetir" la reactiva vía abrirCamara.
+  detenerBrujula();
   document.getElementById('camera-modal').classList.remove('open');
   document.getElementById('preview-modal').classList.add('open');
 }
@@ -3368,7 +3391,11 @@ function cargarGhostFoto(tipo, subtipo) {
   // el prefijo del tipo actual y, p. ej., al hacer la EL nunca aparecía la
   // foto de la Visita Previa.
   function coincideGhost(codigo) {
-    return codigo && codigo.indexOf(unidad + '_') === 0 && codigo.indexOf('_' + subtipo + '_') > 0;
+    if (!codigo) return false;
+    // Exigir el segmento de tipo completo: evita que una unidad que sea
+    // prefijo de otra (p.ej. FINCA y FINCA_SUR) coja fotos ajenas
+    return codigo.indexOf(unidad + '_VP_' + subtipo + '_') === 0 ||
+           codigo.indexOf(unidad + '_EV_' + subtipo + '_') === 0;
   }
 
   function activarGhost(src) {
@@ -4777,7 +4804,14 @@ var mapWakeLock = null;
 function solicitarWakeLockMapa() {
   if (!('wakeLock' in navigator)) return;
   navigator.wakeLock.request('screen').then(function(wl) {
-    mapWakeLock = wl;
+    // Si el usuario ya salió del mapa mientras se resolvía la petición,
+    // liberar en vez de retener la pantalla encendida fuera del mapa
+    var mapaPage = document.getElementById('mapa-page');
+    if (mapaPage && mapaPage.classList.contains('active')) {
+      mapWakeLock = wl;
+    } else {
+      try { wl.release(); } catch(e) {}
+    }
   }).catch(function() { /* denegado o batería baja: seguir sin wake lock */ });
 }
 function liberarWakeLockMapa() {
@@ -5101,7 +5135,7 @@ function toggleGPS() {
     document.getElementById('gps-lat').textContent = coordNW.split('  ')[0];
     document.getElementById('gps-lon').textContent = coordNW.split('  ')[1];
     document.getElementById('gps-alt').textContent = pos.coords.altitude ? pos.coords.altitude.toFixed(1) + 'm' : '—';
-    document.getElementById('gps-utm').textContent = latLonToUTM(pos.coords.latitude, pos.coords.longitude);
+    document.getElementById('gps-utm').textContent = formatUTMString(pos.coords.latitude, pos.coords.longitude);
     document.getElementById('gps-speed').textContent = pos.coords.speed ? (pos.coords.speed * 3.6).toFixed(1) + ' km/h' : '—';
     document.getElementById('gps-acc').textContent = pos.coords.accuracy ? pos.coords.accuracy.toFixed(0) + 'm' : '—';
     document.getElementById('gps-heading').textContent = pos.coords.heading ? pos.coords.heading.toFixed(0) + '°' : '—';
@@ -5847,8 +5881,6 @@ function cargarWaypointsPersistentes() {
 
   obtenerTodosDB('waypoints_comp').then(function(wps) {
     if (!wps || wps.length === 0) {
-      var badge = document.getElementById('wp-persist-count');
-      if (badge) badge.textContent = '0';
       return;
     }
     var coloresWP = {W1: '#e74c3c', W2: '#3498db'};
@@ -5903,9 +5935,6 @@ function cargarWaypointsPersistentes() {
       capaWaypointsPersist.addLayer(marker);
     });
 
-    // Actualizar contador en toolbar
-    var badge = document.getElementById('wp-persist-count');
-    if (badge) badge.textContent = wps.length;
   }).catch(function(e) { console.warn('Error cargando waypoints persistentes:', e); });
 }
 
@@ -5927,8 +5956,6 @@ function borrarTodosWaypointsPersistentes() {
     return Promise.all(promises);
   }).then(function() {
     capaWaypointsPersist.clearLayers();
-    var badge = document.getElementById('wp-persist-count');
-    if (badge) badge.textContent = '0';
     showToast('Todos los waypoints borrados', 'info');
   }).catch(function(e) { showToast('Error: ' + e, 'error'); });
 }
@@ -6464,8 +6491,10 @@ function cargarRegistroEnForm(r, prefix) {
       }
     }
   }
-  // Matorralizacion (EL; en EI la restaura restaurarDatosEI por transecto)
-  if (r.datos.matorral && typeof aplicarMatorral === 'function') {
+  // Matorralizacion (solo EL; en EI la restaura restaurarDatosEI por
+  // transecto, y aplicar aquí la copia top-level de T1 contaminaría
+  // los transectos vacíos al editar)
+  if (r.tipo !== 'EI' && r.datos.matorral && typeof aplicarMatorral === 'function') {
     aplicarMatorral(prefix, r.datos.matorral);
   }
   // Restaurar fotos en fotosPagina y preview
@@ -10154,6 +10183,13 @@ function filtrarGaleria() {
   var tipo = document.getElementById('gal-f-tipo').value;
   var fecha = document.getElementById('gal-f-fecha').value;
 
+  // Pestaña Pre-caché: mostrar las fotos precargadas offline (antes esta
+  // pestaña enseñaba lo mismo que "Todas" — no estaba implementada)
+  if (galTab === 'precache') {
+    galRenderPrecache(grid, unidad);
+    return;
+  }
+
   if (unidad) regs = regs.filter(function(r) { return r.unidad === unidad; });
   if (tipo) regs = regs.filter(function(r) { return r.tipo === tipo; });
   if (fecha) regs = regs.filter(function(r) { return r.fecha === fecha; });
@@ -10227,6 +10263,57 @@ function filtrarGaleria() {
     });
   });
   galActualizarUI();
+}
+
+// Render de la pestaña Pre-caché: fotos descargadas para uso offline
+function galRenderPrecache(grid, unidadFiltro) {
+  if (!db) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#888;padding:30px">Almacenamiento no disponible</div>';
+    return;
+  }
+  obtenerTodosDB('fotos_precargadas').then(function(fotos) {
+    fotos = fotos || [];
+    if (unidadFiltro) fotos = fotos.filter(function(f) { return f.unidad === unidadFiltro; });
+    if (fotos.length === 0) {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#888;padding:30px">Sin fotos precargadas.<br><small>Descárgalas desde el menú Precarga offline.</small></div>';
+      return;
+    }
+    // Agrupar por unidad
+    var grupos = {};
+    fotos.forEach(function(f) {
+      var u = f.unidad || 'Sin unidad';
+      if (!grupos[u]) grupos[u] = [];
+      grupos[u].push(f);
+    });
+    var html = '';
+    Object.keys(grupos).sort().forEach(function(u) {
+      html += '<div class="gal-group-title">' + escapeHtml(u) + ' (' + grupos[u].length + ')</div>';
+      grupos[u].forEach(function(f) {
+        var imgId = 'gal-pc-' + String(f.codigo).replace(/[^a-zA-Z0-9]/g, '_');
+        html += '<div class="gal-item">';
+        html += '<img id="' + imgId + '" src="" alt="' + escapeHtml(f.codigo) + '" onclick="galAbrirFotoPrecache(\'' + escapeJsAttr(f.codigo) + '\')">';
+        html += '<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.55);color:#fff;font-size:10px;padding:1px 4px;text-align:center">' + escapeHtml((f.waypoint || 'G') + (f.fecha ? ' · ' + f.fecha : '')) + '</div>';
+        html += '</div>';
+      });
+    });
+    grid.innerHTML = html;
+    // Cargar los thumbnails (data URLs ya en local)
+    fotos.forEach(function(f) {
+      var img = document.getElementById('gal-pc-' + String(f.codigo).replace(/[^a-zA-Z0-9]/g, '_'));
+      if (img && f.data) img.src = f.data;
+    });
+    galActualizarUI();
+  }).catch(function(e) {
+    console.warn('Error listando precargadas:', e);
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#888;padding:30px">Error al leer las fotos precargadas</div>';
+  });
+}
+
+function galAbrirFotoPrecache(codigo) {
+  if (!db) return;
+  obtenerDeDB('fotos_precargadas', codigo).then(function(f) {
+    if (f && f.data) abrirLightboxFoto(f.data, codigo);
+  }).catch(function() {});
 }
 
 function galAbrirFoto(codigo) {
@@ -10434,6 +10521,18 @@ function galConfirmarEliminarLB(codigo) {
   // Refrescar galería si está visible
   var galGrid = document.getElementById('gal-grid');
   if (galGrid) filtrarGaleria();
+  // Quitar también la miniatura de los formularios abiertos: el lightbox
+  // puede abrirse desde el preview de VP/EL/EI y la miniatura quedaba
+  // huérfana como si la foto siguiera adjunta
+  ['vp', 'el', 'ev'].forEach(function(prefix) {
+    var grid = document.getElementById(prefix + '-fotos-preview');
+    if (!grid) return;
+    var imgs = grid.querySelectorAll('img');
+    for (var i = 0; i < imgs.length; i++) {
+      if (imgs[i].title === codigo || imgs[i].alt === codigo) imgs[i].remove();
+    }
+    if (typeof actualizarBtnEliminarFotos === 'function') actualizarBtnEliminarFotos(prefix);
+  });
 }
 
 function eliminarFotosDeCodigos(codigos) {

@@ -120,7 +120,14 @@ var mapWakeLock = null;
 function solicitarWakeLockMapa() {
   if (!('wakeLock' in navigator)) return;
   navigator.wakeLock.request('screen').then(function(wl) {
-    mapWakeLock = wl;
+    // Si el usuario ya salió del mapa mientras se resolvía la petición,
+    // liberar en vez de retener la pantalla encendida fuera del mapa
+    var mapaPage = document.getElementById('mapa-page');
+    if (mapaPage && mapaPage.classList.contains('active')) {
+      mapWakeLock = wl;
+    } else {
+      try { wl.release(); } catch(e) {}
+    }
   }).catch(function() { /* denegado o batería baja: seguir sin wake lock */ });
 }
 function liberarWakeLockMapa() {
@@ -444,7 +451,7 @@ function toggleGPS() {
     document.getElementById('gps-lat').textContent = coordNW.split('  ')[0];
     document.getElementById('gps-lon').textContent = coordNW.split('  ')[1];
     document.getElementById('gps-alt').textContent = pos.coords.altitude ? pos.coords.altitude.toFixed(1) + 'm' : '—';
-    document.getElementById('gps-utm').textContent = latLonToUTM(pos.coords.latitude, pos.coords.longitude);
+    document.getElementById('gps-utm').textContent = formatUTMString(pos.coords.latitude, pos.coords.longitude);
     document.getElementById('gps-speed').textContent = pos.coords.speed ? (pos.coords.speed * 3.6).toFixed(1) + ' km/h' : '—';
     document.getElementById('gps-acc').textContent = pos.coords.accuracy ? pos.coords.accuracy.toFixed(0) + 'm' : '—';
     document.getElementById('gps-heading').textContent = pos.coords.heading ? pos.coords.heading.toFixed(0) + '°' : '—';
@@ -1190,8 +1197,6 @@ function cargarWaypointsPersistentes() {
 
   obtenerTodosDB('waypoints_comp').then(function(wps) {
     if (!wps || wps.length === 0) {
-      var badge = document.getElementById('wp-persist-count');
-      if (badge) badge.textContent = '0';
       return;
     }
     var coloresWP = {W1: '#e74c3c', W2: '#3498db'};
@@ -1246,9 +1251,6 @@ function cargarWaypointsPersistentes() {
       capaWaypointsPersist.addLayer(marker);
     });
 
-    // Actualizar contador en toolbar
-    var badge = document.getElementById('wp-persist-count');
-    if (badge) badge.textContent = wps.length;
   }).catch(function(e) { console.warn('Error cargando waypoints persistentes:', e); });
 }
 
@@ -1270,8 +1272,6 @@ function borrarTodosWaypointsPersistentes() {
     return Promise.all(promises);
   }).then(function() {
     capaWaypointsPersist.clearLayers();
-    var badge = document.getElementById('wp-persist-count');
-    if (badge) badge.textContent = '0';
     showToast('Todos los waypoints borrados', 'info');
   }).catch(function(e) { showToast('Error: ' + e, 'error'); });
 }

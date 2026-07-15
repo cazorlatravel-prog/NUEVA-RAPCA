@@ -1,5 +1,5 @@
 // RAPCA Campo — Service Worker v1.0
-const CACHE_NAME = 'rapca-v25';
+const CACHE_NAME = 'rapca-v26';
 const CDN_CACHE = 'rapca-cdn-v1';
 
 const APP_FILES = [
@@ -19,7 +19,9 @@ const APP_FILES = [
   './timeline.js',
   './comparador.js',
   './galeria.js',
-  './manifest.json'
+  './manifest.json',
+  './icons/icon-192.png',
+  './icons/icon-512.png'
 ];
 
 const CDN_FILES = [
@@ -79,11 +81,13 @@ self.addEventListener('fetch', (e) => {
 
   // Network-first para HTML y JS propios: así los cambios/fixes llegan
   // de inmediato cuando hay conexión, con la caché como respaldo offline.
+  // cache:'no-cache' revalida contra el servidor: sin él, la caché HTTP del
+  // navegador (Expires de 1 año en .htaccess) podía servir JS rancio.
   const esHtmlOJs = e.request.mode === 'navigate' ||
     url.pathname.endsWith('.html') || url.pathname.endsWith('.js') || url.pathname === '/';
   if (esHtmlOJs) {
     e.respondWith(
-      fetch(e.request).then((resp) => {
+      fetch(e.request.url, {cache: 'no-cache', credentials: 'same-origin'}).then((resp) => {
         const clone = resp.clone();
         caches.open(CACHE_NAME).then((c) => c.put(e.request, clone));
         return resp;

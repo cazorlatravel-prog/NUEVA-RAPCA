@@ -62,7 +62,6 @@ var transectosDatos = {T1:null,T2:null,T3:null};
 var editandoRegistro = null;
 var deferredPrompt = null;
 var db = null;
-var compassHeading = 0;
 var miniMapaCamera = null;
 var anotaciones = [];
 var medirActivo = false;

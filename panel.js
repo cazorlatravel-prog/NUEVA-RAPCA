@@ -132,8 +132,10 @@ function cargarRegistroEnForm(r, prefix) {
       }
     }
   }
-  // Matorralizacion (EL; en EI la restaura restaurarDatosEI por transecto)
-  if (r.datos.matorral && typeof aplicarMatorral === 'function') {
+  // Matorralizacion (solo EL; en EI la restaura restaurarDatosEI por
+  // transecto, y aplicar aquí la copia top-level de T1 contaminaría
+  // los transectos vacíos al editar)
+  if (r.tipo !== 'EI' && r.datos.matorral && typeof aplicarMatorral === 'function') {
     aplicarMatorral(prefix, r.datos.matorral);
   }
   // Restaurar fotos en fotosPagina y preview
