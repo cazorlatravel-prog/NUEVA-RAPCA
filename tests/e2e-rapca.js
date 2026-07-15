@@ -70,6 +70,8 @@ function ok(nombre, cond, detalle) {
     }
     return route.abort();
   });
+  // Cloudinary no está disponible en el entorno de test: fallar rápido
+  await context.route(/res\.cloudinary\.com/, (route) => route.abort());
   // Tiles de OSM/IGN: responder con imagen vacía para no depender de la red
   const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
   await context.route(/tile\.openstreetmap\.org|ign\.es|opentopomap\.org/, (route) =>
@@ -134,29 +136,65 @@ function ok(nombre, cond, detalle) {
   nEL = await page.evaluate(() => registros.filter(r => r.tipo === 'EL').length);
   ok('Duplicado EL bloqueado (sigue habiendo 1)', nEL === 1, 'hay ' + nEL);
 
-  console.log('\n== 2b. Ghost: foto del waypoint de la visita anterior ==');
-  // Sembrar una foto de la Visita Previa (código VP) del mismo waypoint
-  await page.evaluate(() => {
-    return guardarEnDB('fotos', {
-      codigo: 'TEST_U1_VP_W1_1',
-      data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-      fecha: Date.now() - 86400000
-    });
-  });
-  await page.evaluate(() => irPagina('el'));
-  await page.waitForTimeout(400);
-  await page.evaluate(() => { document.getElementById('el-unidad').value = 'TEST_U1'; });
-  await page.evaluate(() => abrirCamara('EL', 'W1'));
-  await page.waitForTimeout(2000);
-  const ghost = await page.evaluate(() => ({
-    activo: ghostingActivo,
-    visible: document.getElementById('ghost-overlay').style.display === 'block',
-    src: (document.getElementById('ghost-overlay').src || '').slice(0, 30)
-  }));
-  ok('El ghost muestra la foto W1 de la Visita Previa en una EL', ghost.activo && ghost.visible, JSON.stringify(ghost));
-  await page.evaluate(() => cerrarCamara());
-  await page.waitForTimeout(300);
-  await page.evaluate(() => irPagina('menu'));
+  console.log('\n== 2b. Ghost: waypoints de visitas anteriores (batería completa) ==');
+  const PNG1 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+  // Helper: abre la cámara para un waypoint y devuelve el estado del ghost
+  async function probarGhost(pagina, prefijo, tipo, unidad, wp) {
+    await page.evaluate((p) => irPagina(p), pagina);
+    await page.waitForTimeout(350);
+    await page.evaluate((args) => { document.getElementById(args.prefijo + '-unidad').value = args.unidad; }, { prefijo, unidad });
+    await page.evaluate((args) => abrirCamara(args.tipo, args.wp), { tipo, wp });
+    await page.waitForTimeout(1500);
+    const estado = await page.evaluate(() => ({
+      activo: ghostingActivo,
+      visible: document.getElementById('ghost-overlay').style.display === 'block'
+    }));
+    await page.evaluate(() => cerrarCamara());
+    await page.waitForTimeout(200);
+    await page.evaluate(() => irPagina('menu'));
+    return estado;
+  }
+
+  // Fuente 1: thumbnail local (store 'fotos') — foto de la Visita Previa
+  await page.evaluate((png) => guardarEnDB('fotos', { codigo: 'TEST_U1_VP_W1_1', data: png, fecha: Date.now() - 86400000 }), PNG1);
+  const g1 = await probarGhost('el', 'el', 'EL', 'TEST_U1', 'W1');
+  ok('Ghost en EL·W1 con foto VP local', g1.activo && g1.visible, JSON.stringify(g1));
+
+  // La misma foto VP debe servir de ghost también en una Evaluación Intensa
+  const g2 = await probarGhost('ei', 'ev', 'EI', 'TEST_U1', 'W1');
+  ok('Ghost en EI·W1 con la misma foto VP', g2.activo && g2.visible, JSON.stringify(g2));
+
+  // Fuente 2: subidas_pendientes — W2 de una visita anterior aún sin subir
+  await page.evaluate((png) => guardarEnDB('subidas_pendientes', { codigo: 'TEST_U1_VP_W2_1', data: png, tipo: 'VP', fecha: Date.now() - 86400000 }), PNG1);
+  const g3 = await probarGhost('el', 'el', 'EL', 'TEST_U1', 'W2');
+  ok('Ghost en EL·W2 desde subidas pendientes', g3.activo && g3.visible, JSON.stringify(g3));
+
+  // Fuente 3: fotos precargadas offline (campos unidad/waypoint)
+  await page.evaluate((png) => guardarEnDB('fotos_precargadas', { codigo: 'TEST_U4_VP_W1_9', data: png, unidad: 'TEST_U4', waypoint: 'W1', fecha: '2026-06-01' }), PNG1);
+  const g4 = await probarGhost('ei', 'ev', 'EI', 'TEST_U4', 'W1');
+  ok('Ghost en EI·W1 desde fotos precargadas', g4.activo && g4.visible, JSON.stringify(g4));
+
+  // Fuente 4: registros sincronizados → buscarFotoData por código
+  await page.evaluate((png) => {
+    registros.push({ id: Date.now() - 999999, tipo: 'VP', fecha: '2026-06-01', zona: '', unidad: 'TEST_U5', transecto: '',
+      datos: { fotos: '', fotosComp: [{ numero: 'TEST_U5_VP_W1_1', waypoint: 'W1', lat: null, lon: null }], observaciones: '' },
+      enviado: true, operador_email: 'test@rapca.es', operador_nombre: 'Tester' });
+    guardarRegistros();
+    // La foto solo existe indexada por código (sin campos unidad/waypoint):
+    // el escaneo de precargadas no la ve, solo la vía registros+buscarFotoData
+    return guardarEnDB('fotos_precargadas', { codigo: 'TEST_U5_VP_W1_1', data: png });
+  }, PNG1);
+  const g5 = await probarGhost('el', 'el', 'EL', 'TEST_U5', 'W1');
+  ok('Ghost en EL·W1 vía registros sincronizados', g5.activo && g5.visible, JSON.stringify(g5));
+
+  // Negativo: unidad sin visitas anteriores → sin ghost
+  const g6 = await probarGhost('el', 'el', 'EL', 'TEST_SINFOTOS', 'W1');
+  ok('Sin visitas anteriores no hay ghost (correcto)', !g6.activo && !g6.visible, JSON.stringify(g6));
+
+  // Negativo: una unidad que es prefijo de otra no roba sus fotos
+  const g7 = await probarGhost('el', 'el', 'EL', 'TEST_U', 'W1');
+  ok('Una unidad prefijo de otra (TEST_U vs TEST_U1) no coge fotos ajenas', !g7.activo && !g7.visible, JSON.stringify(g7));
 
   console.log('\n== 3. Evaluación Intensiva: transectos individuales y ficha única ==');
   await page.evaluate(() => irPagina('menu'));
@@ -320,15 +358,19 @@ function ok(nombre, cond, detalle) {
   ok('Marcador de posición creado', centro1.marker);
   ok('Zoom de trabajo aplicado (>=15)', centro1.zoom >= 15, 'zoom=' + centro1.zoom);
 
-  // Fix impreciso repentino (red/wifi, ±2000m): el marcador NO debe saltar
+  // Fix impreciso repentino (red/wifi, ±2000m): el marcador NO debe saltar.
+  // Primero re-cebar un fix bueno para que el filtro tenga referencia fresca
+  // (el entorno de test puede espaciar los fixes más de 15s)
+  await context.setGeolocation({ latitude: 37.901, longitude: -3.101, accuracy: 10 });
+  await page.waitForTimeout(1500);
   await context.setGeolocation({ latitude: 37.80, longitude: -3.30, accuracy: 2000 });
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(2500);
   const trasFixMalo = await page.evaluate(() => {
     var p = gpsMapMarker.getLatLng();
     return { lat: p.lat, lon: p.lng };
   });
   ok('Un fix impreciso (±2000m) no desplaza el marcador',
-    Math.abs(trasFixMalo.lat - 37.90) < 0.01 && Math.abs(trasFixMalo.lon + 3.10) < 0.01,
+    Math.abs(trasFixMalo.lat - 37.901) < 0.01 && Math.abs(trasFixMalo.lon + 3.101) < 0.01,
     JSON.stringify(trasFixMalo));
   // Restaurar fix preciso para las siguientes pruebas
   await context.setGeolocation({ latitude: 37.90, longitude: -3.10, accuracy: 10 });
