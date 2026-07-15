@@ -134,6 +134,30 @@ function ok(nombre, cond, detalle) {
   nEL = await page.evaluate(() => registros.filter(r => r.tipo === 'EL').length);
   ok('Duplicado EL bloqueado (sigue habiendo 1)', nEL === 1, 'hay ' + nEL);
 
+  console.log('\n== 2b. Ghost: foto del waypoint de la visita anterior ==');
+  // Sembrar una foto de la Visita Previa (código VP) del mismo waypoint
+  await page.evaluate(() => {
+    return guardarEnDB('fotos', {
+      codigo: 'TEST_U1_VP_W1_1',
+      data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      fecha: Date.now() - 86400000
+    });
+  });
+  await page.evaluate(() => irPagina('el'));
+  await page.waitForTimeout(400);
+  await page.evaluate(() => { document.getElementById('el-unidad').value = 'TEST_U1'; });
+  await page.evaluate(() => abrirCamara('EL', 'W1'));
+  await page.waitForTimeout(2000);
+  const ghost = await page.evaluate(() => ({
+    activo: ghostingActivo,
+    visible: document.getElementById('ghost-overlay').style.display === 'block',
+    src: (document.getElementById('ghost-overlay').src || '').slice(0, 30)
+  }));
+  ok('El ghost muestra la foto W1 de la Visita Previa en una EL', ghost.activo && ghost.visible, JSON.stringify(ghost));
+  await page.evaluate(() => cerrarCamara());
+  await page.waitForTimeout(300);
+  await page.evaluate(() => irPagina('menu'));
+
   console.log('\n== 3. Evaluación Intensiva: transectos individuales y ficha única ==');
   await page.evaluate(() => irPagina('menu'));
   await page.evaluate(() => irPagina('ei'));

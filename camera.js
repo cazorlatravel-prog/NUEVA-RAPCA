@@ -1297,9 +1297,13 @@ function cargarGhostFoto(tipo, subtipo) {
   var unidad = document.getElementById(prefix + '-unidad').value || '';
   if (!unidad) return;
 
-  // Buscar en registros anteriores fotos comparativas del mismo waypoint/unidad
-  var codeTipo = (tipo === 'EI' || tipo === 'EL') ? 'EV' : tipo;
-  var patronBusqueda = unidad + '_' + codeTipo + '_' + subtipo;
+  // El ghost debe mostrar el waypoint de CUALQUIER visita anterior: la VP usa
+  // códigos UNIDAD_VP_W1_n y EL/EI usan UNIDAD_EV_W1_n. Antes solo se buscaba
+  // el prefijo del tipo actual y, p. ej., al hacer la EL nunca aparecía la
+  // foto de la Visita Previa.
+  function coincideGhost(codigo) {
+    return codigo && codigo.indexOf(unidad + '_') === 0 && codigo.indexOf('_' + subtipo + '_') > 0;
+  }
 
   function activarGhost(src) {
     ghostEl.src = src;
@@ -1322,9 +1326,8 @@ function cargarGhostFoto(tipo, subtipo) {
   // Buscar en IndexedDB el thumbnail más reciente que coincida
   if (!db) return;
   obtenerTodosDB('fotos').then(function(fotos) {
-    // Buscar la foto más reciente cuyo código empiece con el patrón
     var matches = fotos.filter(function(f) {
-      return f.codigo && f.codigo.indexOf(patronBusqueda) === 0;
+      return coincideGhost(f.codigo);
     }).sort(function(a, b) { return (b.fecha || 0) - (a.fecha || 0); });
 
     if (matches.length > 0 && matches[0].data) {
@@ -1333,21 +1336,24 @@ function cargarGhostFoto(tipo, subtipo) {
       // Buscar en subidas_pendientes
       obtenerTodosDB('subidas_pendientes').then(function(pendientes) {
         var matchesPend = pendientes.filter(function(f) {
-          return f.codigo && f.codigo.indexOf(patronBusqueda) === 0;
+          return coincideGhost(f.codigo);
         }).sort(function(a, b) { return (b.fecha || 0) - (a.fecha || 0); });
 
         if (matchesPend.length > 0 && matchesPend[0].data) {
           activarGhost(matchesPend[0].data);
         } else {
-          // Buscar en fotos precargadas offline
-          buscarGhostEnPrecargadas(unidad, subtipo, activarGhost);
+          // Buscar en fotos precargadas offline y, como último recurso,
+          // en los registros sincronizados (descarga de Cloudinary si hay red)
+          buscarGhostEnPrecargadas(unidad, subtipo, activarGhost, function() {
+            buscarGhostEnRegistros(unidad, subtipo, activarGhost);
+          });
         }
       });
     }
-  });
+  }).catch(function() {});
 }
 
-function buscarGhostEnPrecargadas(unidad, subtipo, callback) {
+function buscarGhostEnPrecargadas(unidad, subtipo, callback, onMiss) {
   if (!db) return;
   // El store 'fotos_precargadas' no tiene índice 'unidad', así que filtramos en memoria
   obtenerTodosDB('fotos_precargadas').then(function(fotos) {
@@ -1360,10 +1366,34 @@ function buscarGhostEnPrecargadas(unidad, subtipo, callback) {
 
     if (matches.length > 0 && matches[0].data) {
       callback(matches[0].data);
+    } else if (onMiss) {
+      onMiss();
     }
   }).catch(function(e) {
     console.warn('Error buscando ghost en precargadas:', e);
+    if (onMiss) onMiss();
   });
+}
+
+// Último recurso del ghost: buscar en los registros el waypoint más reciente
+// de la unidad (de cualquier tipo de visita) y cargar su foto desde cualquier
+// fuente, incluida Cloudinary si hay conexión.
+function buscarGhostEnRegistros(unidad, subtipo, callback) {
+  if (typeof registros === 'undefined' || !registros) return;
+  var candidatos = [];
+  registros.forEach(function(r) {
+    if (r.unidad !== unidad || !r.datos || !r.datos.fotosComp) return;
+    r.datos.fotosComp.forEach(function(fc) {
+      if ((fc.waypoint || '') === subtipo && fc.numero) {
+        candidatos.push({codigo: fc.numero, fecha: r.fecha || '', tipo: r.tipo});
+      }
+    });
+  });
+  if (candidatos.length === 0) return;
+  candidatos.sort(function(a, b) { return (b.fecha || '').localeCompare(a.fecha || ''); });
+  buscarFotoData(candidatos[0].codigo, candidatos[0].tipo, unidad).then(function(data) {
+    if (data) callback(data);
+  }).catch(function() {});
 }
 
 function toggleGhost() {
