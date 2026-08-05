@@ -1,5 +1,5 @@
 // RAPCA Campo — Service Worker v1.0
-const CACHE_NAME = 'rapca-v31';
+const CACHE_NAME = 'rapca-v32';
 const CDN_CACHE = 'rapca-cdn-v1';
 
 const APP_FILES = [
@@ -67,14 +67,26 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Cache-first para CDN
+  // Cache-first para CDN y teselas de mapa.
+  // Las teselas se piden de dos formas: como <img> normal (mapa general,
+  // respuesta "opaca") y en modo CORS (mini-mapa de la cámara, que necesita
+  // leer los píxeles). Una respuesta opaca cacheada NO sirve para una
+  // petición CORS: por eso las teselas se descargan siempre en modo CORS,
+  // válido para ambos consumidores, y las entradas opacas antiguas se
+  // sobrescriben cuando llega una petición CORS con conexión.
   if (url.origin !== location.origin) {
+    const esTesela = /tile\.openstreetmap\.org|opentopomap\.org|www\.ign\.es\/wmts/.test(url.href);
     e.respondWith(
-      caches.match(e.request).then((cached) => cached || fetch(e.request).then((resp) => {
-        const clone = resp.clone();
-        caches.open(CDN_CACHE).then((c) => c.put(e.request, clone));
-        return resp;
-      }))
+      caches.match(e.request).then((cached) => {
+        const opacaParaCors = cached && esTesela && e.request.mode === 'cors' && cached.type === 'opaque';
+        if (cached && !opacaParaCors) return cached;
+        const req = esTesela ? new Request(url.href, {mode: 'cors'}) : e.request;
+        return fetch(req).then((resp) => {
+          const clone = resp.clone();
+          caches.open(CDN_CACHE).then((c) => c.put(e.request, clone));
+          return resp;
+        }).catch(() => cached); // sin red: una respuesta opaca es mejor que nada
+      })
     );
     return;
   }

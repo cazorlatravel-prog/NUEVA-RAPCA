@@ -95,6 +95,8 @@ function precargaSeleccionarZona(zona) {
 
   if (!zona) {
     divUnidades.style.display = 'none';
+    var dm = document.getElementById('precarga-mapas');
+    if (dm) dm.style.display = 'none';
     return;
   }
 
@@ -138,6 +140,9 @@ function precargaSeleccionarZona(zona) {
   lista.insertBefore(btnTodo, lista.firstChild);
 
   divUnidades.style.display = 'block';
+  var divMapas = document.getElementById('precarga-mapas');
+  if (divMapas) divMapas.style.display = 'block';
+  actualizarEstimacionMapas();
 }
 
 function precargaListarFotos(zona) {
@@ -150,8 +155,10 @@ function precargaListarFotos(zona) {
   if (unidadesSeleccionadas.length === 0) {
     document.getElementById('precarga-fotos-info').style.display = 'none';
     precargaFotosListadas = [];
+    actualizarEstimacionMapas();
     return;
   }
+  actualizarEstimacionMapas();
 
   // Buscar fotos en registros locales
   var fotosEncontradas = [];
@@ -388,3 +395,199 @@ function mostrarGaleriaPrecarga(fotos) {
   });
 }
 
+// ============================================================
+// CARTOGRAFÍA OFFLINE — precarga de teselas de mapa por zona
+// El Service Worker cachea toda petición de tesela (cache-first para
+// orígenes externos): basta con pedirlas una vez con conexión para que
+// el mapa y el mini-mapa de las fotos funcionen luego sin cobertura.
+// ============================================================
+
+var PRECARGA_CAPAS = {
+  osm: {
+    nombre: 'Mapa base',
+    // Réplica de la elección de subdominio de Leaflet: (x+y) % 3 → a/b/c
+    url: function(z, x, y) {
+      var s = 'abc'[Math.abs(x + y) % 3];
+      return 'https://' + s + '.tile.openstreetmap.org/' + z + '/' + x + '/' + y + '.png';
+    }
+  },
+  topo: {
+    nombre: 'Topográfico IGN',
+    url: function(z, x, y) {
+      return 'https://www.ign.es/wmts/mapa-raster?layer=MTN&style=default&tilematrixset=GoogleMapsCompatible&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/jpeg&TileMatrix=' + z + '&TileCol=' + x + '&TileRow=' + y;
+    }
+  },
+  orto: {
+    nombre: 'Ortofoto PNOA',
+    url: function(z, x, y) {
+      return 'https://www.ign.es/wmts/pnoa-ma?layer=OI.OrthoimageCoverage&style=default&tilematrixset=GoogleMapsCompatible&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/jpeg&TileMatrix=' + z + '&TileCol=' + x + '&TileRow=' + y;
+    }
+  }
+};
+
+function _tileXY(lat, lon, z) {
+  var n = Math.pow(2, z);
+  var x = Math.floor((lon + 180) / 360 * n);
+  var latRad = lat * Math.PI / 180;
+  var y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+  return {x: x, y: y};
+}
+
+// Puntos (lat/lon) conocidos de las unidades seleccionadas: registros,
+// fotos comparativas, infraestructuras y waypoints persistentes
+function precargaPuntosSeleccionados() {
+  var btns = document.getElementById('precarga-unidades-lista');
+  var unidades = [];
+  if (btns) {
+    btns.querySelectorAll('button[data-unidad]').forEach(function(b) {
+      if (b.dataset.selected === 'true') unidades.push(b.dataset.unidad);
+    });
+  }
+  var puntos = [];
+  function add(lat, lon) {
+    if (typeof lat === 'number' && typeof lon === 'number' && lat && lon) puntos.push({lat: lat, lon: lon});
+  }
+  misRegistros().forEach(function(r) {
+    if (unidades.indexOf(r.unidad) < 0) return;
+    add(r.lat, r.lon);
+    if (r.datos && r.datos.fotosComp) {
+      r.datos.fotosComp.forEach(function(fc) { add(fc.lat, fc.lon); });
+    }
+  });
+  (infraestructuras || []).forEach(function(inf) {
+    if (unidades.indexOf(inf.idUnidad) >= 0) add(parseFloat(inf.lat), parseFloat(inf.lon));
+  });
+  if (!db) return Promise.resolve({unidades: unidades, puntos: puntos});
+  return obtenerTodosDB('waypoints_comp').then(function(wps) {
+    (wps || []).forEach(function(w) {
+      if (unidades.indexOf(w.unidad) >= 0) add(w.lat, w.lon);
+    });
+    return {unidades: unidades, puntos: puntos};
+  }).catch(function() { return {unidades: unidades, puntos: puntos}; });
+}
+
+// URLs de teselas alrededor de los puntos: zooms 12-16 (+ zoom del
+// mini-mapa configurado) con radio creciente por zoom
+function _urlsTilesParaPuntos(puntos, capas) {
+  var cfg = typeof obtenerConfigWatermark === 'function' ? obtenerConfigWatermark() : {escalaMiniMapa: 14};
+  var zooms = [12, 13, 14, 15, 16];
+  var zMini = parseInt(cfg.escalaMiniMapa) || 14;
+  if (zooms.indexOf(zMini) < 0) zooms.push(zMini);
+  var radios = {12: 1, 13: 1, 14: 1, 15: 2, 16: 2, 17: 2, 18: 2};
+
+  var urls = {};
+  puntos.forEach(function(p) {
+    zooms.forEach(function(z) {
+      var c = _tileXY(p.lat, p.lon, z);
+      var r = radios[z] || 1;
+      for (var dx = -r; dx <= r; dx++) {
+        for (var dy = -r; dy <= r; dy++) {
+          capas.forEach(function(capa) {
+            urls[PRECARGA_CAPAS[capa].url(z, c.x + dx, c.y + dy)] = true;
+          });
+        }
+      }
+    });
+  });
+  return Object.keys(urls);
+}
+
+function _capasSeleccionadas() {
+  var capas = [];
+  if ((document.getElementById('pc-capa-osm') || {}).checked) capas.push('osm');
+  if ((document.getElementById('pc-capa-topo') || {}).checked) capas.push('topo');
+  if ((document.getElementById('pc-capa-orto') || {}).checked) capas.push('orto');
+  return capas;
+}
+
+function actualizarEstimacionMapas() {
+  var info = document.getElementById('precarga-mapas-info');
+  var btn = document.getElementById('precarga-btn-mapas');
+  if (!info) return;
+  precargaPuntosSeleccionados().then(function(res) {
+    if (res.unidades.length === 0) {
+      info.textContent = 'Selecciona unidades para calcular la descarga';
+      if (btn) btn.disabled = true;
+      return;
+    }
+    if (res.puntos.length === 0) {
+      info.textContent = 'Las unidades seleccionadas no tienen coordenadas conocidas (visítalas una vez con GPS)';
+      if (btn) btn.disabled = true;
+      return;
+    }
+    var capas = _capasSeleccionadas();
+    if (capas.length === 0) {
+      info.textContent = 'Marca al menos una capa de mapa';
+      if (btn) btn.disabled = true;
+      return;
+    }
+    var urls = _urlsTilesParaPuntos(res.puntos, capas);
+    var mb = (urls.length * 18 / 1024).toFixed(1); // ~18 KB por tesela
+    info.textContent = res.puntos.length + ' puntos · ' + urls.length + ' teselas (~' + mb + ' MB)';
+    if (btn) btn.disabled = false;
+  });
+}
+
+var precargaMapasDescargando = false;
+function precargaDescargarMapas() {
+  if (precargaMapasDescargando) return;
+  if (!navigator.onLine) { showToast('Necesitas conexión para descargar los mapas', 'error'); return; }
+  precargaPuntosSeleccionados().then(function(res) {
+    if (res.puntos.length === 0) { showToast('Sin coordenadas para estas unidades', 'error'); return; }
+    var capas = _capasSeleccionadas();
+    if (capas.length === 0) { showToast('Marca al menos una capa de mapa', 'error'); return; }
+    var urls = _urlsTilesParaPuntos(res.puntos, capas);
+    var MAX_TILES = 4000;
+    if (urls.length > MAX_TILES) {
+      urls = urls.slice(0, MAX_TILES);
+      showToast('Zona muy grande: se descargan las primeras ' + MAX_TILES + ' teselas', 'info');
+    }
+
+    precargaMapasDescargando = true;
+    var btn = document.getElementById('precarga-btn-mapas');
+    if (btn) btn.disabled = true;
+    var prog = document.getElementById('precarga-progreso');
+    var barra = document.getElementById('precarga-barra');
+    var texto = document.getElementById('precarga-progreso-texto');
+    if (prog) prog.style.display = 'block';
+
+    var total = urls.length, hechas = 0, exitos = 0, fallos = 0;
+    var CONCURRENCIA = 6;
+    var idx = 0;
+
+    function actualizar() {
+      if (barra) barra.style.width = Math.round(hechas / total * 100) + '%';
+      if (texto) texto.textContent = 'Mapas: ' + hechas + ' / ' + total + ' teselas' + (fallos ? ' (' + fallos + ' fallos)' : '');
+    }
+
+    function siguiente() {
+      if (idx >= total) return Promise.resolve();
+      var url = urls[idx++];
+      // La petición pasa por el Service Worker, que la guarda en caché:
+      // esa misma URL se servirá offline en el mapa y el mini-mapa
+      return fetch(url, {mode: 'cors', cache: 'reload'}).then(function(resp) {
+        if (resp && resp.ok) exitos++; else fallos++;
+      }).catch(function() { fallos++; }).then(function() {
+        hechas++;
+        if (hechas % 10 === 0 || hechas === total) actualizar();
+        return siguiente();
+      });
+    }
+
+    actualizar();
+    var trabajadores = [];
+    for (var i = 0; i < CONCURRENCIA; i++) trabajadores.push(siguiente());
+    Promise.all(trabajadores).then(function() {
+      precargaMapasDescargando = false;
+      if (btn) btn.disabled = false;
+      if (prog) setTimeout(function() { prog.style.display = 'none'; }, 2500);
+      if (fallos === 0) {
+        showToast('Cartografía descargada: ' + exitos + ' teselas listas para usar sin cobertura', 'success', 5000);
+      } else if (exitos > 0) {
+        showToast('Cartografía: ' + exitos + ' teselas descargadas, ' + fallos + ' fallaron (reintenta con mejor conexión)', 'info', 5000);
+      } else {
+        showToast('No se pudo descargar la cartografía. Comprueba la conexión.', 'error');
+      }
+    });
+  });
+}

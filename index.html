@@ -855,7 +855,7 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     <h1>Precarga Offline</h1>
   </div>
   <div style="padding:12px;overflow-y:auto;flex:1">
-    <p style="color:#666;font-size:13px;margin:0 0 12px">Descarga las fotos de visitas anteriores para poder usarlas sin cobertura (ghosting y consulta).</p>
+    <p style="color:#666;font-size:13px;margin:0 0 12px">Descarga las fotos de visitas anteriores y la cartografía de la zona para poder usarlas sin cobertura.</p>
 
     <div id="precarga-estado" style="background:#e3f2fd;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;display:none">
       <strong>Fotos precargadas:</strong> <span id="precarga-count">0</span>
@@ -884,6 +884,18 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
         <button class="btn btn-primary" onclick="precargaDescargarTodo()" id="precarga-btn-descargar" style="flex:1">Descargar todas</button>
         <button class="btn btn-secondary" onclick="precargaDescargarComp()" id="precarga-btn-comp" style="flex:1">Solo comparativas</button>
       </div>
+    </div>
+
+    <div id="precarga-mapas" style="display:none;margin-top:16px">
+      <h3 style="margin:0 0 6px;font-size:15px">🗺️ Cartografía offline</h3>
+      <p style="color:#666;font-size:12px;margin:0 0 8px">Descarga los mapas del entorno de las unidades seleccionadas: mapa general y mini-mapa de las fotos funcionarán sin cobertura.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:8px;font-size:13px">
+        <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="pc-capa-osm" checked onchange="actualizarEstimacionMapas()" style="width:18px;height:18px">Mapa base</label>
+        <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="pc-capa-topo" checked onchange="actualizarEstimacionMapas()" style="width:18px;height:18px">Topográfico IGN</label>
+        <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="pc-capa-orto" onchange="actualizarEstimacionMapas()" style="width:18px;height:18px">Ortofoto PNOA</label>
+      </div>
+      <div id="precarga-mapas-info" style="background:#e8f5e9;border-radius:8px;padding:8px 12px;font-size:12px;color:#333;margin-bottom:8px">Selecciona unidades para calcular la descarga</div>
+      <button class="btn btn-primary" style="width:100%" id="precarga-btn-mapas" onclick="precargaDescargarMapas()">🗺️ Descargar mapas de la zona</button>
     </div>
 
     <div id="precarga-progreso" style="display:none;margin-top:12px">

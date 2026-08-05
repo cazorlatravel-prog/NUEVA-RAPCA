@@ -72,6 +72,8 @@ function ok(nombre, cond, detalle) {
   });
   // Cloudinary no está disponible en el entorno de test: fallar rápido
   await context.route(/res\.cloudinary\.com/, (route) => route.abort());
+  // Backend PHP tampoco: abortar rápido en vez de dejar peticiones colgadas
+  await context.route(/rapca\.app/, (route) => route.abort());
   // Tiles de OSM/IGN: responder con imagen vacía para no depender de la red
   const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
   await context.route(/tile\.openstreetmap\.org|ign\.es|opentopomap\.org/, (route) =>
@@ -727,6 +729,44 @@ function ok(nombre, cond, detalle) {
   await page.waitForTimeout(600);
   const paginaTrasAtras = await page.evaluate(() => document.querySelector('.page.active').id);
   ok('Atrás desde galería lleva al menú (no al Panel)', paginaTrasAtras === 'menu-page', paginaTrasAtras);
+
+  console.log('\n== 8e. Cartografía offline: precarga de teselas por zona ==');
+  await page.evaluate(() => irPagina('precarga'));
+  await page.waitForFunction(() => document.getElementById('precarga-zona').options.length > 1, { timeout: 15000 }).catch(() => {});
+  const zonaPre = await page.evaluate(() => {
+    var sel = document.getElementById('precarga-zona');
+    var opts = Array.from(sel.options).map(o => o.value).filter(Boolean);
+    if (opts.length === 0) return null;
+    sel.value = opts[0];
+    precargaSeleccionarZona(opts[0]);
+    return opts[0];
+  });
+  ok('La página de precarga lista zonas con registros', !!zonaPre, String(zonaPre));
+  // Seleccionar toda la zona
+  await page.evaluate(() => {
+    var btns = document.querySelectorAll('#precarga-unidades-lista button[data-unidad]');
+    btns.forEach(b => { b.dataset.selected = 'true'; });
+    precargaListarFotos(document.getElementById('precarga-zona').value);
+  });
+  await page.waitForTimeout(800);
+  const estimacion = await page.evaluate(() => ({
+    visible: document.getElementById('precarga-mapas').style.display === 'block',
+    info: document.getElementById('precarga-mapas-info').textContent
+  }));
+  ok('Sección de cartografía visible con estimación de teselas',
+    estimacion.visible && /\d+ teselas/.test(estimacion.info), JSON.stringify(estimacion));
+
+  const tilesFallidas = [];
+  const onFail = (req) => { if (/openstreetmap|ign\.es/.test(req.url())) tilesFallidas.push(req.url().slice(0, 110) + ' :: ' + ((req.failure() || {}).errorText || '?')); };
+  page.on('requestfailed', onFail);
+  await page.evaluate(() => precargaDescargarMapas());
+  await page.waitForFunction(() => precargaMapasDescargando === false, { timeout: 60000 });
+  page.off('requestfailed', onFail);
+  if (tilesFallidas.length) console.log('TILES FALLIDAS (' + tilesFallidas.length + '):', tilesFallidas.slice(0, 6));
+  const resultadoMapas = await page.evaluate(() => document.getElementById('precarga-progreso-texto').textContent);
+  ok('Descarga de cartografía completada sin fallos',
+    /Mapas: (\d+) \/ \1/.test(resultadoMapas) && resultadoMapas.indexOf('fallos') < 0, resultadoMapas);
+  await page.evaluate(() => irPagina('menu'));
 
   console.log('\n== 9. Informe de zona e infraestructuras (sin errores) ==');
   const informeZonaOK = await page.evaluate(() => {
