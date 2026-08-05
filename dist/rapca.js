@@ -332,6 +332,12 @@ window.addEventListener('offline', actualizarEstado);
 function irPagina(id) {
   vibrar();
   if (typeof detenerAutoGuardado === 'function') detenerAutoGuardado();
+  // Si el diálogo continuar/descartar borrador quedó abierto, cerrarlo al
+  // navegar (y liberar el guard para no bloquear borradores de otras páginas)
+  if (window._dialogoBorradorPendiente) {
+    window._dialogoBorradorPendiente = false;
+    if (typeof cerrarModal === 'function') cerrarModal();
+  }
   // Detener GPS del mapa al salir de la página de mapa
   if (id !== 'mapa' && typeof detenerGPSMapa === 'function') detenerGPSMapa();
   // Limpiar editandoRegistro si NO viene de editarRegistro()
@@ -1016,6 +1022,9 @@ function guardarBorrador(tipo) {
   // contaminaría la próxima visita nueva con los datos (y fotos) del registro,
   // y al borrar ese duplicado se podrían eliminar fotos del registro original
   if (editandoRegistro) return;
+  // Con el diálogo continuar/descartar abierto, el formulario está vacío:
+  // guardarlo pisaría el borrador que precisamente se está preguntando
+  if (window._dialogoBorradorPendiente) return;
   var prefix = tipo === 'EI' ? 'ev' : tipo.toLowerCase();
   var data = {};
 
@@ -1304,10 +1313,59 @@ function initFormEI() {
       actualizarTransectoTabs();
     }
   } else {
-    // Nueva visita: cargar borrador si existe
-    cargarBorrador('EI');
+    // Nueva visita: si hay una evaluación a medias, PREGUNTAR en vez de
+    // restaurarla en silencio (parecía que se abría "la anterior")
+    var borrEI = safeParse('rapca_borrador_ei', null);
+    if (borrEI && _borradorEITieneDatos(borrEI)) {
+      mostrarDialogoBorradorEI(borrEI);
+      return; // el auto-guardado arranca al elegir en el diálogo
+    }
   }
   iniciarAutoGuardado('EI');
+}
+
+// ¿El borrador EI tiene contenido real que merezca retomarse?
+function _borradorEITieneDatos(b) {
+  if (!b) return false;
+  if (b.unidad) return true;
+  if (b.transectosDatos) {
+    for (var t in b.transectosDatos) {
+      if (b.transectosDatos[t] && !(typeof esTransectoVacio === 'function' && esTransectoVacio(b.transectosDatos[t]))) return true;
+    }
+  }
+  if (b.fotosPagina && Object.keys(b.fotosPagina).length) return true;
+  return false;
+}
+
+function mostrarDialogoBorradorEI(borr) {
+  // Mientras el diálogo esté abierto, guardarBorrador no debe pisar el
+  // borrador con el formulario vacío (auto-guardado, beforeunload...)
+  window._dialogoBorradorPendiente = true;
+  var unidad = borr.unidad || 'sin unidad';
+  var fecha = borr.fecha || '';
+  var html = '<h2>Evaluación a medias</h2>' +
+    '<p style="margin:12px 0">Hay una Evaluación Intensa sin terminar de <strong>' + escapeHtml(unidad) + '</strong>' +
+    (fecha ? ' <span style="color:#888">(' + escapeHtml(fecha) + ')</span>' : '') + '.<br>¿Qué quieres hacer?</p>' +
+    '<div style="display:flex;flex-direction:column;gap:10px">' +
+    '<button class="btn btn-primary" style="width:100%;padding:12px" onclick="continuarBorradorEI()">▶️ Continuar donde lo dejé</button>' +
+    '<button class="btn btn-outline" style="width:100%;padding:12px;color:#e74c3c;border-color:#e74c3c" onclick="descartarBorradorEI()">🆕 Empezar una nueva (descartar borrador)</button>' +
+    '</div>';
+  abrirModal(html);
+}
+
+function continuarBorradorEI() {
+  window._dialogoBorradorPendiente = false;
+  cerrarModal();
+  cargarBorrador('EI');
+  iniciarAutoGuardado('EI');
+}
+
+function descartarBorradorEI() {
+  window._dialogoBorradorPendiente = false;
+  cerrarModal();
+  limpiarBorrador('EI');
+  iniciarAutoGuardado('EI');
+  showToast('Borrador descartado. Evaluación nueva en blanco.', 'info');
 }
 
 // ============================================================
@@ -1932,6 +1990,9 @@ function restaurarFotosEI(datos) {
 
 function guardarEI() {
   if (!sesion) { showToast('Sesión no válida. Vuelve a iniciar sesión.', 'error'); return; }
+  // Si el usuario cerró el diálogo de borrador sin elegir y se puso a
+  // trabajar, al guardar la elección queda implícita: liberar el flag
+  window._dialogoBorradorPendiente = false;
   var fecha = document.getElementById('ev-fecha').value;
   var unidad = document.getElementById('ev-unidad').value.trim();
   var zona = document.getElementById('ev-zona').value;

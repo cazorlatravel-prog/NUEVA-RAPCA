@@ -332,6 +332,12 @@ window.addEventListener('offline', actualizarEstado);
 function irPagina(id) {
   vibrar();
   if (typeof detenerAutoGuardado === 'function') detenerAutoGuardado();
+  // Si el diálogo continuar/descartar borrador quedó abierto, cerrarlo al
+  // navegar (y liberar el guard para no bloquear borradores de otras páginas)
+  if (window._dialogoBorradorPendiente) {
+    window._dialogoBorradorPendiente = false;
+    if (typeof cerrarModal === 'function') cerrarModal();
+  }
   // Detener GPS del mapa al salir de la página de mapa
   if (id !== 'mapa' && typeof detenerGPSMapa === 'function') detenerGPSMapa();
   // Limpiar editandoRegistro si NO viene de editarRegistro()

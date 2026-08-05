@@ -295,6 +295,48 @@ function ok(nombre, cond, detalle) {
   ok('Al volver a T1 se restauran sus observaciones', t1Restaurado.obs === 'Observación de T1');
   ok('Al volver a T1 se restaura su planta', t1Restaurado.planta === 'Stipa tenacissima');
 
+  console.log('\n== 3b. Al reabrir EI pregunta: continuar o empezar nueva ==');
+  await page.evaluate(() => irPagina('menu'));
+  await page.evaluate(() => irPagina('ei'));
+  await page.waitForTimeout(500);
+  const dialogo = await page.evaluate(() => ({
+    abierto: document.getElementById('modal-overlay').classList.contains('open'),
+    texto: (document.getElementById('modal-box') || document.getElementById('modal-overlay')).textContent.slice(0, 200)
+  }));
+  ok('Aparece el diálogo de evaluación a medias', dialogo.abierto && dialogo.texto.indexOf('TEST_U2') >= 0, JSON.stringify(dialogo));
+
+  // Elegir CONTINUAR: restaura la unidad y los transectos del borrador
+  await page.evaluate(() => continuarBorradorEI());
+  await page.waitForTimeout(500);
+  const trasContinuar = await page.evaluate(() => ({
+    unidad: document.getElementById('ev-unidad').value,
+    modal: document.getElementById('modal-overlay').classList.contains('open')
+  }));
+  ok('Continuar restaura la evaluación a medias', trasContinuar.unidad === 'TEST_U2' && !trasContinuar.modal, JSON.stringify(trasContinuar));
+
+  // Reabrir y elegir EMPEZAR NUEVA: formulario en blanco y borrador eliminado
+  await page.evaluate(() => irPagina('menu'));
+  await page.evaluate(() => irPagina('ei'));
+  await page.waitForTimeout(500);
+  const dialogo2 = await page.evaluate(() => document.getElementById('modal-overlay').classList.contains('open'));
+  ok('El diálogo vuelve a aparecer mientras el borrador siga vivo', dialogo2 === true);
+  await page.evaluate(() => descartarBorradorEI());
+  await page.waitForTimeout(400);
+  const trasDescartar = await page.evaluate(() => ({
+    unidad: document.getElementById('ev-unidad').value,
+    borrador: localStorage.getItem('rapca_borrador_ei')
+  }));
+  ok('Empezar nueva deja el formulario en blanco y borra el borrador',
+    trasDescartar.unidad === '' && trasDescartar.borrador === null, JSON.stringify(trasDescartar));
+
+  // Sin borrador ya no pregunta
+  await page.evaluate(() => irPagina('menu'));
+  await page.evaluate(() => irPagina('ei'));
+  await page.waitForTimeout(500);
+  const dialogo3 = await page.evaluate(() => document.getElementById('modal-overlay').classList.contains('open'));
+  ok('Sin evaluación a medias no aparece el diálogo', dialogo3 === false);
+  await page.evaluate(() => irPagina('menu'));
+
   console.log('\n== 4. Informe PDF de la ficha EI (transectos incluidos) ==');
   const eiId = await page.evaluate(() => registros.find(x => x.tipo === 'EI').id);
   const [popup] = await Promise.all([
