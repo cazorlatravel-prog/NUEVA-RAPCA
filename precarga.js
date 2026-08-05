@@ -333,7 +333,10 @@ async function precargaDescargar(listaFotos) {
 }
 
 function limpiarPrecarga() {
-  if (!confirm('¿Borrar todas las fotos precargadas?')) return;
+  confirmarAccion('Borrar precarga', '¿Borrar todas las fotos precargadas?', '🗑️ Borrar', function() { _limpiarPrecargaConfirmado(); });
+}
+
+function _limpiarPrecargaConfirmado() {
   if (!db) return;
   var tx = db.transaction('fotos_precargadas', 'readwrite');
   tx.objectStore('fotos_precargadas').clear();

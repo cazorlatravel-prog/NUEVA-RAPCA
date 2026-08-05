@@ -659,6 +659,9 @@ function iniciarOverlayCamara() {
   // GPS para overlay
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(function(pos) {
+      // Si el usuario canceló la cámara antes de llegar el fix (GPS lento en
+      // el monte), no crear el mini-mapa sobre un modal ya cerrado
+      if (!camaraStream) return;
       gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude, accuracy: pos.coords.accuracy, ts: pos.timestamp || Date.now()};
 
       // Mostrar coordenadas según config
@@ -1304,6 +1307,10 @@ function _postprocesarFoto(ctx, w, h) {
 // el sello de la foto se dibuja en canvas y NO incluye este elemento.
 // ============================================================
 var camDistWatchId = null;
+// Token de generación: invalida búsquedas/watches en vuelo cuando se detiene
+// el indicador (la búsqueda en IndexedDB es async y el watch podía arrancar
+// DESPUÉS de cerrar la cámara, quedándose huérfano gastando batería)
+var camDistGen = 0;
 
 function _distanciaMetros(lat1, lon1, lat2, lon2) {
   var R = 6371000;
@@ -1317,6 +1324,7 @@ function _distanciaMetros(lat1, lon1, lat2, lon2) {
 
 function iniciarIndicadorDistancia(tipo, subtipo) {
   detenerIndicadorDistancia();
+  var gen = camDistGen;
   var el = document.getElementById('cam-distancia');
   if (!el) return;
   // Solo para fotos comparativas W1/W2
@@ -1327,6 +1335,8 @@ function iniciarIndicadorDistancia(tipo, subtipo) {
 
   // Buscar el waypoint de referencia: el más reciente de esa unidad+waypoint
   obtenerTodosDB('waypoints_comp').then(function(wps) {
+    // Si el indicador se detuvo mientras resolvía IndexedDB, abortar
+    if (gen !== camDistGen) return;
     var candidatos = (wps || []).filter(function(w) {
       return w.unidad === unidad && w.waypoint === subtipo && w.lat && w.lon;
     }).sort(function(a, b) { return String(b.fecha || '').localeCompare(String(a.fecha || '')); });
@@ -1369,6 +1379,7 @@ function iniciarIndicadorDistancia(tipo, subtipo) {
     }
 
     camDistWatchId = navigator.geolocation.watchPosition(function(pos) {
+      if (gen !== camDistGen) return;
       gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude,
                 accuracy: pos.coords.accuracy, ts: pos.timestamp || Date.now()};
       pintar(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
@@ -1377,6 +1388,7 @@ function iniciarIndicadorDistancia(tipo, subtipo) {
 }
 
 function detenerIndicadorDistancia() {
+  camDistGen++;
   if (camDistWatchId) {
     navigator.geolocation.clearWatch(camDistWatchId);
     camDistWatchId = null;

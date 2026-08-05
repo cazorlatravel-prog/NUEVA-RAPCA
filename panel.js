@@ -252,7 +252,14 @@ function eliminarRegistro(id) {
   // Verificar que el operador tiene acceso a este registro
   var r = misRegistros().find(function(r) { return r.id == id; });
   if (!r) { showToast('No tienes acceso a este registro', 'error'); return; }
-  if (!confirm('¿Eliminar registro?')) return;
+  confirmarAccion('Eliminar registro',
+    'Vas a eliminar la ficha <strong>' + escapeHtml(r.tipo + ' ' + r.unidad) + '</strong> (' + escapeHtml(r.fecha) + ') y sus fotos.<br>Esta acción no se puede deshacer.',
+    '🗑️ Eliminar', function() { _eliminarRegistroConfirmado(id); });
+}
+
+function _eliminarRegistroConfirmado(id) {
+  var r = misRegistros().find(function(r) { return r.id == id; });
+  if (!r) return;
 
   // Recopilar fotos del registro para eliminarlas también
   var codigosFotos = [];
@@ -299,7 +306,12 @@ function eliminarRegistroServidor(id) {
 }
 
 function reiniciarContadoresFotos() {
-  if (!confirm('¿Reiniciar los contadores de numeración de fotos?\n\nLas fotos nuevas empezarán a numerarse desde 1. Usa esto solo si quieres empezar de nuevo.')) return;
+  confirmarAccion('Reiniciar contadores',
+    'Las fotos nuevas empezarán a numerarse desde 1.<br>Usa esto solo si quieres empezar de nuevo.',
+    '🔢 Reiniciar', function() { _reiniciarContadoresConfirmado(); });
+}
+
+function _reiniciarContadoresConfirmado() {
   localStorage.removeItem('rapca_contadores_VP');
   localStorage.removeItem('rapca_contadores_EL');
   localStorage.removeItem('rapca_contadores_EI');
@@ -1049,7 +1061,10 @@ function editarInfra(idx) {
 }
 
 function eliminarInfra(idx) {
-  if (!confirm('¿Eliminar infraestructura?')) return;
+  confirmarAccion('Eliminar infraestructura', '¿Eliminar esta infraestructura?', '🗑️ Eliminar', function() { _eliminarInfraConfirmado(idx); });
+}
+
+function _eliminarInfraConfirmado(idx) {
   infraestructuras.splice(idx, 1);
   guardarInfras();
   renderInfras();

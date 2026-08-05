@@ -410,7 +410,7 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 .map-search input{width:100%;padding:8px 12px;border:2px solid var(--c-map);border-radius:20px;font-size:14px;box-shadow:var(--shadow);background:#fff;box-sizing:border-box}
 
 /* === MODAL GENÉRICO === */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5000;display:none;align-items:center;justify-content:center}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9500;display:none;align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
 .modal-box{background:#fff;border-radius:16px;padding:20px;width:90%;max-width:400px;max-height:80vh;overflow-y:auto}
 .modal-box h2{font-size:18px;margin-bottom:12px}
@@ -985,7 +985,7 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 </div>
 
 <!-- ==================== MODAL GENÉRICO ==================== -->
-<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)cerrarModal()">
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)cerrarModalSeguro()">
   <div class="modal-box" id="modal-box"></div>
 </div>
 

@@ -546,6 +546,9 @@ function sincronizarAuto() {
 // --- Subida automática de fotos en segundo plano (sin bloquear UI con toast excesivos) ---
 var subiendoFotosAuto = false;
 var subiendoFotosAutoTimer = null;
+// Token de pasada: si el safety-timeout libera el flag y arranca otra pasada,
+// la anterior debe abortar (antes ambas subían las mismas fotos duplicadas)
+var _subirFotosGen = 0;
 async function subirFotosPendientesAuto() {
   if (!db || subiendoFotosAuto) return;
   // Sin token válido no hay nada que subir (evita TypeError y prompts espontáneos)
@@ -553,6 +556,7 @@ async function subirFotosPendientesAuto() {
   // Poner el flag ANTES de cualquier await: dos eventos 'online' casi simultáneos
   // pasaban ambos el guard y subían la misma lista de fotos por duplicado
   subiendoFotosAuto = true;
+  var gen = ++_subirFotosGen;
   try {
     var pendientes = await obtenerTodosDB('subidas_pendientes');
     if (pendientes.length === 0) return;
@@ -562,7 +566,10 @@ async function subirFotosPendientesAuto() {
       subiendoFotosAuto = false;
       subiendoFotosAutoTimer = null;
     }, Math.max(120000, pendientes.length * 30000)); // mín 2min, o 30s por foto
+    var yaReautenticadoAuto = false;
     for (var i = 0; i < pendientes.length; i++) {
+      // Otra pasada tomó el relevo tras el safety-timeout: abortar esta
+      if (gen !== _subirFotosGen) break;
       var foto = pendientes[i];
       try {
         var resp = await fetch(API_BASE + 'upload.php', {
@@ -576,6 +583,10 @@ async function subirFotosPendientesAuto() {
             await eliminarDeDB('subidas_pendientes', foto.codigo);
           }
         } else if (resp.status === 401) {
+          // Reautenticar UNA sola vez: sin guard, un 401 persistente
+          // encadenaba prompts de contraseña en bucle infinito
+          if (yaReautenticadoAuto) break;
+          yaReautenticadoAuto = true;
           var reauth = await reautenticar();
           if (reauth) { i--; continue; }
           break;
@@ -585,8 +596,12 @@ async function subirFotosPendientesAuto() {
     actualizarContadorFotos();
     actualizarColaSubida();
   } finally {
-    subiendoFotosAuto = false;
-    if (subiendoFotosAutoTimer) { clearTimeout(subiendoFotosAutoTimer); subiendoFotosAutoTimer = null; }
+    // Solo liberar si esta pasada sigue siendo la vigente (el safety-timeout
+    // pudo haberla relevado y otra pasada estar en curso)
+    if (gen === _subirFotosGen) {
+      subiendoFotosAuto = false;
+      if (subiendoFotosAutoTimer) { clearTimeout(subiendoFotosAutoTimer); subiendoFotosAutoTimer = null; }
+    }
   }
 }
 

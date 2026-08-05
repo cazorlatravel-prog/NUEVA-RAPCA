@@ -556,7 +556,9 @@ function medirClick(e) {
 }
 
 function agregarWaypoint() {
-  if (!gpsPos) { showToast('Esperando GPS...', 'error'); return; }
+  var fresca = gpsPos && gpsPos.ts && (Date.now() - gpsPos.ts) < 20000 &&
+               (typeof gpsPos.accuracy !== 'number' || gpsPos.accuracy <= 100);
+  if (!fresca) { showToast('Esperando posición GPS precisa...', 'error'); return; }
   var name = prompt('Nombre del waypoint:');
   if (!name) return;
   L.marker([gpsPos.lat, gpsPos.lon]).addTo(mapa).bindPopup('<strong>' + escapeHtml(name) + '</strong><br>' + formatCoordNW(gpsPos.lat, gpsPos.lon)).openPopup();
@@ -1168,7 +1170,8 @@ function capturarGPSConPrecision(callback) {
       lat: pos.coords.latitude,
       lon: pos.coords.longitude,
       alt: pos.coords.altitude,
-      accuracy: pos.coords.accuracy
+      accuracy: pos.coords.accuracy,
+      ts: pos.timestamp || Date.now()
     };
     gpsPos = data;
     callback(data);
@@ -1271,7 +1274,14 @@ function toggleWaypointsPanel() {
   var panel = document.getElementById('wp-panel');
   if (!panel) return;
   panel.classList.toggle('open');
-  if (panel.classList.contains('open')) cargarWaypointsPersistentes();
+  if (panel.classList.contains('open')) {
+    cargarWaypointsPersistentes();
+  } else {
+    // Al cerrar el panel se quita el filtro: dejar el mapa mostrando un
+    // subconjunto sin ninguna indicación visible confundía
+    wpFiltro = {unidad: '', anio: '', tipo: ''};
+    cargarWaypointsPersistentes();
+  }
 }
 
 // Rellena los selects de filtro y el resumen con los waypoints existentes
@@ -1301,6 +1311,11 @@ function actualizarPanelWaypoints(wps) {
     var a = String(w.fecha || '').slice(0, 4);
     if (a && /^\d{4}$/.test(a) && anios.indexOf(a) < 0) anios.push(a);
   });
+  // Si el valor filtrado ya no existe (p. ej. se borraron todos sus
+  // waypoints), resetear ese filtro: dejarlo activo pero invisible hacía
+  // desaparecer del mapa los waypoints restantes sin indicación
+  if (wpFiltro.unidad && unidades.indexOf(wpFiltro.unidad) < 0) wpFiltro.unidad = '';
+  if (wpFiltro.anio && anios.indexOf(wpFiltro.anio) < 0) wpFiltro.anio = '';
   poblar('wp-f-unidad', unidades.sort(), wpFiltro.unidad);
   poblar('wp-f-anio', anios.sort().reverse(), wpFiltro.anio);
   var selTipo = document.getElementById('wp-f-tipo');
@@ -1358,23 +1373,30 @@ function confirmarBorrarWaypointsFiltrados() {
 }
 
 function borrarWaypointPersistente(id) {
-  if (!confirm('¿Borrar este waypoint?')) return;
   if (!db) return;
-  eliminarDeDB('waypoints_comp', id).then(function() {
-    mapa.closePopup();
-    cargarWaypointsPersistentes();
-    showToast('Waypoint borrado', 'info');
-  }).catch(function(e) { showToast('Error al borrar: ' + e, 'error'); });
+  confirmarAccion('Borrar waypoint', '¿Borrar este waypoint?', '🗑️ Borrar', function() {
+    eliminarDeDB('waypoints_comp', id).then(function() {
+      mapa.closePopup();
+      cargarWaypointsPersistentes();
+      showToast('Waypoint borrado', 'info');
+    }).catch(function(e) { showToast('Error al borrar: ' + e, 'error'); });
+  });
 }
 
 function borrarTodosWaypointsPersistentes() {
-  if (!confirm('¿Borrar TODOS los waypoints persistentes? Esta acción no se puede deshacer.')) return;
+  if (!db) return;
+  confirmarAccion('Borrar TODOS los waypoints',
+    'Se borrarán <strong>todos</strong> los waypoints persistentes.<br>Esta acción no se puede deshacer.',
+    '🗑️ Borrar todos', function() { _borrarTodosWaypointsConfirmado(); });
+}
+
+function _borrarTodosWaypointsConfirmado() {
   if (!db) return;
   obtenerTodosDB('waypoints_comp').then(function(wps) {
     var promises = wps.map(function(wp) { return eliminarDeDB('waypoints_comp', wp.id); });
     return Promise.all(promises);
   }).then(function() {
-    capaWaypointsPersist.clearLayers();
+    cargarWaypointsPersistentes();
     showToast('Todos los waypoints borrados', 'info');
   }).catch(function(e) { showToast('Error: ' + e, 'error'); });
 }
@@ -1701,7 +1723,10 @@ function toggleInfraKMLLayer(visible) {
 }
 
 function eliminarInfraKML() {
-  if (!confirm('¿Borrar la capa de infraestructuras KML? Esta acción no se puede deshacer.')) return;
+  confirmarAccion('Borrar capa KML', '¿Borrar la capa de infraestructuras KML?<br>Esta acción no se puede deshacer.', '🗑️ Borrar', function() { _eliminarInfraKMLConfirmado(); });
+}
+
+function _eliminarInfraKMLConfirmado() {
   var nombre = localStorage.getItem('rapca_infra_kml_nombre');
   capaInfraKML.clearLayers();
   infraKMLFeatures = [];

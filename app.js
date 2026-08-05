@@ -548,6 +548,41 @@ function abrirModal(html) {
   document.getElementById('modal-overlay').classList.add('open');
 }
 
+// Confirmación destructiva con modal propio: el confirm() nativo se suprime
+// en algunas PWAs instaladas en Android (el botón parecía no hacer nada o,
+// peor, actuaba sin preguntar según la versión).
+var _accionConfirmarCb = null;
+function confirmarAccion(titulo, mensajeHtml, textoBoton, cb) {
+  _accionConfirmarCb = cb;
+  var html = '<div style="text-align:center;padding:8px 0">' +
+    '<div style="font-size:36px;margin-bottom:8px">⚠️</div>' +
+    '<h2 style="margin:0 0 10px">' + escapeHtml(titulo) + '</h2>' +
+    '<div style="margin:0 0 10px;font-size:14px;color:#444">' + mensajeHtml + '</div>' +
+    '</div>' +
+    '<div class="modal-actions">' +
+    '<button class="btn btn-outline" onclick="cerrarModal()">↩️ Cancelar</button>' +
+    '<button class="btn" style="background:#e74c3c;color:#fff" onclick="_ejecutarAccionConfirmada()">' + textoBoton + '</button>' +
+    '</div>';
+  abrirModal(html);
+}
+function _ejecutarAccionConfirmada() {
+  cerrarModal();
+  var cb = _accionConfirmarCb;
+  _accionConfirmarCb = null;
+  if (cb) cb();
+}
+
+// Cierre de modal "sin elegir": si el modal era el diálogo de borrador EI,
+// tratarlo como "continuar" (restaura el borrador, limpia el flag y arranca
+// el auto-guardado) en vez de dejar el flag pegado con el formulario vacío
+function cerrarModalSeguro() {
+  if (window._dialogoBorradorPendiente && typeof continuarBorradorEI === 'function') {
+    continuarBorradorEI();
+    return;
+  }
+  cerrarModal();
+}
+
 function cerrarModal() {
   document.getElementById('modal-overlay').classList.remove('open');
 }
@@ -673,11 +708,26 @@ var _ignorandoPopstate = false;
 window.addEventListener('popstate', function(e) {
   if (_ignorandoPopstate) { _ignorandoPopstate = false; return; }
 
+  // Cámara o preview abiertos: atrás los cierra (antes se abría el diálogo
+  // "¿salir del formulario?" INVISIBLE debajo, atrapando el historial)
+  var previewM = document.getElementById('preview-modal');
+  if (previewM && previewM.classList.contains('open')) {
+    pushHistoryState();
+    if (typeof repetirFoto === 'function') repetirFoto();
+    return;
+  }
+  var cameraM = document.getElementById('camera-modal');
+  if (cameraM && cameraM.classList.contains('open')) {
+    pushHistoryState();
+    if (typeof cerrarCamara === 'function') cerrarCamara();
+    return;
+  }
+
   // Si hay un modal abierto, cerrarlo en vez de salir
   var modal = document.getElementById('modal-overlay');
   if (modal && modal.classList.contains('open')) {
     pushHistoryState();
-    cerrarModal();
+    cerrarModalSeguro();
     return;
   }
 
@@ -791,7 +841,7 @@ document.addEventListener('DOMContentLoaded', function() {
       var lb = document.getElementById('lightbox');
       if (lb && lb.classList.contains('open')) { cerrarLightbox(); return; }
       var mo = document.getElementById('modal-overlay');
-      if (mo && mo.classList.contains('open')) { cerrarModal(); return; }
+      if (mo && mo.classList.contains('open')) { cerrarModalSeguro(); return; }
       var so = document.getElementById('search-overlay');
       if (so && so.classList.contains('open')) { cerrarBusqueda(); return; }
     }

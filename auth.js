@@ -145,7 +145,10 @@ function loginExito() {
 }
 
 function cerrarSesion() {
-  if (!confirm('¿Cerrar sesión?')) return;
+  confirmarAccion('Cerrar sesión', '¿Seguro que quieres cerrar la sesión?', '🚪 Cerrar sesión', function() { _cerrarSesionConfirmado(); });
+}
+
+function _cerrarSesionConfirmado() {
   localStorage.removeItem('rapca_pass_tmp');
   // Invalidar token en servidor
   if (sesion && sesion.token && !sesion.token.startsWith('local_')) {

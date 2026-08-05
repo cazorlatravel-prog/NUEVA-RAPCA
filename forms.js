@@ -331,6 +331,17 @@ function guardarEIParaDespues() {
     showToast('Estás editando una ficha ya guardada: usa "Guardar Transecto"', 'info');
     return;
   }
+  // Con el formulario totalmente vacío no hay nada que pausar (y guardar un
+  // borrador vacío podría pisar uno bueno tras cerrar el diálogo sin elegir)
+  var unidadAct = (document.getElementById('ev-unidad') || {}).value || '';
+  var actual = recogerDatosEI();
+  var hayAlgo = unidadAct.trim() !== '' || !esTransectoVacio(actual) ||
+    Object.keys(fotosPagina).length > 0 ||
+    ['T1', 'T2', 'T3'].some(function(t) { return transectosDatos[t] && !esTransectoVacio(transectosDatos[t]); });
+  if (!hayAlgo) {
+    showToast('No hay nada que guardar todavía', 'info');
+    return;
+  }
   window._dialogoBorradorPendiente = false;
   guardarBorrador('EI');
   detenerAutoGuardado();

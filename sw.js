@@ -1,5 +1,5 @@
 // RAPCA Campo — Service Worker v1.0
-const CACHE_NAME = 'rapca-v30';
+const CACHE_NAME = 'rapca-v31';
 const CDN_CACHE = 'rapca-cdn-v1';
 
 const APP_FILES = [

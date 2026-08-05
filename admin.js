@@ -326,9 +326,14 @@ function cambiarPassUsuario(idx) {
 
 function eliminarUsuario(idx) {
   if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
+  var usuariosChk = safeParse('rapca_usuarios_local', []);
+  if (!usuariosChk[idx]) { showToast('Usuario no encontrado', 'error'); return; }
+  confirmarAccion('Eliminar usuario', '¿Eliminar el usuario <strong>' + escapeHtml(usuariosChk[idx].nombre || usuariosChk[idx].email || '') + '</strong>?', '🗑️ Eliminar', function() { _eliminarUsuarioConfirmado(idx); });
+}
+
+function _eliminarUsuarioConfirmado(idx) {
   var usuarios = safeParse('rapca_usuarios_local', []);
-  if (!usuarios[idx]) { showToast('Usuario no encontrado', 'error'); return; }
-  if (!confirm('¿Eliminar usuario?')) return;
+  if (!usuarios[idx]) return;
   usuarios.splice(idx, 1);
   localStorage.setItem('rapca_usuarios_local', JSON.stringify(usuarios));
   renderAdmin();
@@ -408,9 +413,14 @@ async function toggleUsuarioServidor(userId) {
   }
 }
 
-async function eliminarUsuarioServidor(userId, email) {
+function eliminarUsuarioServidor(userId, email) {
   if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
-  if (!confirm('¿Eliminar usuario ' + email + ' del servidor?')) return;
+  confirmarAccion('Eliminar usuario del servidor',
+    '¿Eliminar el usuario <strong>' + escapeHtml(email) + '</strong> del servidor?',
+    '🗑️ Eliminar', function() { _eliminarUsuarioServidorConfirmado(userId, email); });
+}
+
+async function _eliminarUsuarioServidorConfirmado(userId, email) {
   var tokenOk = await asegurarTokenServidor();
   if (!tokenOk) { showToast('No se pudo autenticar', 'error'); return; }
 

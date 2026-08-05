@@ -548,6 +548,41 @@ function abrirModal(html) {
   document.getElementById('modal-overlay').classList.add('open');
 }
 
+// Confirmación destructiva con modal propio: el confirm() nativo se suprime
+// en algunas PWAs instaladas en Android (el botón parecía no hacer nada o,
+// peor, actuaba sin preguntar según la versión).
+var _accionConfirmarCb = null;
+function confirmarAccion(titulo, mensajeHtml, textoBoton, cb) {
+  _accionConfirmarCb = cb;
+  var html = '<div style="text-align:center;padding:8px 0">' +
+    '<div style="font-size:36px;margin-bottom:8px">⚠️</div>' +
+    '<h2 style="margin:0 0 10px">' + escapeHtml(titulo) + '</h2>' +
+    '<div style="margin:0 0 10px;font-size:14px;color:#444">' + mensajeHtml + '</div>' +
+    '</div>' +
+    '<div class="modal-actions">' +
+    '<button class="btn btn-outline" onclick="cerrarModal()">↩️ Cancelar</button>' +
+    '<button class="btn" style="background:#e74c3c;color:#fff" onclick="_ejecutarAccionConfirmada()">' + textoBoton + '</button>' +
+    '</div>';
+  abrirModal(html);
+}
+function _ejecutarAccionConfirmada() {
+  cerrarModal();
+  var cb = _accionConfirmarCb;
+  _accionConfirmarCb = null;
+  if (cb) cb();
+}
+
+// Cierre de modal "sin elegir": si el modal era el diálogo de borrador EI,
+// tratarlo como "continuar" (restaura el borrador, limpia el flag y arranca
+// el auto-guardado) en vez de dejar el flag pegado con el formulario vacío
+function cerrarModalSeguro() {
+  if (window._dialogoBorradorPendiente && typeof continuarBorradorEI === 'function') {
+    continuarBorradorEI();
+    return;
+  }
+  cerrarModal();
+}
+
 function cerrarModal() {
   document.getElementById('modal-overlay').classList.remove('open');
 }
@@ -673,11 +708,26 @@ var _ignorandoPopstate = false;
 window.addEventListener('popstate', function(e) {
   if (_ignorandoPopstate) { _ignorandoPopstate = false; return; }
 
+  // Cámara o preview abiertos: atrás los cierra (antes se abría el diálogo
+  // "¿salir del formulario?" INVISIBLE debajo, atrapando el historial)
+  var previewM = document.getElementById('preview-modal');
+  if (previewM && previewM.classList.contains('open')) {
+    pushHistoryState();
+    if (typeof repetirFoto === 'function') repetirFoto();
+    return;
+  }
+  var cameraM = document.getElementById('camera-modal');
+  if (cameraM && cameraM.classList.contains('open')) {
+    pushHistoryState();
+    if (typeof cerrarCamara === 'function') cerrarCamara();
+    return;
+  }
+
   // Si hay un modal abierto, cerrarlo en vez de salir
   var modal = document.getElementById('modal-overlay');
   if (modal && modal.classList.contains('open')) {
     pushHistoryState();
-    cerrarModal();
+    cerrarModalSeguro();
     return;
   }
 
@@ -791,7 +841,7 @@ document.addEventListener('DOMContentLoaded', function() {
       var lb = document.getElementById('lightbox');
       if (lb && lb.classList.contains('open')) { cerrarLightbox(); return; }
       var mo = document.getElementById('modal-overlay');
-      if (mo && mo.classList.contains('open')) { cerrarModal(); return; }
+      if (mo && mo.classList.contains('open')) { cerrarModalSeguro(); return; }
       var so = document.getElementById('search-overlay');
       if (so && so.classList.contains('open')) { cerrarBusqueda(); return; }
     }
@@ -944,7 +994,10 @@ function loginExito() {
 }
 
 function cerrarSesion() {
-  if (!confirm('¿Cerrar sesión?')) return;
+  confirmarAccion('Cerrar sesión', '¿Seguro que quieres cerrar la sesión?', '🚪 Cerrar sesión', function() { _cerrarSesionConfirmado(); });
+}
+
+function _cerrarSesionConfirmado() {
   localStorage.removeItem('rapca_pass_tmp');
   // Invalidar token en servidor
   if (sesion && sesion.token && !sesion.token.startsWith('local_')) {
@@ -1333,6 +1386,17 @@ function initFormEI() {
 function guardarEIParaDespues() {
   if (editandoRegistro) {
     showToast('Estás editando una ficha ya guardada: usa "Guardar Transecto"', 'info');
+    return;
+  }
+  // Con el formulario totalmente vacío no hay nada que pausar (y guardar un
+  // borrador vacío podría pisar uno bueno tras cerrar el diálogo sin elegir)
+  var unidadAct = (document.getElementById('ev-unidad') || {}).value || '';
+  var actual = recogerDatosEI();
+  var hayAlgo = unidadAct.trim() !== '' || !esTransectoVacio(actual) ||
+    Object.keys(fotosPagina).length > 0 ||
+    ['T1', 'T2', 'T3'].some(function(t) { return transectosDatos[t] && !esTransectoVacio(transectosDatos[t]); });
+  if (!hayAlgo) {
+    showToast('No hay nada que guardar todavía', 'info');
     return;
   }
   window._dialogoBorradorPendiente = false;
@@ -2824,6 +2888,9 @@ function iniciarOverlayCamara() {
   // GPS para overlay
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(function(pos) {
+      // Si el usuario canceló la cámara antes de llegar el fix (GPS lento en
+      // el monte), no crear el mini-mapa sobre un modal ya cerrado
+      if (!camaraStream) return;
       gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude, accuracy: pos.coords.accuracy, ts: pos.timestamp || Date.now()};
 
       // Mostrar coordenadas según config
@@ -3469,6 +3536,10 @@ function _postprocesarFoto(ctx, w, h) {
 // el sello de la foto se dibuja en canvas y NO incluye este elemento.
 // ============================================================
 var camDistWatchId = null;
+// Token de generación: invalida búsquedas/watches en vuelo cuando se detiene
+// el indicador (la búsqueda en IndexedDB es async y el watch podía arrancar
+// DESPUÉS de cerrar la cámara, quedándose huérfano gastando batería)
+var camDistGen = 0;
 
 function _distanciaMetros(lat1, lon1, lat2, lon2) {
   var R = 6371000;
@@ -3482,6 +3553,7 @@ function _distanciaMetros(lat1, lon1, lat2, lon2) {
 
 function iniciarIndicadorDistancia(tipo, subtipo) {
   detenerIndicadorDistancia();
+  var gen = camDistGen;
   var el = document.getElementById('cam-distancia');
   if (!el) return;
   // Solo para fotos comparativas W1/W2
@@ -3492,6 +3564,8 @@ function iniciarIndicadorDistancia(tipo, subtipo) {
 
   // Buscar el waypoint de referencia: el más reciente de esa unidad+waypoint
   obtenerTodosDB('waypoints_comp').then(function(wps) {
+    // Si el indicador se detuvo mientras resolvía IndexedDB, abortar
+    if (gen !== camDistGen) return;
     var candidatos = (wps || []).filter(function(w) {
       return w.unidad === unidad && w.waypoint === subtipo && w.lat && w.lon;
     }).sort(function(a, b) { return String(b.fecha || '').localeCompare(String(a.fecha || '')); });
@@ -3534,6 +3608,7 @@ function iniciarIndicadorDistancia(tipo, subtipo) {
     }
 
     camDistWatchId = navigator.geolocation.watchPosition(function(pos) {
+      if (gen !== camDistGen) return;
       gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude,
                 accuracy: pos.coords.accuracy, ts: pos.timestamp || Date.now()};
       pintar(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
@@ -3542,6 +3617,7 @@ function iniciarIndicadorDistancia(tipo, subtipo) {
 }
 
 function detenerIndicadorDistancia() {
+  camDistGen++;
   if (camDistWatchId) {
     navigator.geolocation.clearWatch(camDistWatchId);
     camDistWatchId = null;
@@ -4808,6 +4884,9 @@ function sincronizarAuto() {
 // --- Subida automática de fotos en segundo plano (sin bloquear UI con toast excesivos) ---
 var subiendoFotosAuto = false;
 var subiendoFotosAutoTimer = null;
+// Token de pasada: si el safety-timeout libera el flag y arranca otra pasada,
+// la anterior debe abortar (antes ambas subían las mismas fotos duplicadas)
+var _subirFotosGen = 0;
 async function subirFotosPendientesAuto() {
   if (!db || subiendoFotosAuto) return;
   // Sin token válido no hay nada que subir (evita TypeError y prompts espontáneos)
@@ -4815,6 +4894,7 @@ async function subirFotosPendientesAuto() {
   // Poner el flag ANTES de cualquier await: dos eventos 'online' casi simultáneos
   // pasaban ambos el guard y subían la misma lista de fotos por duplicado
   subiendoFotosAuto = true;
+  var gen = ++_subirFotosGen;
   try {
     var pendientes = await obtenerTodosDB('subidas_pendientes');
     if (pendientes.length === 0) return;
@@ -4824,7 +4904,10 @@ async function subirFotosPendientesAuto() {
       subiendoFotosAuto = false;
       subiendoFotosAutoTimer = null;
     }, Math.max(120000, pendientes.length * 30000)); // mín 2min, o 30s por foto
+    var yaReautenticadoAuto = false;
     for (var i = 0; i < pendientes.length; i++) {
+      // Otra pasada tomó el relevo tras el safety-timeout: abortar esta
+      if (gen !== _subirFotosGen) break;
       var foto = pendientes[i];
       try {
         var resp = await fetch(API_BASE + 'upload.php', {
@@ -4838,6 +4921,10 @@ async function subirFotosPendientesAuto() {
             await eliminarDeDB('subidas_pendientes', foto.codigo);
           }
         } else if (resp.status === 401) {
+          // Reautenticar UNA sola vez: sin guard, un 401 persistente
+          // encadenaba prompts de contraseña en bucle infinito
+          if (yaReautenticadoAuto) break;
+          yaReautenticadoAuto = true;
           var reauth = await reautenticar();
           if (reauth) { i--; continue; }
           break;
@@ -4847,8 +4934,12 @@ async function subirFotosPendientesAuto() {
     actualizarContadorFotos();
     actualizarColaSubida();
   } finally {
-    subiendoFotosAuto = false;
-    if (subiendoFotosAutoTimer) { clearTimeout(subiendoFotosAutoTimer); subiendoFotosAutoTimer = null; }
+    // Solo liberar si esta pasada sigue siendo la vigente (el safety-timeout
+    // pudo haberla relevado y otra pasada estar en curso)
+    if (gen === _subirFotosGen) {
+      subiendoFotosAuto = false;
+      if (subiendoFotosAutoTimer) { clearTimeout(subiendoFotosAutoTimer); subiendoFotosAutoTimer = null; }
+    }
   }
 }
 
@@ -5419,7 +5510,9 @@ function medirClick(e) {
 }
 
 function agregarWaypoint() {
-  if (!gpsPos) { showToast('Esperando GPS...', 'error'); return; }
+  var fresca = gpsPos && gpsPos.ts && (Date.now() - gpsPos.ts) < 20000 &&
+               (typeof gpsPos.accuracy !== 'number' || gpsPos.accuracy <= 100);
+  if (!fresca) { showToast('Esperando posición GPS precisa...', 'error'); return; }
   var name = prompt('Nombre del waypoint:');
   if (!name) return;
   L.marker([gpsPos.lat, gpsPos.lon]).addTo(mapa).bindPopup('<strong>' + escapeHtml(name) + '</strong><br>' + formatCoordNW(gpsPos.lat, gpsPos.lon)).openPopup();
@@ -6031,7 +6124,8 @@ function capturarGPSConPrecision(callback) {
       lat: pos.coords.latitude,
       lon: pos.coords.longitude,
       alt: pos.coords.altitude,
-      accuracy: pos.coords.accuracy
+      accuracy: pos.coords.accuracy,
+      ts: pos.timestamp || Date.now()
     };
     gpsPos = data;
     callback(data);
@@ -6134,7 +6228,14 @@ function toggleWaypointsPanel() {
   var panel = document.getElementById('wp-panel');
   if (!panel) return;
   panel.classList.toggle('open');
-  if (panel.classList.contains('open')) cargarWaypointsPersistentes();
+  if (panel.classList.contains('open')) {
+    cargarWaypointsPersistentes();
+  } else {
+    // Al cerrar el panel se quita el filtro: dejar el mapa mostrando un
+    // subconjunto sin ninguna indicación visible confundía
+    wpFiltro = {unidad: '', anio: '', tipo: ''};
+    cargarWaypointsPersistentes();
+  }
 }
 
 // Rellena los selects de filtro y el resumen con los waypoints existentes
@@ -6164,6 +6265,11 @@ function actualizarPanelWaypoints(wps) {
     var a = String(w.fecha || '').slice(0, 4);
     if (a && /^\d{4}$/.test(a) && anios.indexOf(a) < 0) anios.push(a);
   });
+  // Si el valor filtrado ya no existe (p. ej. se borraron todos sus
+  // waypoints), resetear ese filtro: dejarlo activo pero invisible hacía
+  // desaparecer del mapa los waypoints restantes sin indicación
+  if (wpFiltro.unidad && unidades.indexOf(wpFiltro.unidad) < 0) wpFiltro.unidad = '';
+  if (wpFiltro.anio && anios.indexOf(wpFiltro.anio) < 0) wpFiltro.anio = '';
   poblar('wp-f-unidad', unidades.sort(), wpFiltro.unidad);
   poblar('wp-f-anio', anios.sort().reverse(), wpFiltro.anio);
   var selTipo = document.getElementById('wp-f-tipo');
@@ -6221,23 +6327,30 @@ function confirmarBorrarWaypointsFiltrados() {
 }
 
 function borrarWaypointPersistente(id) {
-  if (!confirm('¿Borrar este waypoint?')) return;
   if (!db) return;
-  eliminarDeDB('waypoints_comp', id).then(function() {
-    mapa.closePopup();
-    cargarWaypointsPersistentes();
-    showToast('Waypoint borrado', 'info');
-  }).catch(function(e) { showToast('Error al borrar: ' + e, 'error'); });
+  confirmarAccion('Borrar waypoint', '¿Borrar este waypoint?', '🗑️ Borrar', function() {
+    eliminarDeDB('waypoints_comp', id).then(function() {
+      mapa.closePopup();
+      cargarWaypointsPersistentes();
+      showToast('Waypoint borrado', 'info');
+    }).catch(function(e) { showToast('Error al borrar: ' + e, 'error'); });
+  });
 }
 
 function borrarTodosWaypointsPersistentes() {
-  if (!confirm('¿Borrar TODOS los waypoints persistentes? Esta acción no se puede deshacer.')) return;
+  if (!db) return;
+  confirmarAccion('Borrar TODOS los waypoints',
+    'Se borrarán <strong>todos</strong> los waypoints persistentes.<br>Esta acción no se puede deshacer.',
+    '🗑️ Borrar todos', function() { _borrarTodosWaypointsConfirmado(); });
+}
+
+function _borrarTodosWaypointsConfirmado() {
   if (!db) return;
   obtenerTodosDB('waypoints_comp').then(function(wps) {
     var promises = wps.map(function(wp) { return eliminarDeDB('waypoints_comp', wp.id); });
     return Promise.all(promises);
   }).then(function() {
-    capaWaypointsPersist.clearLayers();
+    cargarWaypointsPersistentes();
     showToast('Todos los waypoints borrados', 'info');
   }).catch(function(e) { showToast('Error: ' + e, 'error'); });
 }
@@ -6564,7 +6677,10 @@ function toggleInfraKMLLayer(visible) {
 }
 
 function eliminarInfraKML() {
-  if (!confirm('¿Borrar la capa de infraestructuras KML? Esta acción no se puede deshacer.')) return;
+  confirmarAccion('Borrar capa KML', '¿Borrar la capa de infraestructuras KML?<br>Esta acción no se puede deshacer.', '🗑️ Borrar', function() { _eliminarInfraKMLConfirmado(); });
+}
+
+function _eliminarInfraKMLConfirmado() {
   var nombre = localStorage.getItem('rapca_infra_kml_nombre');
   capaInfraKML.clearLayers();
   infraKMLFeatures = [];
@@ -6893,7 +7009,14 @@ function eliminarRegistro(id) {
   // Verificar que el operador tiene acceso a este registro
   var r = misRegistros().find(function(r) { return r.id == id; });
   if (!r) { showToast('No tienes acceso a este registro', 'error'); return; }
-  if (!confirm('¿Eliminar registro?')) return;
+  confirmarAccion('Eliminar registro',
+    'Vas a eliminar la ficha <strong>' + escapeHtml(r.tipo + ' ' + r.unidad) + '</strong> (' + escapeHtml(r.fecha) + ') y sus fotos.<br>Esta acción no se puede deshacer.',
+    '🗑️ Eliminar', function() { _eliminarRegistroConfirmado(id); });
+}
+
+function _eliminarRegistroConfirmado(id) {
+  var r = misRegistros().find(function(r) { return r.id == id; });
+  if (!r) return;
 
   // Recopilar fotos del registro para eliminarlas también
   var codigosFotos = [];
@@ -6940,7 +7063,12 @@ function eliminarRegistroServidor(id) {
 }
 
 function reiniciarContadoresFotos() {
-  if (!confirm('¿Reiniciar los contadores de numeración de fotos?\n\nLas fotos nuevas empezarán a numerarse desde 1. Usa esto solo si quieres empezar de nuevo.')) return;
+  confirmarAccion('Reiniciar contadores',
+    'Las fotos nuevas empezarán a numerarse desde 1.<br>Usa esto solo si quieres empezar de nuevo.',
+    '🔢 Reiniciar', function() { _reiniciarContadoresConfirmado(); });
+}
+
+function _reiniciarContadoresConfirmado() {
   localStorage.removeItem('rapca_contadores_VP');
   localStorage.removeItem('rapca_contadores_EL');
   localStorage.removeItem('rapca_contadores_EI');
@@ -7690,7 +7818,10 @@ function editarInfra(idx) {
 }
 
 function eliminarInfra(idx) {
-  if (!confirm('¿Eliminar infraestructura?')) return;
+  confirmarAccion('Eliminar infraestructura', '¿Eliminar esta infraestructura?', '🗑️ Eliminar', function() { _eliminarInfraConfirmado(idx); });
+}
+
+function _eliminarInfraConfirmado(idx) {
   infraestructuras.splice(idx, 1);
   guardarInfras();
   renderInfras();
@@ -8647,9 +8778,14 @@ function cambiarPassUsuario(idx) {
 
 function eliminarUsuario(idx) {
   if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
+  var usuariosChk = safeParse('rapca_usuarios_local', []);
+  if (!usuariosChk[idx]) { showToast('Usuario no encontrado', 'error'); return; }
+  confirmarAccion('Eliminar usuario', '¿Eliminar el usuario <strong>' + escapeHtml(usuariosChk[idx].nombre || usuariosChk[idx].email || '') + '</strong>?', '🗑️ Eliminar', function() { _eliminarUsuarioConfirmado(idx); });
+}
+
+function _eliminarUsuarioConfirmado(idx) {
   var usuarios = safeParse('rapca_usuarios_local', []);
-  if (!usuarios[idx]) { showToast('Usuario no encontrado', 'error'); return; }
-  if (!confirm('¿Eliminar usuario?')) return;
+  if (!usuarios[idx]) return;
   usuarios.splice(idx, 1);
   localStorage.setItem('rapca_usuarios_local', JSON.stringify(usuarios));
   renderAdmin();
@@ -8729,9 +8865,14 @@ async function toggleUsuarioServidor(userId) {
   }
 }
 
-async function eliminarUsuarioServidor(userId, email) {
+function eliminarUsuarioServidor(userId, email) {
   if (!sesion || sesion.rol !== 'admin') { showToast('Solo administradores', 'error'); return; }
-  if (!confirm('¿Eliminar usuario ' + email + ' del servidor?')) return;
+  confirmarAccion('Eliminar usuario del servidor',
+    '¿Eliminar el usuario <strong>' + escapeHtml(email) + '</strong> del servidor?',
+    '🗑️ Eliminar', function() { _eliminarUsuarioServidorConfirmado(userId, email); });
+}
+
+async function _eliminarUsuarioServidorConfirmado(userId, email) {
   var tokenOk = await asegurarTokenServidor();
   if (!tokenOk) { showToast('No se pudo autenticar', 'error'); return; }
 
@@ -9676,7 +9817,10 @@ async function precargaDescargar(listaFotos) {
 }
 
 function limpiarPrecarga() {
-  if (!confirm('¿Borrar todas las fotos precargadas?')) return;
+  confirmarAccion('Borrar precarga', '¿Borrar todas las fotos precargadas?', '🗑️ Borrar', function() { _limpiarPrecargaConfirmado(); });
+}
+
+function _limpiarPrecargaConfirmado() {
   if (!db) return;
   var tx = db.transaction('fotos_precargadas', 'readwrite');
   tx.objectStore('fotos_precargadas').clear();
