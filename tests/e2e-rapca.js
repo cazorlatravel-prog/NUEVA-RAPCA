@@ -586,11 +586,30 @@ function ok(nombre, cond, detalle) {
   const resumenW1 = await page.evaluate(() => document.getElementById('wp-f-resumen').textContent);
   ok('Filtro unidad+W1 muestra 1 de 4', resumenW1.indexOf('1 de 4') >= 0, resumenW1);
 
-  // Borrar los filtrados (1 waypoint): quedan 3
-  await page.evaluate(() => { window.confirm = () => true; borrarWaypointsFiltrados(); });
+  // Pedir borrado: debe abrir el modal de confirmación propio (no confirm nativo)
+  await page.evaluate(() => borrarWaypointsFiltrados());
+  await page.waitForTimeout(600);
+  const modalConfirm = await page.evaluate(() => ({
+    abierto: document.getElementById('modal-overlay').classList.contains('open'),
+    texto: document.getElementById('modal-overlay').textContent
+  }));
+  ok('Borrar filtrados abre modal de confirmación con el recuento',
+    modalConfirm.abierto && modalConfirm.texto.indexOf('1') >= 0 && modalConfirm.texto.indexOf('WP_UNIT_A') >= 0,
+    modalConfirm.texto.slice(0, 120));
+
+  // Cancelar: no borra nada
+  await page.evaluate(() => cerrarModal());
+  await page.waitForTimeout(400);
+  const trasCancelar = await page.evaluate(() => obtenerTodosDB('waypoints_comp').then(w => w.length));
+  ok('Cancelar el modal no borra ningún waypoint', trasCancelar === 4, 'quedan ' + trasCancelar);
+
+  // Confirmar de verdad: quedan 3
+  await page.evaluate(() => borrarWaypointsFiltrados());
+  await page.waitForTimeout(500);
+  await page.evaluate(() => confirmarBorrarWaypointsFiltrados());
   await page.waitForTimeout(700);
   const trasBorrar = await page.evaluate(() => obtenerTodosDB('waypoints_comp').then(w => w.length));
-  ok('Borrado por filtro elimina solo los filtrados (quedan 3)', trasBorrar === 3, 'quedan ' + trasBorrar);
+  ok('Confirmar borra solo los filtrados (quedan 3)', trasBorrar === 3, 'quedan ' + trasBorrar);
 
   // Borrar por año 2025: queda solo los de 2026
   await page.evaluate(() => {
@@ -601,6 +620,8 @@ function ok(nombre, cond, detalle) {
   });
   await page.waitForTimeout(400);
   await page.evaluate(() => borrarWaypointsFiltrados());
+  await page.waitForTimeout(500);
+  await page.evaluate(() => confirmarBorrarWaypointsFiltrados());
   await page.waitForTimeout(700);
   const trasBorrarAnio = await page.evaluate(() => obtenerTodosDB('waypoints_comp').then(w => w.map(x => String(x.fecha).slice(0,4))));
   ok('Borrado por año 2025 conserva solo 2026', trasBorrarAnio.length === 2 && trasBorrarAnio.every(a => a === '2026'), JSON.stringify(trasBorrarAnio));

@@ -6177,7 +6177,9 @@ function aplicarFiltroWaypoints() {
   cargarWaypointsPersistentes();
 }
 
-// Borra del almacén todos los waypoints que cumplen el filtro actual
+// Pide confirmación con el modal propio de la app (el confirm() nativo se
+// suprime en algunas PWAs instaladas en Android) y borra los waypoints que
+// cumplen el filtro actual.
 function borrarWaypointsFiltrados() {
   if (!db) return;
   obtenerTodosDB('waypoints_comp').then(function(wps) {
@@ -6186,9 +6188,31 @@ function borrarWaypointsFiltrados() {
     var desc = [];
     if (wpFiltro.unidad) desc.push('unidad ' + wpFiltro.unidad);
     if (wpFiltro.anio) desc.push('año ' + wpFiltro.anio);
-    if (wpFiltro.tipo) desc.push(wpFiltro.tipo);
-    var etiqueta = desc.length ? ' (' + desc.join(', ') + ')' : ' (TODOS)';
-    if (!confirm('¿Borrar ' + objetivo.length + ' waypoints' + etiqueta + '? Esta acción no se puede deshacer.')) return;
+    if (wpFiltro.tipo) desc.push('solo ' + wpFiltro.tipo);
+    var etiqueta = desc.length ? desc.join(' · ') : 'TODOS los waypoints (sin filtro)';
+
+    var html = '<div style="text-align:center;padding:8px 0">' +
+      '<div style="font-size:36px;margin-bottom:8px">🗑️</div>' +
+      '<h2 style="margin:0 0 10px">Borrar waypoints</h2>' +
+      '<p style="margin:0 0 6px">Vas a borrar <strong style="font-size:18px">' + objetivo.length + '</strong> waypoint' + (objetivo.length === 1 ? '' : 's') + ':</p>' +
+      '<p style="margin:0 0 10px;color:#555;font-size:14px">' + escapeHtml(etiqueta) + '</p>' +
+      '<p style="color:#e74c3c;font-weight:600;font-size:13px">Esta acción no se puede deshacer</p>' +
+      '</div>' +
+      '<div class="modal-actions">' +
+      '<button class="btn btn-outline" onclick="cerrarModal()">↩️ Cancelar</button>' +
+      '<button class="btn" style="background:#e74c3c;color:#fff" onclick="confirmarBorrarWaypointsFiltrados()">🗑️ Sí, borrar ' + objetivo.length + '</button>' +
+      '</div>';
+    abrirModal(html);
+  });
+}
+
+// Ejecuta el borrado tras la confirmación explícita del modal
+function confirmarBorrarWaypointsFiltrados() {
+  cerrarModal();
+  if (!db) return;
+  obtenerTodosDB('waypoints_comp').then(function(wps) {
+    var objetivo = (wps || []).filter(function(w) { return _wpPasaFiltro(w); });
+    if (objetivo.length === 0) { showToast('No hay waypoints que cumplan el filtro', 'info'); return; }
     Promise.all(objetivo.map(function(w) { return eliminarDeDB('waypoints_comp', w.id); })).then(function() {
       cargarWaypointsPersistentes();
       showToast(objetivo.length + ' waypoints borrados', 'success');
