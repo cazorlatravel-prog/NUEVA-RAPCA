@@ -9746,6 +9746,7 @@ function precargaDescargarComp() {
 
 async function precargaDescargar(listaFotos) {
   if (precargaDescargando) { showToast('Ya hay una descarga en curso', 'info'); return; }
+  if (typeof precargaMapasDescargando !== 'undefined' && precargaMapasDescargando) { showToast('Espera a que termine la descarga de mapas', 'info'); return; }
   if (listaFotos.length === 0) { showToast('No hay fotos para descargar', 'info'); return; }
   if (!db) { showToast('Base de datos no disponible', 'error'); return; }
 
@@ -9986,11 +9987,14 @@ function _capasSeleccionadas() {
   return capas;
 }
 
+var _estimacionMapasGen = 0;
 function actualizarEstimacionMapas() {
   var info = document.getElementById('precarga-mapas-info');
   var btn = document.getElementById('precarga-btn-mapas');
   if (!info) return;
+  var gen = ++_estimacionMapasGen;
   precargaPuntosSeleccionados().then(function(res) {
+    if (gen !== _estimacionMapasGen) return;
     if (res.unidades.length === 0) {
       info.textContent = 'Selecciona unidades para calcular la descarga';
       if (btn) btn.disabled = true;
@@ -10010,13 +10014,14 @@ function actualizarEstimacionMapas() {
     var urls = _urlsTilesParaPuntos(res.puntos, capas);
     var mb = (urls.length * 18 / 1024).toFixed(1); // ~18 KB por tesela
     info.textContent = res.puntos.length + ' puntos · ' + urls.length + ' teselas (~' + mb + ' MB)';
-    if (btn) btn.disabled = false;
+    if (btn) btn.disabled = !!precargaMapasDescargando;
   });
 }
 
 var precargaMapasDescargando = false;
 function precargaDescargarMapas() {
   if (precargaMapasDescargando) return;
+  if (precargaDescargando) { showToast('Espera a que termine la descarga de fotos', 'info'); return; }
   if (!navigator.onLine) { showToast('Necesitas conexión para descargar los mapas', 'error'); return; }
   precargaPuntosSeleccionados().then(function(res) {
     if (res.puntos.length === 0) { showToast('Sin coordenadas para estas unidades', 'error'); return; }
@@ -10066,7 +10071,9 @@ function precargaDescargarMapas() {
     Promise.all(trabajadores).then(function() {
       precargaMapasDescargando = false;
       if (btn) btn.disabled = false;
-      if (prog) setTimeout(function() { prog.style.display = 'none'; }, 2500);
+      if (prog) setTimeout(function() {
+        if (!precargaDescargando && !precargaMapasDescargando) prog.style.display = 'none';
+      }, 2500);
       if (fallos === 0) {
         showToast('Cartografía descargada: ' + exitos + ' teselas listas para usar sin cobertura', 'success', 5000);
       } else if (exitos > 0) {

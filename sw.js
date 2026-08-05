@@ -1,5 +1,5 @@
 // RAPCA Campo — Service Worker v1.0
-const CACHE_NAME = 'rapca-v32';
+const CACHE_NAME = 'rapca-v33';
 const CDN_CACHE = 'rapca-cdn-v1';
 
 const APP_FILES = [
@@ -79,13 +79,30 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(
       caches.match(e.request).then((cached) => {
         const opacaParaCors = cached && esTesela && e.request.mode === 'cors' && cached.type === 'opaque';
-        if (cached && !opacaParaCors) return cached;
-        const req = esTesela ? new Request(url.href, {mode: 'cors'}) : e.request;
-        return fetch(req).then((resp) => {
-          const clone = resp.clone();
-          caches.open(CDN_CACHE).then((c) => c.put(e.request, clone));
+        // La precarga usa cache:'reload' para refrescar de verdad (repara
+        // teselas corruptas); el resto de peticiones son cache-first
+        const forzarRed = esTesela && e.request.cache === 'reload';
+        if (cached && !opacaParaCors && !forzarRed) return cached;
+        const req = esTesela ? new Request(url.href, {mode: 'cors', cache: forzarRed ? 'reload' : 'default'}) : e.request;
+        const guardar = (resp) => {
+          // NUNCA cachear errores: un 404/5xx pisaría una tesela buena y,
+          // con cache-first, se serviría corrupta para siempre
+          if (resp && (resp.ok || resp.type === 'opaque')) {
+            const clone = resp.clone();
+            caches.open(CDN_CACHE).then((c) => c.put(e.request, clone));
+          }
           return resp;
-        }).catch(() => cached); // sin red: una respuesta opaca es mejor que nada
+        };
+        return fetch(req).then(guardar).catch(() => {
+          // Una respuesta opaca cacheada NO es utilizable para peticiones CORS
+          if (cached && !opacaParaCors) return cached;
+          // Degradación del mapa general: si el refetch CORS falló (servidor
+          // sin cabeceras ACAO), reintentar la petición original no-cors
+          if (esTesela && e.request.mode !== 'cors') {
+            return fetch(e.request).then(guardar).catch(() => Response.error());
+          }
+          return Response.error();
+        });
       })
     );
     return;
