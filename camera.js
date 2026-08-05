@@ -135,6 +135,7 @@ function abrirCamara(tipo, subtipo) {
     document.getElementById('camera-modal').classList.add('open');
     iniciarOverlayCamara();
     cargarGhostFoto(tipo, subtipo);
+    iniciarIndicadorDistancia(tipo, subtipo);
     // Iniciar tap-to-focus y ajuste de exposición
     iniciarTapToFocus();
     iniciarExposureSlide();
@@ -170,6 +171,7 @@ function cerrarCamara() {
   }
   imageCaptureObj = null;
   detenerBrujula();
+  detenerIndicadorDistancia();
   document.getElementById('camera-modal').classList.remove('open');
   if (miniMapaCamera) { miniMapaCamera.remove(); miniMapaCamera = null; }
   // Limpiar ghost
@@ -1233,6 +1235,7 @@ function _renderizarFotoFinal(fuente, fw, fh) {
   // Parar la brújula: el sensor a 10Hz seguía emitiendo (gastando batería)
   // hasta la siguiente apertura de cámara. "Repetir" la reactiva vía abrirCamara.
   detenerBrujula();
+  detenerIndicadorDistancia();
   document.getElementById('camera-modal').classList.remove('open');
   document.getElementById('preview-modal').classList.add('open');
 }
@@ -1294,6 +1297,93 @@ function _postprocesarFoto(ctx, w, h) {
 }
 
 // --- SISTEMA DE GHOSTING PARA FOTOS COMPARATIVAS ---
+
+// ============================================================
+// INDICADOR DE DISTANCIA AL WAYPOINT DE LA VISITA ANTERIOR
+// Solo se muestra en pantalla mientras se encuadra la foto comparativa:
+// el sello de la foto se dibuja en canvas y NO incluye este elemento.
+// ============================================================
+var camDistWatchId = null;
+
+function _distanciaMetros(lat1, lon1, lat2, lon2) {
+  var R = 6371000;
+  var dLat = (lat2 - lat1) * Math.PI / 180;
+  var dLon = (lon2 - lon1) * Math.PI / 180;
+  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+          Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function iniciarIndicadorDistancia(tipo, subtipo) {
+  detenerIndicadorDistancia();
+  var el = document.getElementById('cam-distancia');
+  if (!el) return;
+  // Solo para fotos comparativas W1/W2
+  if (subtipo !== 'W1' && subtipo !== 'W2') return;
+  var prefix = tipo === 'EI' ? 'ev' : tipo.toLowerCase();
+  var unidad = (document.getElementById(prefix + '-unidad') || {}).value || '';
+  if (!unidad || !db || !navigator.geolocation) return;
+
+  // Buscar el waypoint de referencia: el más reciente de esa unidad+waypoint
+  obtenerTodosDB('waypoints_comp').then(function(wps) {
+    var candidatos = (wps || []).filter(function(w) {
+      return w.unidad === unidad && w.waypoint === subtipo && w.lat && w.lon;
+    }).sort(function(a, b) { return String(b.fecha || '').localeCompare(String(a.fecha || '')); });
+
+    // Fallback: coordenadas guardadas en las fotosComp de los registros
+    if (candidatos.length === 0 && typeof registros !== 'undefined' && registros) {
+      var deRegistros = [];
+      registros.forEach(function(r) {
+        if (r.unidad !== unidad || !r.datos || !r.datos.fotosComp) return;
+        r.datos.fotosComp.forEach(function(fc) {
+          if ((fc.waypoint || '') === subtipo && fc.lat && fc.lon) {
+            deRegistros.push({lat: fc.lat, lon: fc.lon, fecha: r.fecha || ''});
+          }
+        });
+      });
+      deRegistros.sort(function(a, b) { return String(b.fecha).localeCompare(String(a.fecha)); });
+      candidatos = deRegistros;
+    }
+
+    if (candidatos.length === 0) return; // sin waypoint previo: no mostrar nada
+    var ref = candidatos[0];
+
+    function pintar(lat, lon, accuracy) {
+      var d = _distanciaMetros(lat, lon, ref.lat, ref.lon);
+      var txt = d >= 1000 ? (d / 1000).toFixed(2) + ' km' : Math.round(d) + ' m';
+      // Verde en el punto (según precisión GPS), naranja cerca, blanco lejos
+      var cerca = d <= Math.max(10, accuracy || 10);
+      var medio = d <= 25;
+      el.style.background = cerca ? 'rgba(39,174,96,.85)' : (medio ? 'rgba(230,126,34,.85)' : 'rgba(0,0,0,.7)');
+      el.textContent = '📏 ' + txt + ' al ' + subtipo + (cerca ? ' ✓' : '');
+      el.style.display = 'block';
+    }
+
+    if (gpsPos && gpsPos.ts && (Date.now() - gpsPos.ts) < 15000) {
+      pintar(gpsPos.lat, gpsPos.lon, gpsPos.accuracy);
+    } else {
+      el.textContent = '📏 buscando GPS...';
+      el.style.background = 'rgba(0,0,0,.7)';
+      el.style.display = 'block';
+    }
+
+    camDistWatchId = navigator.geolocation.watchPosition(function(pos) {
+      gpsPos = {lat: pos.coords.latitude, lon: pos.coords.longitude, alt: pos.coords.altitude,
+                accuracy: pos.coords.accuracy, ts: pos.timestamp || Date.now()};
+      pintar(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+    }, function() {}, {enableHighAccuracy: true, maximumAge: 0});
+  }).catch(function() {});
+}
+
+function detenerIndicadorDistancia() {
+  if (camDistWatchId) {
+    navigator.geolocation.clearWatch(camDistWatchId);
+    camDistWatchId = null;
+  }
+  var el = document.getElementById('cam-distancia');
+  if (el) el.style.display = 'none';
+}
 
 function cargarGhostFoto(tipo, subtipo) {
   // Buscar foto previa del mismo waypoint y unidad para usar como ghost

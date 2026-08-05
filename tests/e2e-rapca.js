@@ -196,6 +196,47 @@ function ok(nombre, cond, detalle) {
   const g7 = await probarGhost('el', 'el', 'EL', 'TEST_U', 'W1');
   ok('Una unidad prefijo de otra (TEST_U vs TEST_U1) no coge fotos ajenas', !g7.activo && !g7.visible, JSON.stringify(g7));
 
+  console.log('\n== 2c. Indicador de distancia al waypoint anterior ==');
+  // Waypoint de la VP a ~22m de la posición GPS simulada (37.90, -3.10)
+  await page.evaluate(() => guardarEnDB('waypoints_comp', {
+    id: 'TEST_U1_VP_W1_1', codigo: 'TEST_U1_VP_W1_1', waypoint: 'W1',
+    lat: 37.9002, lon: -3.10, unidad: 'TEST_U1', tipo: 'VP', fecha: '2026-06-01T10:00:00'
+  }));
+  await page.evaluate(() => irPagina('el'));
+  await page.waitForTimeout(350);
+  await page.evaluate(() => { document.getElementById('el-unidad').value = 'TEST_U1'; });
+  await page.evaluate(() => abrirCamara('EL', 'W1'));
+  await page.waitForTimeout(2500);
+  const dist = await page.evaluate(() => ({
+    visible: document.getElementById('cam-distancia').style.display === 'block',
+    texto: document.getElementById('cam-distancia').textContent
+  }));
+  ok('Indicador de distancia visible al encuadrar W1', dist.visible, JSON.stringify(dist));
+  ok('Muestra la distancia real al waypoint (~22 m)', /2[0-4] m al W1/.test(dist.texto), dist.texto);
+  // Capturar: el indicador desaparece y no está en el canvas de la foto
+  await page.evaluate(() => capturarFoto());
+  await page.waitForTimeout(3500);
+  const trasCaptura = await page.evaluate(() => ({
+    preview: document.getElementById('preview-modal').classList.contains('open'),
+    distOculto: document.getElementById('cam-distancia').style.display === 'none'
+  }));
+  ok('Al capturar, el preview se abre y el indicador se oculta', trasCaptura.preview && trasCaptura.distOculto, JSON.stringify(trasCaptura));
+  await page.evaluate(() => {
+    document.getElementById('preview-modal').classList.remove('open');
+    limpiarAnotaciones();
+    irPagina('menu');
+  });
+  // Foto general: no debe mostrar indicador
+  await page.evaluate(() => irPagina('el'));
+  await page.waitForTimeout(350);
+  await page.evaluate(() => { document.getElementById('el-unidad').value = 'TEST_U1'; });
+  await page.evaluate(() => abrirCamara('EL', 'G'));
+  await page.waitForTimeout(1200);
+  const distG = await page.evaluate(() => document.getElementById('cam-distancia').style.display);
+  ok('En fotos generales no aparece el indicador', distG === 'none', distG);
+  await page.evaluate(() => cerrarCamara());
+  await page.evaluate(() => irPagina('menu'));
+
   console.log('\n== 3. Evaluación Intensiva: transectos individuales y ficha única ==');
   await page.evaluate(() => irPagina('menu'));
   await page.evaluate(() => irPagina('ei'));
@@ -514,6 +555,56 @@ function ok(nombre, cond, detalle) {
     try { toggleEtiquetasWP(); toggleEtiquetasWP(); return true; } catch (e) { return String(e); }
   });
   ok('Botón 🏷️ de nombres de waypoints funciona', toggleOK === true, String(toggleOK));
+
+  console.log('\n== 6b. Gestor de waypoints: filtros y borrado ==');
+  // Sembrar waypoints de 2 unidades y 2 años (además del de TEST_U1 de 2026)
+  await page.evaluate(() => Promise.all([
+    guardarEnDB('waypoints_comp', {id: 'WPA_1', codigo: 'WPA_EV_W1_1', waypoint: 'W1', lat: 37.91, lon: -3.11, unidad: 'WP_UNIT_A', tipo: 'EL', fecha: '2025-03-10T09:00:00'}),
+    guardarEnDB('waypoints_comp', {id: 'WPA_2', codigo: 'WPA_EV_W2_1', waypoint: 'W2', lat: 37.92, lon: -3.12, unidad: 'WP_UNIT_A', tipo: 'EL', fecha: '2025-03-10T09:05:00'}),
+    guardarEnDB('waypoints_comp', {id: 'WPB_1', codigo: 'WPB_VP_W1_1', waypoint: 'W1', lat: 37.93, lon: -3.13, unidad: 'WP_UNIT_B', tipo: 'VP', fecha: '2026-04-20T11:00:00'})
+  ]));
+  await page.evaluate(() => toggleWaypointsPanel());
+  await page.waitForTimeout(600);
+  const panelWP = await page.evaluate(() => ({
+    abierto: document.getElementById('wp-panel').classList.contains('open'),
+    total: document.getElementById('wp-panel-count').textContent,
+    unidades: Array.from(document.getElementById('wp-f-unidad').options).map(o => o.value).filter(Boolean),
+    anios: Array.from(document.getElementById('wp-f-anio').options).map(o => o.value).filter(Boolean)
+  }));
+  ok('Panel de waypoints abierto con el total', panelWP.abierto && panelWP.total === '4', JSON.stringify(panelWP));
+  ok('Filtros poblados con unidades y años', panelWP.unidades.length >= 3 && panelWP.anios.indexOf('2025') >= 0 && panelWP.anios.indexOf('2026') >= 0, JSON.stringify(panelWP));
+
+  // Filtrar por unidad A: se ven 2 de 4
+  await page.evaluate(() => { document.getElementById('wp-f-unidad').value = 'WP_UNIT_A'; aplicarFiltroWaypoints(); });
+  await page.waitForTimeout(500);
+  const resumenA = await page.evaluate(() => document.getElementById('wp-f-resumen').textContent);
+  ok('Filtro por unidad muestra 2 de 4', resumenA.indexOf('2 de 4') >= 0, resumenA);
+
+  // Filtrar además solo W1: 1 de 4
+  await page.evaluate(() => { document.getElementById('wp-f-tipo').value = 'W1'; aplicarFiltroWaypoints(); });
+  await page.waitForTimeout(500);
+  const resumenW1 = await page.evaluate(() => document.getElementById('wp-f-resumen').textContent);
+  ok('Filtro unidad+W1 muestra 1 de 4', resumenW1.indexOf('1 de 4') >= 0, resumenW1);
+
+  // Borrar los filtrados (1 waypoint): quedan 3
+  await page.evaluate(() => { window.confirm = () => true; borrarWaypointsFiltrados(); });
+  await page.waitForTimeout(700);
+  const trasBorrar = await page.evaluate(() => obtenerTodosDB('waypoints_comp').then(w => w.length));
+  ok('Borrado por filtro elimina solo los filtrados (quedan 3)', trasBorrar === 3, 'quedan ' + trasBorrar);
+
+  // Borrar por año 2025: queda solo los de 2026
+  await page.evaluate(() => {
+    document.getElementById('wp-f-unidad').value = '';
+    document.getElementById('wp-f-tipo').value = '';
+    document.getElementById('wp-f-anio').value = '2025';
+    aplicarFiltroWaypoints();
+  });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => borrarWaypointsFiltrados());
+  await page.waitForTimeout(700);
+  const trasBorrarAnio = await page.evaluate(() => obtenerTodosDB('waypoints_comp').then(w => w.map(x => String(x.fecha).slice(0,4))));
+  ok('Borrado por año 2025 conserva solo 2026', trasBorrarAnio.length === 2 && trasBorrarAnio.every(a => a === '2026'), JSON.stringify(trasBorrarAnio));
+  await page.evaluate(() => { document.getElementById('wp-f-anio').value = ''; aplicarFiltroWaypoints(); toggleWaypointsPanel(); });
 
   console.log('\n== 7. Borrador: persistencia al recargar ==');
   await page.evaluate(() => irPagina('menu'));

@@ -709,7 +709,27 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
   <div class="map-controls">
     <button class="btn" onclick="miPosicion()">📍</button>
     <button class="btn" onclick="toggleEtiquetasWP()" title="Nombres de waypoints">🏷️</button>
+    <button class="btn" onclick="toggleWaypointsPanel()" title="Gestionar waypoints">📌</button>
     <button class="btn" onclick="toggleCapas()">🗂️</button>
+  </div>
+  <div class="kml-panel" id="wp-panel">
+    <h3>📌 Waypoints (<span id="wp-panel-count">0</span>)
+      <button onclick="toggleWaypointsPanel()" style="background:none;border:none;font-size:14px;cursor:pointer">✕</button>
+    </h3>
+    <div class="kml-panel-body">
+      <div class="form-group" style="margin-bottom:8px"><label style="font-size:12px">Unidad</label>
+        <select id="wp-f-unidad" onchange="aplicarFiltroWaypoints()"><option value="">Todas</option></select></div>
+      <div class="form-group" style="margin-bottom:8px"><label style="font-size:12px">Año</label>
+        <select id="wp-f-anio" onchange="aplicarFiltroWaypoints()"><option value="">Todos</option></select></div>
+      <div class="form-group" style="margin-bottom:8px"><label style="font-size:12px">Waypoint</label>
+        <select id="wp-f-tipo" onchange="aplicarFiltroWaypoints()">
+          <option value="">W1 y W2</option>
+          <option value="W1">Solo W1</option>
+          <option value="W2">Solo W2</option>
+        </select></div>
+      <div id="wp-f-resumen" style="font-size:12px;color:#666;margin:6px 0">—</div>
+      <button class="btn btn-sm btn-outline" style="width:100%;color:#e74c3c;border-color:#e74c3c" onclick="borrarWaypointsFiltrados()">🗑️ Borrar los waypoints filtrados</button>
+    </div>
   </div>
   <div class="gps-panel" id="gps-panel">
     <div class="gps-panel-header" onclick="toggleGPSPanelBody()">
@@ -929,6 +949,9 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
       <div class="cam-code" id="cam-code" style="margin-top:4px;font-weight:700"></div>
     </div>
     <div class="camera-minimap" id="camera-minimap"></div>
+    <!-- Indicador de distancia al waypoint de la visita anterior (solo en
+         pantalla: el sello de la foto se dibuja en canvas y no lo incluye) -->
+    <div id="cam-distancia" style="display:none;position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:4;background:rgba(0,0,0,.7);color:#fff;font-size:15px;font-weight:700;padding:7px 16px;border-radius:18px;white-space:nowrap">📏 —</div>
     <!-- Controles ghost -->
     <div id="ghost-controls" style="display:none;position:absolute;bottom:80px;left:50%;transform:translateX(-50%);z-index:5;background:rgba(0,0,0,0.6);border-radius:20px;padding:6px 14px;align-items:center;gap:10px">
       <button onclick="toggleGhost()" id="ghost-toggle-btn" style="background:none;border:2px solid #00e5ff;color:#00e5ff;border-radius:12px;padding:4px 10px;font-size:13px;font-weight:600;cursor:pointer">👻 Ghost ON</button>

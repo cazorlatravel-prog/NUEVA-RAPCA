@@ -1191,18 +1191,31 @@ function mostrarPrecisionGPS() {
 // WAYPOINTS PERSISTENTES (IndexedDB — sobreviven cierre/reinicio/borrar caché)
 // ============================================================
 
+// Filtro activo del gestor de waypoints (unidad, año, tipo W1/W2)
+var wpFiltro = {unidad: '', anio: '', tipo: ''};
+
+function _wpPasaFiltro(wp) {
+  if (wpFiltro.unidad && (wp.unidad || '') !== wpFiltro.unidad) return false;
+  if (wpFiltro.anio && String(wp.fecha || '').slice(0, 4) !== wpFiltro.anio) return false;
+  if (wpFiltro.tipo && (wp.waypoint || '') !== wpFiltro.tipo) return false;
+  return true;
+}
+
 function cargarWaypointsPersistentes() {
   if (!db || !capaWaypointsPersist) return;
   capaWaypointsPersist.clearLayers();
 
   obtenerTodosDB('waypoints_comp').then(function(wps) {
-    if (!wps || wps.length === 0) {
+    wps = wps || [];
+    actualizarPanelWaypoints(wps);
+    if (wps.length === 0) {
       return;
     }
     var coloresWP = {W1: '#e74c3c', W2: '#3498db'};
 
     wps.forEach(function(wp) {
       if (!wp.lat || !wp.lon) return;
+      if (!_wpPasaFiltro(wp)) return;
       var wColor = coloresWP[wp.waypoint] || '#888';
       var marker = L.circleMarker([wp.lat, wp.lon], {
         radius: 7, fillColor: wColor, color: '#fff', weight: 2, fillOpacity: 0.9
@@ -1252,6 +1265,72 @@ function cargarWaypointsPersistentes() {
     });
 
   }).catch(function(e) { console.warn('Error cargando waypoints persistentes:', e); });
+}
+
+function toggleWaypointsPanel() {
+  var panel = document.getElementById('wp-panel');
+  if (!panel) return;
+  panel.classList.toggle('open');
+  if (panel.classList.contains('open')) cargarWaypointsPersistentes();
+}
+
+// Rellena los selects de filtro y el resumen con los waypoints existentes
+function actualizarPanelWaypoints(wps) {
+  var panel = document.getElementById('wp-panel');
+  if (!panel) return;
+  var total = wps.length;
+  var visibles = wps.filter(function(w) { return _wpPasaFiltro(w); }).length;
+  var count = document.getElementById('wp-panel-count');
+  if (count) count.textContent = total;
+  var resumen = document.getElementById('wp-f-resumen');
+  if (resumen) resumen.textContent = 'Mostrando ' + visibles + ' de ' + total + ' waypoints';
+
+  function poblar(selId, valores, actual) {
+    var sel = document.getElementById(selId);
+    if (!sel) return;
+    var primera = sel.options[0].outerHTML;
+    sel.innerHTML = primera + valores.map(function(v) {
+      return '<option value="' + escapeHtml(v) + '"' + (v === actual ? ' selected' : '') + '>' + escapeHtml(v) + '</option>';
+    }).join('');
+    sel.value = actual || '';
+  }
+  var unidades = [];
+  var anios = [];
+  wps.forEach(function(w) {
+    if (w.unidad && unidades.indexOf(w.unidad) < 0) unidades.push(w.unidad);
+    var a = String(w.fecha || '').slice(0, 4);
+    if (a && /^\d{4}$/.test(a) && anios.indexOf(a) < 0) anios.push(a);
+  });
+  poblar('wp-f-unidad', unidades.sort(), wpFiltro.unidad);
+  poblar('wp-f-anio', anios.sort().reverse(), wpFiltro.anio);
+  var selTipo = document.getElementById('wp-f-tipo');
+  if (selTipo) selTipo.value = wpFiltro.tipo || '';
+}
+
+function aplicarFiltroWaypoints() {
+  wpFiltro.unidad = (document.getElementById('wp-f-unidad') || {}).value || '';
+  wpFiltro.anio = (document.getElementById('wp-f-anio') || {}).value || '';
+  wpFiltro.tipo = (document.getElementById('wp-f-tipo') || {}).value || '';
+  cargarWaypointsPersistentes();
+}
+
+// Borra del almacén todos los waypoints que cumplen el filtro actual
+function borrarWaypointsFiltrados() {
+  if (!db) return;
+  obtenerTodosDB('waypoints_comp').then(function(wps) {
+    var objetivo = (wps || []).filter(function(w) { return _wpPasaFiltro(w); });
+    if (objetivo.length === 0) { showToast('No hay waypoints que cumplan el filtro', 'info'); return; }
+    var desc = [];
+    if (wpFiltro.unidad) desc.push('unidad ' + wpFiltro.unidad);
+    if (wpFiltro.anio) desc.push('año ' + wpFiltro.anio);
+    if (wpFiltro.tipo) desc.push(wpFiltro.tipo);
+    var etiqueta = desc.length ? ' (' + desc.join(', ') + ')' : ' (TODOS)';
+    if (!confirm('¿Borrar ' + objetivo.length + ' waypoints' + etiqueta + '? Esta acción no se puede deshacer.')) return;
+    Promise.all(objetivo.map(function(w) { return eliminarDeDB('waypoints_comp', w.id); })).then(function() {
+      cargarWaypointsPersistentes();
+      showToast(objetivo.length + ' waypoints borrados', 'success');
+    }).catch(function(e) { showToast('Error al borrar: ' + e, 'error'); });
+  });
 }
 
 function borrarWaypointPersistente(id) {
