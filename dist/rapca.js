@@ -352,6 +352,7 @@ function irPagina(id) {
   // Empujar estado al historial para proteger botón atrás
   pushHistoryState();
 
+  if (id === 'menu' && typeof actualizarBadgeBorradorEI === 'function') actualizarBadgeBorradorEI();
   if (id === 'vp') initFormVP();
   if (id === 'el') initFormEL();
   if (id === 'ei') initFormEI();
@@ -929,6 +930,8 @@ function loginExito() {
   }
   showToast('Bienvenido, ' + sesion.nombre, 'success');
   cargarDatos();
+  // Mostrar aviso de Evaluación Intensa a medias si la hay
+  if (typeof actualizarBadgeBorradorEI === 'function') actualizarBadgeBorradorEI();
   // Descargar registros del servidor (admin ve todos, operador los suyos)
   if (sesion.token && !sesion.token.startsWith('local_') && navigator.onLine) {
     cargarRegistrosServidor().then(function() {
@@ -1322,6 +1325,31 @@ function initFormEI() {
     }
   }
   iniciarAutoGuardado('EI');
+}
+
+// Guardar la evaluación intensa A MEDIAS (sin exigir transectos completos)
+// para retomarla más tarde desde el diálogo "Continuar donde lo dejé".
+// No crea ficha en registros: todo queda en el borrador local.
+function guardarEIParaDespues() {
+  if (editandoRegistro) {
+    showToast('Estás editando una ficha ya guardada: usa "Guardar Transecto"', 'info');
+    return;
+  }
+  window._dialogoBorradorPendiente = false;
+  guardarBorrador('EI');
+  detenerAutoGuardado();
+  vibrar(30);
+  var unidad = document.getElementById('ev-unidad').value.trim();
+  showToast('Evaluación de ' + (unidad || 'la unidad') + ' guardada sin terminar. Al volver a abrir Eval. Intensa podrás continuarla.', 'success', 5000);
+  irPagina('menu');
+}
+
+// Aviso en el menú de que hay una Evaluación Intensa a medias
+function actualizarBadgeBorradorEI() {
+  var badge = document.getElementById('badge-ei-borrador');
+  if (!badge) return;
+  var borr = safeParse('rapca_borrador_ei', null);
+  badge.style.display = (borr && _borradorEITieneDatos(borr)) ? 'inline-block' : 'none';
 }
 
 // ¿El borrador EI tiene contenido real que merezca retomarse?

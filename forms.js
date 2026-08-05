@@ -323,6 +323,31 @@ function initFormEI() {
   iniciarAutoGuardado('EI');
 }
 
+// Guardar la evaluación intensa A MEDIAS (sin exigir transectos completos)
+// para retomarla más tarde desde el diálogo "Continuar donde lo dejé".
+// No crea ficha en registros: todo queda en el borrador local.
+function guardarEIParaDespues() {
+  if (editandoRegistro) {
+    showToast('Estás editando una ficha ya guardada: usa "Guardar Transecto"', 'info');
+    return;
+  }
+  window._dialogoBorradorPendiente = false;
+  guardarBorrador('EI');
+  detenerAutoGuardado();
+  vibrar(30);
+  var unidad = document.getElementById('ev-unidad').value.trim();
+  showToast('Evaluación de ' + (unidad || 'la unidad') + ' guardada sin terminar. Al volver a abrir Eval. Intensa podrás continuarla.', 'success', 5000);
+  irPagina('menu');
+}
+
+// Aviso en el menú de que hay una Evaluación Intensa a medias
+function actualizarBadgeBorradorEI() {
+  var badge = document.getElementById('badge-ei-borrador');
+  if (!badge) return;
+  var borr = safeParse('rapca_borrador_ei', null);
+  badge.style.display = (borr && _borradorEITieneDatos(borr)) ? 'inline-block' : 'none';
+}
+
 // ¿El borrador EI tiene contenido real que merezca retomarse?
 function _borradorEITieneDatos(b) {
   if (!b) return false;

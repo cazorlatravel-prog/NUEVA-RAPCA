@@ -352,6 +352,7 @@ function irPagina(id) {
   // Empujar estado al historial para proteger botón atrás
   pushHistoryState();
 
+  if (id === 'menu' && typeof actualizarBadgeBorradorEI === 'function') actualizarBadgeBorradorEI();
   if (id === 'vp') initFormVP();
   if (id === 'el') initFormEL();
   if (id === 'ei') initFormEI();

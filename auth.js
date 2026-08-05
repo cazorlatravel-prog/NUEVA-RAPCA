@@ -131,6 +131,8 @@ function loginExito() {
   }
   showToast('Bienvenido, ' + sesion.nombre, 'success');
   cargarDatos();
+  // Mostrar aviso de Evaluación Intensa a medias si la hay
+  if (typeof actualizarBadgeBorradorEI === 'function') actualizarBadgeBorradorEI();
   // Descargar registros del servidor (admin ve todos, operador los suyos)
   if (sesion.token && !sesion.token.startsWith('local_') && navigator.onLine) {
     cargarRegistrosServidor().then(function() {

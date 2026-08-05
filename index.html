@@ -470,7 +470,7 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
   <div class="menu-grid" id="menu-campo">
     <button class="menu-btn" onclick="irPagina('vp')"><div class="icon" style="background:var(--c-vp)">📋</div><span>Visita Previa</span></button>
     <button class="menu-btn" onclick="irPagina('el')"><div class="icon" style="background:var(--c-el)">📝</div><span>Eval. Ligera</span></button>
-    <button class="menu-btn" onclick="irPagina('ei')"><div class="icon" style="background:var(--c-ei)">📊</div><span>Eval. Intensa</span></button>
+    <button class="menu-btn" onclick="irPagina('ei')" style="position:relative"><div class="icon" style="background:var(--c-ei)">📊</div><span>Eval. Intensa</span><span id="badge-ei-borrador" style="display:none;position:absolute;top:6px;right:6px;background:#e67e22;color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px">⏸ a medias</span></button>
     <button class="menu-btn" onclick="irPagina('mapa')"><div class="icon" style="background:var(--c-map)">🗺️</div><span>Mapa</span></button>
   </div>
 
@@ -664,6 +664,7 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
     <div class="form-group"><textarea id="ev-observaciones" placeholder="Observaciones generales..."></textarea></div>
 
     <button class="btn btn-block" style="background:var(--c-ei);color:#fff;font-size:16px;padding:14px" onclick="guardarEI()">💾 Guardar Transecto</button>
+    <button class="btn btn-block btn-outline" style="margin-top:8px;font-size:14px;padding:12px;color:#e67e22;border-color:#e67e22" onclick="guardarEIParaDespues()">⏸️ Guardar sin terminar y continuar después</button>
   </div>
 </div>
 

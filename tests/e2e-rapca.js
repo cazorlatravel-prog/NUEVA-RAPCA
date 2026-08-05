@@ -337,6 +337,54 @@ function ok(nombre, cond, detalle) {
   ok('Sin evaluación a medias no aparece el diálogo', dialogo3 === false);
   await page.evaluate(() => irPagina('menu'));
 
+  console.log('\n== 3c. Guardar EI sin terminar y continuarla después ==');
+  await page.evaluate(() => irPagina('ei'));
+  await page.waitForTimeout(400);
+  await page.evaluate(() => {
+    document.getElementById('ev-unidad').value = 'TEST_U6';
+    document.querySelector('#ev-pastoreo-container .pastoreo-btn[data-punto="1"][data-val="PL"]').click();
+    document.getElementById('ev-planta1-nombre').value = 'Ulex sp.';
+    document.getElementById('ev-planta1-n1').value = '4';
+    calcMediaPlanta(1);
+  });
+  const nEIAntes = await page.evaluate(() => registros.filter(r => r.tipo === 'EI').length);
+  await page.evaluate(() => guardarEIParaDespues());
+  await page.waitForTimeout(500);
+  const trasPausar = await page.evaluate(() => ({
+    pagina: document.querySelector('.page.active').id,
+    nEI: registros.filter(r => r.tipo === 'EI').length,
+    borrador: !!localStorage.getItem('rapca_borrador_ei'),
+    badge: document.getElementById('badge-ei-borrador').style.display
+  }));
+  ok('Guardar sin terminar vuelve al menú', trasPausar.pagina === 'menu-page', JSON.stringify(trasPausar));
+  ok('No crea ficha en registros (queda como borrador)', trasPausar.nEI === nEIAntes);
+  ok('El borrador queda guardado', trasPausar.borrador === true);
+  ok('El menú muestra el aviso "a medias" en Eval. Intensa', trasPausar.badge === 'inline-block', trasPausar.badge);
+
+  // Reabrir: diálogo → continuar → datos restaurados
+  await page.evaluate(() => irPagina('ei'));
+  await page.waitForTimeout(500);
+  const dialogoPausa = await page.evaluate(() => document.getElementById('modal-overlay').classList.contains('open'));
+  ok('Al reabrir pregunta si continuar', dialogoPausa === true);
+  await page.evaluate(() => continuarBorradorEI());
+  await page.waitForTimeout(500);
+  const restaurado = await page.evaluate(() => ({
+    unidad: document.getElementById('ev-unidad').value,
+    planta: document.getElementById('ev-planta1-nombre').value,
+    nota: document.getElementById('ev-planta1-n1').value,
+    pastoreo: document.querySelector('#ev-pastoreo-container .pastoreo-btn.selected[data-punto="1"]') ?
+      document.querySelector('#ev-pastoreo-container .pastoreo-btn.selected[data-punto="1"]').getAttribute('data-val') : null
+  }));
+  ok('Al continuar se restaura todo lo que había a medias',
+    restaurado.unidad === 'TEST_U6' && restaurado.planta === 'Ulex sp.' && restaurado.nota === '4' && restaurado.pastoreo === 'PL',
+    JSON.stringify(restaurado));
+
+  // Dejar limpio para el resto de secciones y comprobar que el badge se apaga
+  await page.evaluate(() => { limpiarBorrador('EI'); irPagina('menu'); });
+  await page.waitForTimeout(300);
+  const badgeApagado = await page.evaluate(() => document.getElementById('badge-ei-borrador').style.display);
+  ok('El aviso del menú se apaga al no haber nada a medias', badgeApagado === 'none', badgeApagado);
+
   console.log('\n== 4. Informe PDF de la ficha EI (transectos incluidos) ==');
   const eiId = await page.evaluate(() => registros.find(x => x.tipo === 'EI').id);
   const [popup] = await Promise.all([
