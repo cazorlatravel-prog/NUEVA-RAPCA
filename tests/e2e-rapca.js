@@ -239,6 +239,58 @@ function ok(nombre, cond, detalle) {
   await page.evaluate(() => cerrarCamara());
   await page.evaluate(() => irPagina('menu'));
 
+  console.log('\n== 2d. Fotos: generales solo en el teléfono, comparativas a la cola ==');
+  await page.evaluate(() => irPagina('el'));
+  await page.waitForTimeout(350);
+  await page.evaluate(() => { document.getElementById('el-unidad').value = 'TEST_U1'; });
+
+  // Foto GENERAL: capturar + aceptar → fotos_locales sí, subidas_pendientes no
+  await page.evaluate(() => abrirCamara('EL', 'G'));
+  await page.waitForTimeout(1200);
+  const codG = await page.evaluate(() => fotoCodigo);
+  await page.evaluate(() => capturarFoto());
+  await page.waitForFunction(() => document.getElementById('preview-modal').classList.contains('open'), { timeout: 15000 });
+  await page.evaluate(() => aceptarFoto());
+  await page.waitForTimeout(2500);
+  const fotoG = await page.evaluate(async (cod) => ({
+    local: !!(await obtenerDeDB('fotos_locales', cod)),
+    pendiente: !!(await obtenerDeDB('subidas_pendientes', cod)),
+    thumb: !!(await obtenerDeDB('fotos', cod))
+  }), codG);
+  ok('Foto general guardada en el teléfono (fotos_locales)', fotoG.local && fotoG.thumb, JSON.stringify(fotoG));
+  ok('Foto general NO entra en la cola de subida', fotoG.pendiente === false, JSON.stringify(fotoG));
+
+  // Foto COMPARATIVA W1: → subidas_pendientes sí, fotos_locales no
+  await page.evaluate(() => abrirCamara('EL', 'W1'));
+  await page.waitForTimeout(1200);
+  const codW = await page.evaluate(() => fotoCodigo);
+  await page.evaluate(() => capturarFoto());
+  await page.waitForFunction(() => document.getElementById('preview-modal').classList.contains('open'), { timeout: 15000 });
+  await page.evaluate(() => aceptarFoto());
+  await page.waitForTimeout(2500);
+  const fotoW = await page.evaluate(async (cod) => ({
+    local: !!(await obtenerDeDB('fotos_locales', cod)),
+    pendiente: !!(await obtenerDeDB('subidas_pendientes', cod))
+  }), codW);
+  ok('Foto comparativa W1 SÍ entra en la cola de subida', fotoW.pendiente === true, JSON.stringify(fotoW));
+  ok('Foto comparativa no duplica copia en fotos_locales', fotoW.local === false, JSON.stringify(fotoW));
+
+  // La general se abre en HD desde el teléfono (sin internet)
+  const hdLocal = await page.evaluate((cod) => cargarFotoHD(cod, 'EL', 'TEST_U1').then(d => !!(d && d.indexOf('data:') === 0)), codG);
+  ok('La foto general abre en HD desde el almacén local', hdLocal === true);
+
+  // Limpieza: no interferir con las secciones posteriores (waypoints, contadores)
+  await page.evaluate(async (cods) => {
+    for (const c of cods) {
+      await eliminarDeDB('fotos', c).catch(() => {});
+      await eliminarDeDB('fotos_locales', c).catch(() => {});
+      await eliminarDeDB('subidas_pendientes', c).catch(() => {});
+      await eliminarDeDB('waypoints_comp', c).catch(() => {});
+    }
+    fotosPagina = {};
+  }, [codG, codW]);
+  await page.evaluate(() => irPagina('menu'));
+
   console.log('\n== 3. Evaluación Intensiva: transectos individuales y ficha única ==');
   await page.evaluate(() => irPagina('menu'));
   await page.evaluate(() => irPagina('ei'));

@@ -2085,12 +2085,20 @@ function aceptarFoto() {
     // La versión de subida viaja como data URL (formato de sync.js/upload.php)
     return _blobADataURL(conExif);
   }).then(function(uploadData) {
+    var esComparativa = _camaraSubtipo === 'W1' || _camaraSubtipo === 'W2';
     return guardarEnDB('fotos', {codigo: _fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
-      return guardarEnDB('subidas_pendientes', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
-    });
-  }).then(function() {
+      // Solo las fotos comparativas W1/W2 se suben a internet; las generales
+      // se quedan a resolución completa en el teléfono (fotos_locales)
+      if (esComparativa) {
+        return guardarEnDB('subidas_pendientes', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
+      }
+      return guardarEnDB('fotos_locales', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
+    }).then(function() { return esComparativa; });
+  }).then(function(esComparativa) {
     actualizarContadorFotos();
-    if (navigator.onLine) {
+    if (!esComparativa) {
+      showToast('Foto ' + _fotoCodigo + ' guardada en el teléfono.', 'success');
+    } else if (navigator.onLine) {
       showToast('Foto ' + _fotoCodigo + ' guardada. Subiendo...', 'success');
       subirFotosPendientesAuto();
     } else {

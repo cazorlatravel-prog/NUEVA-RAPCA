@@ -77,11 +77,14 @@ var lightboxIdx = 0;
 // --- IndexedDB ---
 function abrirDB() {
   return new Promise(function(resolve, reject) {
-    var req = indexedDB.open('RAPCA_Fotos', 5);
+    var req = indexedDB.open('RAPCA_Fotos', 6);
     req.onupgradeneeded = function(e) {
       var d = e.target.result;
       if (!d.objectStoreNames.contains('fotos')) d.createObjectStore('fotos', {keyPath:'codigo'});
       if (!d.objectStoreNames.contains('subidas_pendientes')) d.createObjectStore('subidas_pendientes', {keyPath:'codigo'});
+      // Fotos generales a resolución completa que se quedan SOLO en el
+      // teléfono (a internet solo se suben las comparativas W1/W2)
+      if (!d.objectStoreNames.contains('fotos_locales')) d.createObjectStore('fotos_locales', {keyPath:'codigo'});
       if (!d.objectStoreNames.contains('fotos_precargadas')) d.createObjectStore('fotos_precargadas', {keyPath:'codigo'});
       if (!d.objectStoreNames.contains('capas_kml')) d.createObjectStore('capas_kml', {keyPath:'nombre'});
       if (!d.objectStoreNames.contains('waypoints_comp')) d.createObjectStore('waypoints_comp', {keyPath:'id'});
@@ -150,6 +153,10 @@ function buscarFotoData(codigo, tipo, unidad) {
   }).then(function(f) {
     if (typeof f === 'string') return f;
     if (f && f.data) return f.data;
+    return obtenerDeDB('fotos_locales', codigo);
+  }).then(function(f) {
+    if (typeof f === 'string') return f;
+    if (f && f.data) return f.data;
 
     // Último recurso: Cloudinary (si online y tenemos tipo/unidad)
     if (!navigator.onLine || !tipo || !unidad) return null;
@@ -199,6 +206,10 @@ function cargarFotoHD(codigo, tipo, unidad) {
   if (!codigo || !db) return Promise.resolve(null);
   return obtenerDeDB('subidas_pendientes', codigo).then(function(f) {
     if (f && f.data) return f.data; // full-res local (antes de subir)
+    return obtenerDeDB('fotos_locales', codigo);
+  }).then(function(f) {
+    if (f && f.data) return f.data; // foto general guardada solo en el teléfono
+    if (typeof f === 'string') return f;
     if (!tipo || !unidad) {
       var info = fotoInfoDesdeCodigo(codigo);
       if (info) { tipo = tipo || info.tipo; unidad = unidad || info.unidad; }
@@ -644,11 +655,14 @@ function limpiarFotosAntiguas() {
   var limite = Date.now() - (5 * 24 * 60 * 60 * 1000);
   // No borrar thumbnails de fotos que aún estén pendientes de subir
   obtenerTodosDB('subidas_pendientes').then(function(pendientes) {
-    var pendMap = {};
-    pendientes.forEach(function(p) { pendMap[p.codigo] = true; });
-    return obtenerTodosDB('fotos').then(function(fotos) {
+    var protegidas = {};
+    pendientes.forEach(function(p) { protegidas[p.codigo] = true; });
+    return obtenerTodosDB('fotos_locales').then(function(locales) {
+      (locales || []).forEach(function(p) { protegidas[p.codigo] = true; });
+      return obtenerTodosDB('fotos');
+    }).then(function(fotos) {
       fotos.forEach(function(f) {
-        if (f.fecha < limite && !pendMap[f.codigo]) eliminarDeDB('fotos', f.codigo);
+        if (f.fecha < limite && !protegidas[f.codigo]) eliminarDeDB('fotos', f.codigo);
       });
     });
   }).catch(function(e) { console.warn('limpiarFotosAntiguas:', e); });
@@ -4314,12 +4328,20 @@ function aceptarFoto() {
     // La versión de subida viaja como data URL (formato de sync.js/upload.php)
     return _blobADataURL(conExif);
   }).then(function(uploadData) {
+    var esComparativa = _camaraSubtipo === 'W1' || _camaraSubtipo === 'W2';
     return guardarEnDB('fotos', {codigo: _fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
-      return guardarEnDB('subidas_pendientes', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
-    });
-  }).then(function() {
+      // Solo las fotos comparativas W1/W2 se suben a internet; las generales
+      // se quedan a resolución completa en el teléfono (fotos_locales)
+      if (esComparativa) {
+        return guardarEnDB('subidas_pendientes', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
+      }
+      return guardarEnDB('fotos_locales', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
+    }).then(function() { return esComparativa; });
+  }).then(function(esComparativa) {
     actualizarContadorFotos();
-    if (navigator.onLine) {
+    if (!esComparativa) {
+      showToast('Foto ' + _fotoCodigo + ' guardada en el teléfono.', 'success');
+    } else if (navigator.onLine) {
       showToast('Foto ' + _fotoCodigo + ' guardada. Subiendo...', 'success');
       subirFotosPendientesAuto();
     } else {
@@ -11237,6 +11259,7 @@ function eliminarFotosDeCodigos(codigos) {
     if (typeof eliminarDeDB === 'function') {
       eliminarDeDB('fotos', codigo);
       eliminarDeDB('subidas_pendientes', codigo);
+      eliminarDeDB('fotos_locales', codigo);
       eliminarDeDB('waypoints_comp', codigo);
       eliminarDeDB('fotos_precargadas', codigo);
     }

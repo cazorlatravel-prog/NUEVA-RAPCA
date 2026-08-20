@@ -483,6 +483,7 @@ function eliminarFotosDeCodigos(codigos) {
     if (typeof eliminarDeDB === 'function') {
       eliminarDeDB('fotos', codigo);
       eliminarDeDB('subidas_pendientes', codigo);
+      eliminarDeDB('fotos_locales', codigo);
       eliminarDeDB('waypoints_comp', codigo);
       eliminarDeDB('fotos_precargadas', codigo);
     }
