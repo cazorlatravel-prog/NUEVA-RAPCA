@@ -2072,23 +2072,18 @@ function aceptarFoto() {
   document.getElementById('preview-modal').classList.remove('open');
 
   // --- Codificación de calidad completa ---
-  // Ambas versiones (descarga 0.97 y subida 0.94) se lanzan en el MISMO tick:
-  // toBlob captura el bitmap en el momento de la llamada, y el canvas de
-  // preview se reutiliza en la siguiente captura (codificar la segunda
-  // versión "más tarde" podía guardar la foto siguiente bajo este código).
-  Promise.all([
-    _canvasABlob(canvas, 0.97),
-    _canvasABlob(canvas, 0.94)
-  ]).then(function(blobs) {
-    // Insertar coordenadas GPS en los metadatos EXIF de ambas copias
-    return Promise.all([
-      inyectarGPSenJPEG(blobs[0], _gpsLat, _gpsLon, _gpsAlt),
-      inyectarGPSenJPEG(blobs[1], _gpsLat, _gpsLon, _gpsAlt)
-    ]);
+  // UNA sola codificación (0.96) reutilizada para la descarga y la subida:
+  // codificar dos JPEG de resolución completa en paralelo duplicaba el pico
+  // de memoria y en móviles justos Android mataba la app al encadenar fotos.
+  // Se lanza en el MISMO tick: toBlob captura el bitmap en el momento de la
+  // llamada y el canvas de preview se reutiliza en la siguiente captura.
+  _canvasABlob(canvas, 0.96).then(function(blob) {
+    // Insertar coordenadas GPS en los metadatos EXIF
+    return inyectarGPSenJPEG(blob, _gpsLat, _gpsLon, _gpsAlt);
   }).then(function(conExif) {
-    descargarBlob(conExif[0], _fotoCodigo + '.jpg');
+    descargarBlob(conExif, _fotoCodigo + '.jpg');
     // La versión de subida viaja como data URL (formato de sync.js/upload.php)
-    return _blobADataURL(conExif[1]);
+    return _blobADataURL(conExif);
   }).then(function(uploadData) {
     return guardarEnDB('fotos', {codigo: _fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
       return guardarEnDB('subidas_pendientes', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});

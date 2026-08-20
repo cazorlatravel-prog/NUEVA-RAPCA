@@ -4301,23 +4301,18 @@ function aceptarFoto() {
   document.getElementById('preview-modal').classList.remove('open');
 
   // --- Codificación de calidad completa ---
-  // Ambas versiones (descarga 0.97 y subida 0.94) se lanzan en el MISMO tick:
-  // toBlob captura el bitmap en el momento de la llamada, y el canvas de
-  // preview se reutiliza en la siguiente captura (codificar la segunda
-  // versión "más tarde" podía guardar la foto siguiente bajo este código).
-  Promise.all([
-    _canvasABlob(canvas, 0.97),
-    _canvasABlob(canvas, 0.94)
-  ]).then(function(blobs) {
-    // Insertar coordenadas GPS en los metadatos EXIF de ambas copias
-    return Promise.all([
-      inyectarGPSenJPEG(blobs[0], _gpsLat, _gpsLon, _gpsAlt),
-      inyectarGPSenJPEG(blobs[1], _gpsLat, _gpsLon, _gpsAlt)
-    ]);
+  // UNA sola codificación (0.96) reutilizada para la descarga y la subida:
+  // codificar dos JPEG de resolución completa en paralelo duplicaba el pico
+  // de memoria y en móviles justos Android mataba la app al encadenar fotos.
+  // Se lanza en el MISMO tick: toBlob captura el bitmap en el momento de la
+  // llamada y el canvas de preview se reutiliza en la siguiente captura.
+  _canvasABlob(canvas, 0.96).then(function(blob) {
+    // Insertar coordenadas GPS en los metadatos EXIF
+    return inyectarGPSenJPEG(blob, _gpsLat, _gpsLon, _gpsAlt);
   }).then(function(conExif) {
-    descargarBlob(conExif[0], _fotoCodigo + '.jpg');
+    descargarBlob(conExif, _fotoCodigo + '.jpg');
     // La versión de subida viaja como data URL (formato de sync.js/upload.php)
-    return _blobADataURL(conExif[1]);
+    return _blobADataURL(conExif);
   }).then(function(uploadData) {
     return guardarEnDB('fotos', {codigo: _fotoCodigo, data: thumbData, fecha: Date.now()}).then(function() {
       return guardarEnDB('subidas_pendientes', {codigo: _fotoCodigo, data: uploadData, tipo: _camaraTipo, fecha: Date.now()});
@@ -4341,6 +4336,18 @@ function aceptarFoto() {
 // Extraído de app.js con mejoras de reintentos, indicadores
 // de estado y cola de subida visible.
 // ============================================================
+
+// fetch con timeout: con cobertura débil las peticiones quedaban colgadas
+// indefinidamente, reteniendo en memoria cuerpos base64 de varios MB y
+// contribuyendo a que Android matara la app en el campo
+function fetchConTimeout(url, opts, ms) {
+  if (typeof AbortController === 'undefined') return fetch(url, opts);
+  var ctrl = new AbortController();
+  var id = setTimeout(function() { ctrl.abort(); }, ms || 30000);
+  opts = opts || {};
+  opts.signal = ctrl.signal;
+  return fetch(url, opts).finally(function() { clearTimeout(id); });
+}
 
 // --- Cola de reintentos con backoff exponencial ---
 var syncRetryCola = [];
@@ -4387,7 +4394,7 @@ async function procesarReintentos() {
 
     try {
       if (sesion && sesion.token) {
-        var resp = await fetch(API_BASE + 'datos.php', {
+        var resp = await fetchConTimeout(API_BASE + 'datos.php', {
           method: 'POST',
           headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
           body: JSON.stringify({
@@ -4516,7 +4523,7 @@ async function sincronizar() {
         formData.append('entry.unidad', r.unidad);
         formData.append('entry.transecto', r.transecto);
         formData.append('entry.datos', JSON.stringify(r.datos));
-        await fetch(GOOGLE_FORM_URL, {method: 'POST', body: formData, mode: 'no-cors'});
+        await fetchConTimeout(GOOGLE_FORM_URL, {method: 'POST', body: formData, mode: 'no-cors'}, 15000);
         r.enviadoForm = true;
         // Persistir al momento: si la app se cierra a mitad de la cola,
         // el flag no se perdería y no se duplicarían filas en la hoja
@@ -4527,7 +4534,7 @@ async function sincronizar() {
     // Intentar PHP backend
     try {
       if (sesion && sesion.token) {
-        var resp = await fetch(API_BASE + 'datos.php', {
+        var resp = await fetchConTimeout(API_BASE + 'datos.php', {
           method: 'POST',
           headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
           body: JSON.stringify({
@@ -4647,7 +4654,7 @@ async function subirFotosPendientes() {
     var yaReautenticado = false;
     for (var intento = 0; intento < 3; intento++) {
       try {
-        var resp = await fetch(API_BASE + 'upload.php', {
+        var resp = await fetchConTimeout(API_BASE + 'upload.php', {
           method: 'POST',
           headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
           body: JSON.stringify({codigo: foto.codigo, tipo: foto.tipo, imagen: foto.data})
@@ -4721,7 +4728,7 @@ async function subirFotosPendientes() {
 
   if (fallos > 0) {
     showToast(fallos + ' fotos fallaron al subir', 'error');
-    fetch(API_BASE + 'notificar.php', {
+    fetchConTimeout(API_BASE + 'notificar.php', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({tipo: 'fallo_subida', fallos: fallos, operador: sesion ? sesion.email : ''})
@@ -4753,7 +4760,7 @@ async function subirDirectoCloudinary(foto) {
   formData.append('folder', folder);
   formData.append('public_id', foto.codigo);
 
-  var resp = await fetch('https://api.cloudinary.com/v1_1/' + cloudName + '/image/upload', {
+  var resp = await fetchConTimeout('https://api.cloudinary.com/v1_1/' + cloudName + '/image/upload', {
     method: 'POST',
     body: formData
   });
@@ -4781,13 +4788,13 @@ async function cargarRegistrosServidor() {
   }
 
   try {
-    var resp = await fetch(API_BASE + 'datos.php?accion=listar', {
+    var resp = await fetchConTimeout(API_BASE + 'datos.php?accion=listar', {
       headers: {'Authorization': 'Bearer ' + sesion.token}
     });
     if (resp.status === 401) {
       var reauth = await reautenticar();
       if (reauth) {
-        resp = await fetch(API_BASE + 'datos.php?accion=listar', {
+        resp = await fetchConTimeout(API_BASE + 'datos.php?accion=listar', {
           headers: {'Authorization': 'Bearer ' + sesion.token}
         });
       } else {
@@ -4891,6 +4898,12 @@ async function subirFotosPendientesAuto() {
   if (!db || subiendoFotosAuto) return;
   // Sin token válido no hay nada que subir (evita TypeError y prompts espontáneos)
   if (!sesion || !sesion.token || sesion.token.startsWith('local_')) return;
+  // Con conexión muy lenta (2G/EDGE, típico del monte) no intentar la subida
+  // automática: las peticiones enormes colgadas agotaban memoria y batería.
+  // Las fotos quedan pendientes y se subirán con mejor cobertura (o con el
+  // botón "Subir ahora").
+  var conn = navigator.connection;
+  if (conn && conn.effectiveType && /(^|-)2g$/.test(conn.effectiveType)) return;
   // Poner el flag ANTES de cualquier await: dos eventos 'online' casi simultáneos
   // pasaban ambos el guard y subían la misma lista de fotos por duplicado
   subiendoFotosAuto = true;
@@ -4910,7 +4923,7 @@ async function subirFotosPendientesAuto() {
       if (gen !== _subirFotosGen) break;
       var foto = pendientes[i];
       try {
-        var resp = await fetch(API_BASE + 'upload.php', {
+        var resp = await fetchConTimeout(API_BASE + 'upload.php', {
           method: 'POST',
           headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
           body: JSON.stringify({codigo: foto.codigo, tipo: foto.tipo, imagen: foto.data})

@@ -1,5 +1,5 @@
 // RAPCA Campo — Service Worker v1.0
-const CACHE_NAME = 'rapca-v33';
+const CACHE_NAME = 'rapca-v34';
 const CDN_CACHE = 'rapca-cdn-v1';
 
 const APP_FILES = [
@@ -108,19 +108,41 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Network-first para HTML y JS propios: así los cambios/fixes llegan
-  // de inmediato cuando hay conexión, con la caché como respaldo offline.
+  // Network-first CON TIMEOUT para HTML y JS propios: los cambios llegan de
+  // inmediato con buena conexión, pero con cobertura débil (señal presente
+  // pero inservible) no se espera a que la red muera por timeout — a los
+  // 3.5s se sirve la caché y la app arranca. La petición de red sigue en
+  // segundo plano y actualiza la caché para la próxima vez.
   // cache:'no-cache' revalida contra el servidor: sin él, la caché HTTP del
   // navegador (Expires de 1 año en .htaccess) podía servir JS rancio.
   const esHtmlOJs = e.request.mode === 'navigate' ||
     url.pathname.endsWith('.html') || url.pathname.endsWith('.js') || url.pathname === '/';
   if (esHtmlOJs) {
-    e.respondWith(
-      fetch(e.request.url, {cache: 'no-cache', credentials: 'same-origin'}).then((resp) => {
+    const redP = fetch(e.request.url, {cache: 'no-cache', credentials: 'same-origin'}).then((resp) => {
+      if (resp && resp.ok) {
         const clone = resp.clone();
         caches.open(CACHE_NAME).then((c) => c.put(e.request, clone));
-        return resp;
-      }).catch(() => caches.match(e.request).then((cached) => cached || caches.match('./index.html')))
+      }
+      return resp;
+    });
+    redP.catch(() => {}); // la rama en segundo plano nunca debe quedar sin manejar
+    const timeoutP = new Promise((resolve) => setTimeout(() => resolve('timeout'), 3500));
+    e.respondWith(
+      Promise.race([redP.catch(() => 'error'), timeoutP]).then((ganador) => {
+        const esRespuesta = ganador !== 'timeout' && ganador !== 'error' && ganador;
+        if (esRespuesta && ganador.ok) return ganador;
+        // Timeout, error de red o respuesta no-ok (500 del servidor): caché
+        return caches.match(e.request).then((cached) => {
+          if (cached) return cached;
+          if (esRespuesta) return ganador; // respuesta real aunque no-ok
+          // Sin caché: esperar a la red de verdad. El fallback a index.html
+          // SOLO vale para navegaciones (devolver HTML donde se esperaba un
+          // JS rompía la app entera con un SyntaxError)
+          return redP.catch(() =>
+            e.request.mode === 'navigate' ? caches.match('./index.html') : Response.error()
+          );
+        });
+      })
     );
     return;
   }
