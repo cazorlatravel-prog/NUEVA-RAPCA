@@ -7,6 +7,10 @@
 // fetch con timeout: con cobertura débil las peticiones quedaban colgadas
 // indefinidamente, reteniendo en memoria cuerpos base64 de varios MB y
 // contribuyendo a que Android matara la app en el campo
+// Timeout largo para subidas de fotos: un JPEG en base64 (~2MB) necesita
+// más de 30s en 3G lento; abortar antes hacía la foto insubible
+var TIMEOUT_SUBIDA_FOTO = 120000;
+
 function fetchConTimeout(url, opts, ms) {
   if (typeof AbortController === 'undefined') return fetch(url, opts);
   var ctrl = new AbortController();
@@ -190,13 +194,21 @@ async function sincronizar() {
         formData.append('entry.unidad', r.unidad);
         formData.append('entry.transecto', r.transecto);
         formData.append('entry.datos', JSON.stringify(r.datos));
-        await fetchConTimeout(GOOGLE_FORM_URL, {method: 'POST', body: formData, mode: 'no-cors'}, 15000);
+        await fetchConTimeout(GOOGLE_FORM_URL, {method: 'POST', body: formData, mode: 'no-cors'}, 30000);
         r.enviadoForm = true;
         // Persistir al momento: si la app se cierra a mitad de la cola,
         // el flag no se perdería y no se duplicarían filas en la hoja
         guardarRegistros();
       }
-    } catch(e) {}
+    } catch(e) {
+      // Timeout con la petición ya en vuelo: lo más probable es que Google
+      // la procesara igualmente — marcar para no duplicar filas en la hoja.
+      // Un fallo de red real (offline) NO marca y se reintenta.
+      if (e && e.name === 'AbortError') {
+        r.enviadoForm = true;
+        guardarRegistros();
+      }
+    }
 
     // Intentar PHP backend
     try {
@@ -325,7 +337,7 @@ async function subirFotosPendientes() {
           method: 'POST',
           headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
           body: JSON.stringify({codigo: foto.codigo, tipo: foto.tipo, imagen: foto.data})
-        });
+        }, TIMEOUT_SUBIDA_FOTO);
         if (!resp.ok) {
           console.warn('Upload HTTP error:', foto.codigo, resp.status, resp.statusText);
           if (resp.status === 401 && !yaReautenticado) {
@@ -430,7 +442,7 @@ async function subirDirectoCloudinary(foto) {
   var resp = await fetchConTimeout('https://api.cloudinary.com/v1_1/' + cloudName + '/image/upload', {
     method: 'POST',
     body: formData
-  });
+  }, TIMEOUT_SUBIDA_FOTO);
   if (!resp.ok) {
     console.warn('Cloudinary directo HTTP error:', resp.status, resp.statusText);
     return false;
@@ -594,7 +606,7 @@ async function subirFotosPendientesAuto() {
           method: 'POST',
           headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
           body: JSON.stringify({codigo: foto.codigo, tipo: foto.tipo, imagen: foto.data})
-        });
+        }, TIMEOUT_SUBIDA_FOTO);
         if (resp.ok) {
           var result = await resp.json();
           if (result.ok) {

@@ -205,13 +205,19 @@ function precargaListarFotos(zona) {
     }
   });
 
-  // También intentar listar desde el servidor
+  // También intentar listar desde el servidor (y recordar qué códigos tiene:
+  // las fotos generales nuevas viven solo en el teléfono que las hizo y
+  // pedirlas al servidor contaba "errores" eternos en cada precarga)
+  var codigosServidor = {};
+  var servidorRespondio = false;
   var promises = unidadesSeleccionadas.map(function(unidad) {
     return fetch(API_BASE + 'fotos.php?accion=listar&unidad=' + encodeURIComponent(unidad), {
       headers: {'Authorization': 'Bearer ' + (sesion ? sesion.token : '')}
     }).then(function(r) { return r.json(); }).then(function(data) {
       if (data.ok && data.fotos) {
+        servidorRespondio = true;
         data.fotos.forEach(function(f) {
+          codigosServidor[f.codigo] = true;
           if (codigosVistos[f.codigo]) return;
           codigosVistos[f.codigo] = true;
           fotosEncontradas.push(f);
@@ -221,12 +227,24 @@ function precargaListarFotos(zona) {
   });
 
   Promise.all(promises).then(function() {
+    // Excluir las generales que el servidor no tiene (solo si respondió:
+    // sin respuesta no podemos distinguir y se mantiene la lista completa)
+    var soloEnOrigen = 0;
+    if (servidorRespondio) {
+      fotosEncontradas = fotosEncontradas.filter(function(f) {
+        if ((f.waypoint || 'G') !== 'G') return true;
+        if (codigosServidor[f.codigo]) return true;
+        soloEnOrigen++;
+        return false;
+      });
+    }
     precargaFotosListadas = fotosEncontradas;
     var nComp = fotosEncontradas.filter(function(f) { return f.waypoint === 'W1' || f.waypoint === 'W2'; }).length;
     var nGen = fotosEncontradas.length - nComp;
 
     var resumen = document.getElementById('precarga-fotos-resumen');
-    resumen.innerHTML = '<strong>' + fotosEncontradas.length + ' fotos</strong> encontradas (' + nComp + ' comparativas, ' + nGen + ' generales)';
+    resumen.innerHTML = '<strong>' + fotosEncontradas.length + ' fotos</strong> encontradas (' + nComp + ' comparativas, ' + nGen + ' generales)' +
+      (soloEnOrigen ? '<br><small style="color:#888">' + soloEnOrigen + ' generales solo en el teléfono que las hizo (no descargables)</small>' : '');
 
     document.getElementById('precarga-fotos-info').style.display = fotosEncontradas.length > 0 ? 'block' : 'none';
 

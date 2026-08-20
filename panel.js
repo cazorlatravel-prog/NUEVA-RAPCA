@@ -371,9 +371,12 @@ async function ejecutarBorrarTodo() {
   // Limpiar fotos e IndexedDB
   if (db) {
     try {
-      var tx = db.transaction(['fotos', 'subidas_pendientes'], 'readwrite');
+      var tx = db.transaction(['fotos', 'subidas_pendientes', 'fotos_locales'], 'readwrite');
       tx.objectStore('fotos').clear();
       tx.objectStore('subidas_pendientes').clear();
+      // Sin esto, las fotos generales full-res quedaban huérfanas para
+      // siempre y podían "resucitar" al reutilizarse códigos tras el reinicio
+      tx.objectStore('fotos_locales').clear();
     } catch(e) { console.error('Error limpiando IndexedDB:', e); }
   }
 
@@ -599,7 +602,7 @@ async function exportarPDFRegistro(id, opcionesFotos) {
       html += '<div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center">';
       for (var i = 0; i < codigos.length; i++) {
         try {
-          var fotoData = await buscarFotoData(codigos[i], r.tipo, r.unidad);
+          var fotoData = await fotoMejorCalidad(codigos[i], r.tipo, r.unidad);
           if (fotoData) {
             html += '<div style="text-align:center">';
             html += '<img src="' + fotoData + '" style="width:220px;border-radius:6px;border:1px solid #ddd">';
@@ -779,8 +782,9 @@ async function descargarFotosZIP(id) {
   var noEncontradas = 0;
   for (var i = 0; i < codigos.length; i++) {
     try {
-      // Buscar en todas las fuentes (local, precarga, pendientes, Cloudinary)
-      var data = await buscarFotoData(codigos[i], r.tipo, r.unidad);
+      // Preferir la resolución completa (local o nube); thumbnail como último recurso
+      var data = await fotoMejorCalidad(codigos[i], r.tipo, r.unidad);
+      if (!(data && data.indexOf('data:') === 0)) data = await buscarFotoData(codigos[i], r.tipo, r.unidad);
       if (data && data.indexOf('data:') === 0) {
         zip.file(codigos[i] + '.jpg', data.split(',')[1], {base64: true});
       } else {
@@ -800,11 +804,22 @@ async function descargarFotosZIP(id) {
 
 async function descargarTodasFotosZIP() {
   var zip = new JSZip();
-  var all = await obtenerTodosDB('fotos');
-  all.forEach(function(foto) {
-    if (!foto || !foto.data || typeof foto.data !== 'string') return;
-    var base64 = foto.data.split(',')[1];
-    zip.file(foto.codigo + '.jpg', base64, {base64: true});
+  // Fusionar fuentes prefiriendo la resolución completa: fotos_locales y
+  // subidas_pendientes pisan al thumbnail del store 'fotos'
+  var porCodigo = {};
+  (await obtenerTodosDB('fotos')).forEach(function(f) {
+    if (f && f.data && typeof f.data === 'string') porCodigo[f.codigo] = f.data;
+  });
+  (await obtenerTodosDB('subidas_pendientes').catch(function() { return []; })).forEach(function(f) {
+    if (f && f.data && typeof f.data === 'string') porCodigo[f.codigo] = f.data;
+  });
+  (await obtenerTodosDB('fotos_locales').catch(function() { return []; })).forEach(function(f) {
+    if (f && f.data && typeof f.data === 'string') porCodigo[f.codigo] = f.data;
+  });
+  Object.keys(porCodigo).forEach(function(codigo) {
+    var data = porCodigo[codigo];
+    if (data.indexOf('data:') !== 0) return;
+    zip.file(codigo + '.jpg', data.split(',')[1], {base64: true});
   });
   zip.generateAsync({type: 'blob'}).then(function(blob) {
     var a = document.createElement('a');

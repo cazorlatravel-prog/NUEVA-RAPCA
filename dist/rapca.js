@@ -92,6 +92,12 @@ function abrirDB() {
     };
     req.onsuccess = function(e) { db = e.target.result; resolve(db); };
     req.onerror = function(e) { reject(e); };
+    // Otra pestaña con la versión antigua de la DB bloquea la migración:
+    // sin este aviso la app quedaba colgada en el arranque sin explicación
+    req.onblocked = function() {
+      console.warn('IndexedDB bloqueada por otra pestaña');
+      if (typeof showToast === 'function') showToast('Cierra las demás pestañas o ventanas de RAPCA y recarga', 'error', 8000);
+    };
   });
 }
 
@@ -220,6 +226,17 @@ function cargarFotoHD(codigo, tipo, unidad) {
     }
     return null;
   }).catch(function() { return null; });
+}
+
+// Mejor fuente disponible para exportar/imprimir una foto: resolución
+// completa local o de la nube (cargarFotoHD); si no, el thumbnail.
+// Con las fotos generales guardadas solo en el teléfono, sin este orden los
+// ZIP e informes salían clavados en el thumbnail de 400px para siempre.
+function fotoMejorCalidad(codigo, tipo, unidad) {
+  return cargarFotoHD(codigo, tipo, unidad).then(function(hd) {
+    if (hd) return hd;
+    return buscarFotoData(codigo, tipo, unidad);
+  }).catch(function() { return buscarFotoData(codigo, tipo, unidad); });
 }
 
 // --- UI: Toast, Vibrar, Utilidades ---
@@ -4339,13 +4356,15 @@ function aceptarFoto() {
     }).then(function() { return esComparativa; });
   }).then(function(esComparativa) {
     actualizarContadorFotos();
+    var conn2g = navigator.connection && navigator.connection.effectiveType &&
+                 /(^|-)2g$/.test(navigator.connection.effectiveType);
     if (!esComparativa) {
       showToast('Foto ' + _fotoCodigo + ' guardada en el teléfono.', 'success');
-    } else if (navigator.onLine) {
+    } else if (navigator.onLine && !conn2g) {
       showToast('Foto ' + _fotoCodigo + ' guardada. Subiendo...', 'success');
       subirFotosPendientesAuto();
     } else {
-      showToast('Foto ' + _fotoCodigo + ' guardada. Sin conexión — se subirá al conectar.', 'info');
+      showToast('Foto ' + _fotoCodigo + ' guardada. Se subirá con mejor cobertura.', 'info');
     }
   }).catch(function(err) {
     console.error('Error procesando foto:', err);
@@ -4362,6 +4381,10 @@ function aceptarFoto() {
 // fetch con timeout: con cobertura débil las peticiones quedaban colgadas
 // indefinidamente, reteniendo en memoria cuerpos base64 de varios MB y
 // contribuyendo a que Android matara la app en el campo
+// Timeout largo para subidas de fotos: un JPEG en base64 (~2MB) necesita
+// más de 30s en 3G lento; abortar antes hacía la foto insubible
+var TIMEOUT_SUBIDA_FOTO = 120000;
+
 function fetchConTimeout(url, opts, ms) {
   if (typeof AbortController === 'undefined') return fetch(url, opts);
   var ctrl = new AbortController();
@@ -4545,13 +4568,21 @@ async function sincronizar() {
         formData.append('entry.unidad', r.unidad);
         formData.append('entry.transecto', r.transecto);
         formData.append('entry.datos', JSON.stringify(r.datos));
-        await fetchConTimeout(GOOGLE_FORM_URL, {method: 'POST', body: formData, mode: 'no-cors'}, 15000);
+        await fetchConTimeout(GOOGLE_FORM_URL, {method: 'POST', body: formData, mode: 'no-cors'}, 30000);
         r.enviadoForm = true;
         // Persistir al momento: si la app se cierra a mitad de la cola,
         // el flag no se perdería y no se duplicarían filas en la hoja
         guardarRegistros();
       }
-    } catch(e) {}
+    } catch(e) {
+      // Timeout con la petición ya en vuelo: lo más probable es que Google
+      // la procesara igualmente — marcar para no duplicar filas en la hoja.
+      // Un fallo de red real (offline) NO marca y se reintenta.
+      if (e && e.name === 'AbortError') {
+        r.enviadoForm = true;
+        guardarRegistros();
+      }
+    }
 
     // Intentar PHP backend
     try {
@@ -4680,7 +4711,7 @@ async function subirFotosPendientes() {
           method: 'POST',
           headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
           body: JSON.stringify({codigo: foto.codigo, tipo: foto.tipo, imagen: foto.data})
-        });
+        }, TIMEOUT_SUBIDA_FOTO);
         if (!resp.ok) {
           console.warn('Upload HTTP error:', foto.codigo, resp.status, resp.statusText);
           if (resp.status === 401 && !yaReautenticado) {
@@ -4785,7 +4816,7 @@ async function subirDirectoCloudinary(foto) {
   var resp = await fetchConTimeout('https://api.cloudinary.com/v1_1/' + cloudName + '/image/upload', {
     method: 'POST',
     body: formData
-  });
+  }, TIMEOUT_SUBIDA_FOTO);
   if (!resp.ok) {
     console.warn('Cloudinary directo HTTP error:', resp.status, resp.statusText);
     return false;
@@ -4949,7 +4980,7 @@ async function subirFotosPendientesAuto() {
           method: 'POST',
           headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + sesion.token},
           body: JSON.stringify({codigo: foto.codigo, tipo: foto.tipo, imagen: foto.data})
-        });
+        }, TIMEOUT_SUBIDA_FOTO);
         if (resp.ok) {
           var result = await resp.json();
           if (result.ok) {
@@ -7165,9 +7196,12 @@ async function ejecutarBorrarTodo() {
   // Limpiar fotos e IndexedDB
   if (db) {
     try {
-      var tx = db.transaction(['fotos', 'subidas_pendientes'], 'readwrite');
+      var tx = db.transaction(['fotos', 'subidas_pendientes', 'fotos_locales'], 'readwrite');
       tx.objectStore('fotos').clear();
       tx.objectStore('subidas_pendientes').clear();
+      // Sin esto, las fotos generales full-res quedaban huérfanas para
+      // siempre y podían "resucitar" al reutilizarse códigos tras el reinicio
+      tx.objectStore('fotos_locales').clear();
     } catch(e) { console.error('Error limpiando IndexedDB:', e); }
   }
 
@@ -7393,7 +7427,7 @@ async function exportarPDFRegistro(id, opcionesFotos) {
       html += '<div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center">';
       for (var i = 0; i < codigos.length; i++) {
         try {
-          var fotoData = await buscarFotoData(codigos[i], r.tipo, r.unidad);
+          var fotoData = await fotoMejorCalidad(codigos[i], r.tipo, r.unidad);
           if (fotoData) {
             html += '<div style="text-align:center">';
             html += '<img src="' + fotoData + '" style="width:220px;border-radius:6px;border:1px solid #ddd">';
@@ -7573,8 +7607,9 @@ async function descargarFotosZIP(id) {
   var noEncontradas = 0;
   for (var i = 0; i < codigos.length; i++) {
     try {
-      // Buscar en todas las fuentes (local, precarga, pendientes, Cloudinary)
-      var data = await buscarFotoData(codigos[i], r.tipo, r.unidad);
+      // Preferir la resolución completa (local o nube); thumbnail como último recurso
+      var data = await fotoMejorCalidad(codigos[i], r.tipo, r.unidad);
+      if (!(data && data.indexOf('data:') === 0)) data = await buscarFotoData(codigos[i], r.tipo, r.unidad);
       if (data && data.indexOf('data:') === 0) {
         zip.file(codigos[i] + '.jpg', data.split(',')[1], {base64: true});
       } else {
@@ -7594,11 +7629,22 @@ async function descargarFotosZIP(id) {
 
 async function descargarTodasFotosZIP() {
   var zip = new JSZip();
-  var all = await obtenerTodosDB('fotos');
-  all.forEach(function(foto) {
-    if (!foto || !foto.data || typeof foto.data !== 'string') return;
-    var base64 = foto.data.split(',')[1];
-    zip.file(foto.codigo + '.jpg', base64, {base64: true});
+  // Fusionar fuentes prefiriendo la resolución completa: fotos_locales y
+  // subidas_pendientes pisan al thumbnail del store 'fotos'
+  var porCodigo = {};
+  (await obtenerTodosDB('fotos')).forEach(function(f) {
+    if (f && f.data && typeof f.data === 'string') porCodigo[f.codigo] = f.data;
+  });
+  (await obtenerTodosDB('subidas_pendientes').catch(function() { return []; })).forEach(function(f) {
+    if (f && f.data && typeof f.data === 'string') porCodigo[f.codigo] = f.data;
+  });
+  (await obtenerTodosDB('fotos_locales').catch(function() { return []; })).forEach(function(f) {
+    if (f && f.data && typeof f.data === 'string') porCodigo[f.codigo] = f.data;
+  });
+  Object.keys(porCodigo).forEach(function(codigo) {
+    var data = porCodigo[codigo];
+    if (data.indexOf('data:') !== 0) return;
+    zip.file(codigo + '.jpg', data.split(',')[1], {base64: true});
   });
   zip.generateAsync({type: 'blob'}).then(function(blob) {
     var a = document.createElement('a');
@@ -9726,13 +9772,19 @@ function precargaListarFotos(zona) {
     }
   });
 
-  // También intentar listar desde el servidor
+  // También intentar listar desde el servidor (y recordar qué códigos tiene:
+  // las fotos generales nuevas viven solo en el teléfono que las hizo y
+  // pedirlas al servidor contaba "errores" eternos en cada precarga)
+  var codigosServidor = {};
+  var servidorRespondio = false;
   var promises = unidadesSeleccionadas.map(function(unidad) {
     return fetch(API_BASE + 'fotos.php?accion=listar&unidad=' + encodeURIComponent(unidad), {
       headers: {'Authorization': 'Bearer ' + (sesion ? sesion.token : '')}
     }).then(function(r) { return r.json(); }).then(function(data) {
       if (data.ok && data.fotos) {
+        servidorRespondio = true;
         data.fotos.forEach(function(f) {
+          codigosServidor[f.codigo] = true;
           if (codigosVistos[f.codigo]) return;
           codigosVistos[f.codigo] = true;
           fotosEncontradas.push(f);
@@ -9742,12 +9794,24 @@ function precargaListarFotos(zona) {
   });
 
   Promise.all(promises).then(function() {
+    // Excluir las generales que el servidor no tiene (solo si respondió:
+    // sin respuesta no podemos distinguir y se mantiene la lista completa)
+    var soloEnOrigen = 0;
+    if (servidorRespondio) {
+      fotosEncontradas = fotosEncontradas.filter(function(f) {
+        if ((f.waypoint || 'G') !== 'G') return true;
+        if (codigosServidor[f.codigo]) return true;
+        soloEnOrigen++;
+        return false;
+      });
+    }
     precargaFotosListadas = fotosEncontradas;
     var nComp = fotosEncontradas.filter(function(f) { return f.waypoint === 'W1' || f.waypoint === 'W2'; }).length;
     var nGen = fotosEncontradas.length - nComp;
 
     var resumen = document.getElementById('precarga-fotos-resumen');
-    resumen.innerHTML = '<strong>' + fotosEncontradas.length + ' fotos</strong> encontradas (' + nComp + ' comparativas, ' + nGen + ' generales)';
+    resumen.innerHTML = '<strong>' + fotosEncontradas.length + ' fotos</strong> encontradas (' + nComp + ' comparativas, ' + nGen + ' generales)' +
+      (soloEnOrigen ? '<br><small style="color:#888">' + soloEnOrigen + ' generales solo en el teléfono que las hizo (no descargables)</small>' : '');
 
     document.getElementById('precarga-fotos-info').style.display = fotosEncontradas.length > 0 ? 'block' : 'none';
 
@@ -11057,8 +11121,9 @@ async function galDescargarSel() {
   for (var i = 0; i < galSeleccionadas.length; i++) {
     var cod = galSeleccionadas[i];
     var info = (typeof fotoInfoDesdeCodigo === 'function' && fotoInfoDesdeCodigo(cod)) || {};
-    // Buscar en todas las fuentes, no solo el store local (ZIP incompleto)
-    var data = await buscarFotoData(cod, info.tipo, info.unidad).catch(function() { return null; });
+    // Preferir resolución completa (local/nube); thumbnail como último recurso
+    var data = await fotoMejorCalidad(cod, info.tipo, info.unidad).catch(function() { return null; });
+    if (!(data && data.indexOf('data:') === 0)) data = await buscarFotoData(cod, info.tipo, info.unidad).catch(function() { return null; });
     if (data && data.indexOf('data:') === 0) {
       zip.file(cod + '.jpg', data.split(',')[1], {base64: true});
     } else {
@@ -11087,8 +11152,15 @@ function galCompararSel() {
     '</div>' +
     '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-sm btn-outline" onclick="filtrarGaleria()">← Volver</button></div>';
 
-  obtenerDeDB('fotos', galSeleccionadas[0]).then(function(f) { if (f) document.getElementById('gal-comp-before').src = f.data; });
-  obtenerDeDB('fotos', galSeleccionadas[1]).then(function(f) { if (f) document.getElementById('gal-comp-after').src = f.data; });
+  ['gal-comp-before', 'gal-comp-after'].forEach(function(elId, i) {
+    var cod = galSeleccionadas[i];
+    var info = (typeof fotoInfoDesdeCodigo === 'function' && fotoInfoDesdeCodigo(cod)) || {};
+    buscarFotoData(cod, info.tipo, info.unidad).then(function(data) {
+      var el = document.getElementById(elId);
+      if (el && data) el.src = data;
+      else if (!data) showToast('Foto ' + cod + ' no disponible en este dispositivo', 'info');
+    }).catch(function() {});
+  });
 
   // Slider
   var wrap = document.getElementById('gal-comp-wrap');
@@ -11346,7 +11418,8 @@ async function galDescargarTodas() {
     // Buscar en todas las fuentes (local, precarga, pendientes, Cloudinary),
     // igual que los thumbnails: antes solo se miraba el store local y el ZIP
     // salía incompleto sin aviso
-    var data = await buscarFotoData(items[i].codigo, items[i].tipo, items[i].unidad).catch(function() { return null; });
+    var data = await fotoMejorCalidad(items[i].codigo, items[i].tipo, items[i].unidad).catch(function() { return null; });
+    if (!(data && data.indexOf('data:') === 0)) data = await buscarFotoData(items[i].codigo, items[i].tipo, items[i].unidad).catch(function() { return null; });
     if (data && data.indexOf('data:') === 0) {
       zip.file(items[i].codigo + '.jpg', data.split(',')[1], {base64: true});
     } else {

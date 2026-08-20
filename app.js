@@ -92,6 +92,12 @@ function abrirDB() {
     };
     req.onsuccess = function(e) { db = e.target.result; resolve(db); };
     req.onerror = function(e) { reject(e); };
+    // Otra pestaña con la versión antigua de la DB bloquea la migración:
+    // sin este aviso la app quedaba colgada en el arranque sin explicación
+    req.onblocked = function() {
+      console.warn('IndexedDB bloqueada por otra pestaña');
+      if (typeof showToast === 'function') showToast('Cierra las demás pestañas o ventanas de RAPCA y recarga', 'error', 8000);
+    };
   });
 }
 
@@ -220,6 +226,17 @@ function cargarFotoHD(codigo, tipo, unidad) {
     }
     return null;
   }).catch(function() { return null; });
+}
+
+// Mejor fuente disponible para exportar/imprimir una foto: resolución
+// completa local o de la nube (cargarFotoHD); si no, el thumbnail.
+// Con las fotos generales guardadas solo en el teléfono, sin este orden los
+// ZIP e informes salían clavados en el thumbnail de 400px para siempre.
+function fotoMejorCalidad(codigo, tipo, unidad) {
+  return cargarFotoHD(codigo, tipo, unidad).then(function(hd) {
+    if (hd) return hd;
+    return buscarFotoData(codigo, tipo, unidad);
+  }).catch(function() { return buscarFotoData(codigo, tipo, unidad); });
 }
 
 // --- UI: Toast, Vibrar, Utilidades ---

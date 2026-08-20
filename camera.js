@@ -2096,13 +2096,15 @@ function aceptarFoto() {
     }).then(function() { return esComparativa; });
   }).then(function(esComparativa) {
     actualizarContadorFotos();
+    var conn2g = navigator.connection && navigator.connection.effectiveType &&
+                 /(^|-)2g$/.test(navigator.connection.effectiveType);
     if (!esComparativa) {
       showToast('Foto ' + _fotoCodigo + ' guardada en el teléfono.', 'success');
-    } else if (navigator.onLine) {
+    } else if (navigator.onLine && !conn2g) {
       showToast('Foto ' + _fotoCodigo + ' guardada. Subiendo...', 'success');
       subirFotosPendientesAuto();
     } else {
-      showToast('Foto ' + _fotoCodigo + ' guardada. Sin conexión — se subirá al conectar.', 'info');
+      showToast('Foto ' + _fotoCodigo + ' guardada. Se subirá con mejor cobertura.', 'info');
     }
   }).catch(function(err) {
     console.error('Error procesando foto:', err);

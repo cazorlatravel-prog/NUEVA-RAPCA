@@ -281,8 +281,9 @@ async function galDescargarSel() {
   for (var i = 0; i < galSeleccionadas.length; i++) {
     var cod = galSeleccionadas[i];
     var info = (typeof fotoInfoDesdeCodigo === 'function' && fotoInfoDesdeCodigo(cod)) || {};
-    // Buscar en todas las fuentes, no solo el store local (ZIP incompleto)
-    var data = await buscarFotoData(cod, info.tipo, info.unidad).catch(function() { return null; });
+    // Preferir resolución completa (local/nube); thumbnail como último recurso
+    var data = await fotoMejorCalidad(cod, info.tipo, info.unidad).catch(function() { return null; });
+    if (!(data && data.indexOf('data:') === 0)) data = await buscarFotoData(cod, info.tipo, info.unidad).catch(function() { return null; });
     if (data && data.indexOf('data:') === 0) {
       zip.file(cod + '.jpg', data.split(',')[1], {base64: true});
     } else {
@@ -311,8 +312,15 @@ function galCompararSel() {
     '</div>' +
     '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-sm btn-outline" onclick="filtrarGaleria()">← Volver</button></div>';
 
-  obtenerDeDB('fotos', galSeleccionadas[0]).then(function(f) { if (f) document.getElementById('gal-comp-before').src = f.data; });
-  obtenerDeDB('fotos', galSeleccionadas[1]).then(function(f) { if (f) document.getElementById('gal-comp-after').src = f.data; });
+  ['gal-comp-before', 'gal-comp-after'].forEach(function(elId, i) {
+    var cod = galSeleccionadas[i];
+    var info = (typeof fotoInfoDesdeCodigo === 'function' && fotoInfoDesdeCodigo(cod)) || {};
+    buscarFotoData(cod, info.tipo, info.unidad).then(function(data) {
+      var el = document.getElementById(elId);
+      if (el && data) el.src = data;
+      else if (!data) showToast('Foto ' + cod + ' no disponible en este dispositivo', 'info');
+    }).catch(function() {});
+  });
 
   // Slider
   var wrap = document.getElementById('gal-comp-wrap');
@@ -570,7 +578,8 @@ async function galDescargarTodas() {
     // Buscar en todas las fuentes (local, precarga, pendientes, Cloudinary),
     // igual que los thumbnails: antes solo se miraba el store local y el ZIP
     // salía incompleto sin aviso
-    var data = await buscarFotoData(items[i].codigo, items[i].tipo, items[i].unidad).catch(function() { return null; });
+    var data = await fotoMejorCalidad(items[i].codigo, items[i].tipo, items[i].unidad).catch(function() { return null; });
+    if (!(data && data.indexOf('data:') === 0)) data = await buscarFotoData(items[i].codigo, items[i].tipo, items[i].unidad).catch(function() { return null; });
     if (data && data.indexOf('data:') === 0) {
       zip.file(items[i].codigo + '.jpg', data.split(',')[1], {base64: true});
     } else {
