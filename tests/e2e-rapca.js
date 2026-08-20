@@ -98,6 +98,11 @@ function ok(nombre, cond, detalle) {
   ok('Sesión restaurada (login oculto)', loginOculto);
   const menuActivo = await page.evaluate(() => document.getElementById('menu-page').classList.contains('active'));
   ok('Menú principal visible', menuActivo);
+  const version = await page.evaluate(() => ({
+    barra: document.getElementById('status-version').textContent,
+    esperada: APP_VERSION
+  }));
+  ok('Indicador de versión visible en la barra inferior', version.barra === version.esperada && /^v\d+$/.test(version.barra), JSON.stringify(version));
 
   console.log('\n== 2. Evaluación Ligera: crear y bloquear duplicado ==');
   await page.evaluate(() => irPagina('el'));

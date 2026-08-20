@@ -5,6 +5,9 @@
 // ============================================================
 
 // --- Constantes globales ---
+// Versión de la app (acompaña al CACHE_NAME de sw.js en cada actualización):
+// visible en la barra inferior para confirmar que la actualización llegó
+var APP_VERSION = 'v38';
 var API_BASE = 'https://rapca.app/';
 var GOOGLE_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSe8kPl5QErboQmrAJ6hSnbkiAJb3h9Mi6_Fntgws_Z1NWj1TQ/formResponse';
 var CLOUDINARY_UPLOAD_URL = 'https://rapca.app/upload.php';
@@ -858,6 +861,12 @@ function cancelarSalida() {
 document.addEventListener('DOMContentLoaded', function() {
   // Inicializar protección del botón atrás
   pushHistoryState();
+
+  // Mostrar versión (barra inferior y pantalla de login)
+  var verEl = document.getElementById('status-version');
+  if (verEl) verEl.textContent = APP_VERSION;
+  var verLogin = document.getElementById('login-version');
+  if (verLogin) verLogin.textContent = 'RAPCA Campo ' + APP_VERSION;
 
   abrirDB().then(function() {
     console.log('IndexedDB lista');
