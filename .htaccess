@@ -20,13 +20,23 @@
     RewriteRule ^includes/ - [F,L]
 </IfModule>
 
-# Cache estático
+# Cache estático.
+# HTML/JS/CSS SIEMPRE revalidan contra el servidor: con cache larga, los
+# navegadores reutilizaban los .js viejos hasta 7 días y las actualizaciones
+# no llegaban a los móviles (el Service Worker ya da el modo offline, la
+# caché HTTP de estos archivos solo estorba). Con ETag, revalidar es un 304
+# barato. Las imágenes sí se cachean largo.
 <IfModule mod_expires.c>
     ExpiresActive On
     ExpiresByType text/html "access plus 0 seconds"
-    ExpiresByType text/css "access plus 1 year"
-    ExpiresByType application/javascript "access plus 1 year"
+    ExpiresByType text/css "access plus 0 seconds"
+    ExpiresByType application/javascript "access plus 0 seconds"
     ExpiresByType image/png "access plus 1 year"
     ExpiresByType image/jpeg "access plus 1 year"
     ExpiresByType application/json "access plus 0 seconds"
+</IfModule>
+<IfModule mod_headers.c>
+    <FilesMatch "\.(js|html|css)$">
+        Header set Cache-Control "no-cache, must-revalidate"
+    </FilesMatch>
 </IfModule>
