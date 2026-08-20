@@ -250,7 +250,8 @@ function precargaListarFotos(zona) {
 
     // Marcar las que ya están precargadas
     if (db) {
-      obtenerTodosDB('fotos_precargadas').then(function(existentes) {
+      obtenerClavesDB('fotos_precargadas').then(function(clavesExist) {
+        var existentes = clavesExist.map(function(c) { return {codigo: c}; });
         var existentesMap = {};
         existentes.forEach(function(e) { existentesMap[e.codigo] = true; });
         var nuevas = fotosEncontradas.filter(function(f) { return !existentesMap[f.codigo]; });
@@ -283,7 +284,8 @@ async function precargaDescargar(listaFotos) {
   if (!db) { showToast('Base de datos no disponible', 'error'); return; }
 
   // Filtrar las que ya tenemos
-  var existentes = await obtenerTodosDB('fotos_precargadas');
+  var clavesExistentes = await obtenerClavesDB('fotos_precargadas');
+  var existentes = clavesExistentes.map(function(c) { return {codigo: c}; });
   var existentesMap = {};
   existentes.forEach(function(e) { existentesMap[e.codigo] = true; });
   var nuevas = listaFotos.filter(function(f) { return !existentesMap[f.codigo]; });

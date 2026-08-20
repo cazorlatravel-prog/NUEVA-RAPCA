@@ -804,23 +804,24 @@ async function descargarFotosZIP(id) {
 
 async function descargarTodasFotosZIP() {
   var zip = new JSZip();
-  // Fusionar fuentes prefiriendo la resolución completa: fotos_locales y
-  // subidas_pendientes pisan al thumbnail del store 'fotos'
-  var porCodigo = {};
-  (await obtenerTodosDB('fotos')).forEach(function(f) {
-    if (f && f.data && typeof f.data === 'string') porCodigo[f.codigo] = f.data;
-  });
-  (await obtenerTodosDB('subidas_pendientes').catch(function() { return []; })).forEach(function(f) {
-    if (f && f.data && typeof f.data === 'string') porCodigo[f.codigo] = f.data;
-  });
-  (await obtenerTodosDB('fotos_locales').catch(function() { return []; })).forEach(function(f) {
-    if (f && f.data && typeof f.data === 'string') porCodigo[f.codigo] = f.data;
-  });
-  Object.keys(porCodigo).forEach(function(codigo) {
-    var data = porCodigo[codigo];
-    if (data.indexOf('data:') !== 0) return;
-    zip.file(codigo + '.jpg', data.split(',')[1], {base64: true});
-  });
+  // Por CLAVES y de una en una: fusionar los stores con getAll cargaba todas
+  // las fotos full-res a la vez (cientos de MB) y Android mataba la app.
+  // Prioridad de fuente: fotos_locales y subidas_pendientes (full-res) sobre
+  // el thumbnail del store 'fotos'.
+  var fuentePorCodigo = {};
+  (await obtenerClavesDB('fotos').catch(function() { return []; })).forEach(function(c) { fuentePorCodigo[c] = 'fotos'; });
+  (await obtenerClavesDB('subidas_pendientes').catch(function() { return []; })).forEach(function(c) { fuentePorCodigo[c] = 'subidas_pendientes'; });
+  (await obtenerClavesDB('fotos_locales').catch(function() { return []; })).forEach(function(c) { fuentePorCodigo[c] = 'fotos_locales'; });
+  var codigosZip = Object.keys(fuentePorCodigo);
+  for (var iz = 0; iz < codigosZip.length; iz++) {
+    var codigoZ = codigosZip[iz];
+    try {
+      var fz = await obtenerDeDB(fuentePorCodigo[codigoZ], codigoZ);
+      if (fz && fz.data && typeof fz.data === 'string' && fz.data.indexOf('data:') === 0) {
+        zip.file(codigoZ + '.jpg', fz.data.split(',')[1], {base64: true});
+      }
+    } catch(e) {}
+  }
   zip.generateAsync({type: 'blob'}).then(function(blob) {
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);

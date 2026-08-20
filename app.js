@@ -136,6 +136,33 @@ function obtenerTodosDB(store) {
   });
 }
 
+// Solo las CLAVES de un store (baratísimo): los getAll de stores con fotos
+// full-res cargaban cientos de MB en memoria y Android mataba la app
+function obtenerClavesDB(store) {
+  return new Promise(function(resolve, reject) {
+    var tx;
+    try { tx = db.transaction(store, 'readonly'); }
+    catch(e) { return reject(e); }
+    tx.onerror = function() { reject(tx.error); };
+    var req = tx.objectStore(store).getAllKeys();
+    req.onsuccess = function() { resolve(req.result || []); };
+    req.onerror = function() { reject(req.error); };
+  });
+}
+
+// Contar registros de un store sin cargar ningún dato
+function contarDB(store) {
+  return new Promise(function(resolve, reject) {
+    var tx;
+    try { tx = db.transaction(store, 'readonly'); }
+    catch(e) { return reject(e); }
+    tx.onerror = function() { reject(tx.error); };
+    var req = tx.objectStore(store).count();
+    req.onsuccess = function() { resolve(req.result || 0); };
+    req.onerror = function() { reject(req.error); };
+  });
+}
+
 function eliminarDeDB(store, key) {
   return new Promise(function(resolve, reject) {
     var tx = db.transaction(store, 'readwrite');
@@ -620,10 +647,10 @@ function cerrarModal() {
 // ============================================================
 function actualizarContadorFotos() {
   if (!db) return;
-  obtenerTodosDB('subidas_pendientes').then(function(items) {
+  contarDB('subidas_pendientes').then(function(n) {
     var el = document.getElementById('menu-pending-fotos');
-    if (el) el.textContent = items.length;
-  });
+    if (el) el.textContent = n;
+  }).catch(function() {});
 }
 
 function reconstruirContadores() {
@@ -671,11 +698,13 @@ function limpiarFotosAntiguas() {
   if (!db) return;
   var limite = Date.now() - (5 * 24 * 60 * 60 * 1000);
   // No borrar thumbnails de fotos que aún estén pendientes de subir
-  obtenerTodosDB('subidas_pendientes').then(function(pendientes) {
+  // Solo claves: cargar los registros completos de estos stores (fotos
+  // full-res) metía cientos de MB en memoria en cada arranque
+  obtenerClavesDB('subidas_pendientes').then(function(pendientes) {
     var protegidas = {};
-    pendientes.forEach(function(p) { protegidas[p.codigo] = true; });
-    return obtenerTodosDB('fotos_locales').then(function(locales) {
-      (locales || []).forEach(function(p) { protegidas[p.codigo] = true; });
+    pendientes.forEach(function(codigo) { protegidas[codigo] = true; });
+    return obtenerClavesDB('fotos_locales').then(function(locales) {
+      (locales || []).forEach(function(codigo) { protegidas[codigo] = true; });
       return obtenerTodosDB('fotos');
     }).then(function(fotos) {
       fotos.forEach(function(f) {

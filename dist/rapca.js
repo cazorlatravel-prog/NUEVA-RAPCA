@@ -136,6 +136,33 @@ function obtenerTodosDB(store) {
   });
 }
 
+// Solo las CLAVES de un store (baratísimo): los getAll de stores con fotos
+// full-res cargaban cientos de MB en memoria y Android mataba la app
+function obtenerClavesDB(store) {
+  return new Promise(function(resolve, reject) {
+    var tx;
+    try { tx = db.transaction(store, 'readonly'); }
+    catch(e) { return reject(e); }
+    tx.onerror = function() { reject(tx.error); };
+    var req = tx.objectStore(store).getAllKeys();
+    req.onsuccess = function() { resolve(req.result || []); };
+    req.onerror = function() { reject(req.error); };
+  });
+}
+
+// Contar registros de un store sin cargar ningún dato
+function contarDB(store) {
+  return new Promise(function(resolve, reject) {
+    var tx;
+    try { tx = db.transaction(store, 'readonly'); }
+    catch(e) { return reject(e); }
+    tx.onerror = function() { reject(tx.error); };
+    var req = tx.objectStore(store).count();
+    req.onsuccess = function() { resolve(req.result || 0); };
+    req.onerror = function() { reject(req.error); };
+  });
+}
+
 function eliminarDeDB(store, key) {
   return new Promise(function(resolve, reject) {
     var tx = db.transaction(store, 'readwrite');
@@ -620,10 +647,10 @@ function cerrarModal() {
 // ============================================================
 function actualizarContadorFotos() {
   if (!db) return;
-  obtenerTodosDB('subidas_pendientes').then(function(items) {
+  contarDB('subidas_pendientes').then(function(n) {
     var el = document.getElementById('menu-pending-fotos');
-    if (el) el.textContent = items.length;
-  });
+    if (el) el.textContent = n;
+  }).catch(function() {});
 }
 
 function reconstruirContadores() {
@@ -671,11 +698,13 @@ function limpiarFotosAntiguas() {
   if (!db) return;
   var limite = Date.now() - (5 * 24 * 60 * 60 * 1000);
   // No borrar thumbnails de fotos que aún estén pendientes de subir
-  obtenerTodosDB('subidas_pendientes').then(function(pendientes) {
+  // Solo claves: cargar los registros completos de estos stores (fotos
+  // full-res) metía cientos de MB en memoria en cada arranque
+  obtenerClavesDB('subidas_pendientes').then(function(pendientes) {
     var protegidas = {};
-    pendientes.forEach(function(p) { protegidas[p.codigo] = true; });
-    return obtenerTodosDB('fotos_locales').then(function(locales) {
-      (locales || []).forEach(function(p) { protegidas[p.codigo] = true; });
+    pendientes.forEach(function(codigo) { protegidas[codigo] = true; });
+    return obtenerClavesDB('fotos_locales').then(function(locales) {
+      (locales || []).forEach(function(codigo) { protegidas[codigo] = true; });
       return obtenerTodosDB('fotos');
     }).then(function(fotos) {
       fotos.forEach(function(f) {
@@ -3702,52 +3731,61 @@ function cargarGhostFoto(tipo, subtipo) {
     };
   }
 
-  // Buscar en IndexedDB el thumbnail más reciente que coincida
+  // Buscar por CLAVES (el código es la clave de estos stores): cargar todos
+  // los registros con getAll metía en memoria las fotos full-res pendientes
+  // (cientos de MB con 50+ fotos) y Android mataba la app al abrir la cámara
   if (!db) return;
-  obtenerTodosDB('fotos').then(function(fotos) {
-    var matches = fotos.filter(function(f) {
-      return coincideGhost(f.codigo);
-    }).sort(function(a, b) { return (b.fecha || 0) - (a.fecha || 0); });
 
-    if (matches.length > 0 && matches[0].data) {
-      activarGhost(matches[0].data);
-    } else {
-      // Buscar en subidas_pendientes
-      obtenerTodosDB('subidas_pendientes').then(function(pendientes) {
-        var matchesPend = pendientes.filter(function(f) {
-          return coincideGhost(f.codigo);
-        }).sort(function(a, b) { return (b.fecha || 0) - (a.fecha || 0); });
-
-        if (matchesPend.length > 0 && matchesPend[0].data) {
-          activarGhost(matchesPend[0].data);
-        } else {
-          // Buscar en fotos precargadas offline y, como último recurso,
-          // en los registros sincronizados (descarga de Cloudinary si hay red)
-          buscarGhostEnPrecargadas(unidad, subtipo, activarGhost, function() {
-            buscarGhostEnRegistros(unidad, subtipo, activarGhost);
-          });
-        }
+  // De una lista de claves, coger las que coinciden y leer solo esas fichas
+  // (pocas), quedándose con la más reciente por fecha
+  function buscarEnStorePorClaves(store, onHit, onMiss) {
+    obtenerClavesDB(store).then(function(claves) {
+      var candidatas = (claves || []).filter(coincideGhost);
+      if (candidatas.length === 0) { onMiss(); return; }
+      Promise.all(candidatas.map(function(c) {
+        return obtenerDeDB(store, c).catch(function() { return null; });
+      })).then(function(regs) {
+        var matches = regs.filter(function(f) { return f && f.data; })
+          .sort(function(a, b) { return (b.fecha || 0) - (a.fecha || 0); });
+        if (matches.length > 0) onHit(matches[0].data);
+        else onMiss();
       });
-    }
-  }).catch(function() {});
+    }).catch(function() { onMiss(); });
+  }
+
+  buscarEnStorePorClaves('fotos', activarGhost, function() {
+    buscarEnStorePorClaves('subidas_pendientes', activarGhost, function() {
+      buscarEnStorePorClaves('fotos_locales', activarGhost, function() {
+        // Fotos precargadas offline y, como último recurso, los registros
+        // sincronizados (descarga de Cloudinary si hay red)
+        buscarGhostEnPrecargadas(unidad, subtipo, activarGhost, function() {
+          buscarGhostEnRegistros(unidad, subtipo, activarGhost);
+        });
+      });
+    });
+  });
 }
 
 function buscarGhostEnPrecargadas(unidad, subtipo, callback, onMiss) {
-  if (!db) return;
-  // El store 'fotos_precargadas' no tiene índice 'unidad', así que filtramos en memoria
-  obtenerTodosDB('fotos_precargadas').then(function(fotos) {
-    var matches = (fotos || []).filter(function(f) {
-      return f.unidad === unidad && f.waypoint === subtipo;
-    }).sort(function(a, b) {
-      // Más reciente primero
-      return (b.fecha || '').localeCompare(a.fecha || '');
+  if (!db) { if (onMiss) onMiss(); return; }
+  // Por claves (código = clave): getAll cargaba todas las precargadas en memoria
+  obtenerClavesDB('fotos_precargadas').then(function(claves) {
+    var candidatas = (claves || []).filter(function(c) {
+      return c.indexOf(unidad + '_VP_' + subtipo + '_') === 0 ||
+             c.indexOf(unidad + '_EV_' + subtipo + '_') === 0;
     });
-
-    if (matches.length > 0 && matches[0].data) {
-      callback(matches[0].data);
-    } else if (onMiss) {
-      onMiss();
-    }
+    if (candidatas.length === 0) { if (onMiss) onMiss(); return; }
+    Promise.all(candidatas.map(function(c) {
+      return obtenerDeDB('fotos_precargadas', c).catch(function() { return null; });
+    })).then(function(regs) {
+      var matches = (regs || []).filter(function(f) { return f && f.data; })
+        .sort(function(a, b) {
+          // Más reciente primero
+          return String(b.fecha || '').localeCompare(String(a.fecha || ''));
+        });
+      if (matches.length > 0) callback(matches[0].data);
+      else if (onMiss) onMiss();
+    });
   }).catch(function(e) {
     console.warn('Error buscando ghost en precargadas:', e);
     if (onMiss) onMiss();
@@ -4505,7 +4543,8 @@ function actualizarIndicadorSync() {
 // --- Cola de subida visible ---
 function actualizarColaSubida() {
   if (!db) return;
-  obtenerTodosDB('subidas_pendientes').then(function(items) {
+  contarDB('subidas_pendientes').then(function(nPend) {
+    var items = {length: nPend};
     var el = document.getElementById('upload-queue-status');
     if (!el) return;
     if (items.length === 0) {
@@ -4669,8 +4708,11 @@ async function sincronizar() {
 // --- Subida de fotos pendientes ---
 async function subirFotosPendientes() {
   if (!db) { showToast('Base de datos no lista', 'error'); return; }
-  var pendientes = await obtenerTodosDB('subidas_pendientes');
-  if (pendientes.length === 0) { showToast('No hay fotos pendientes', 'info'); return; }
+  // Solo las CLAVES: cargar las 50+ fotos full-res de golpe (getAll) metía
+  // cientos de MB en memoria y Android mataba la app al pulsar "Subir ahora".
+  // Cada foto se lee de la base justo antes de subirla y se libera después.
+  var codigosPend = await obtenerClavesDB('subidas_pendientes');
+  if (codigosPend.length === 0) { showToast('No hay fotos pendientes', 'info'); return; }
 
   // Si el token es local o no existe, intentar re-autenticar antes de subir
   if (!sesion || !sesion.token || sesion.token.startsWith('local_')) {
@@ -4686,13 +4728,14 @@ async function subirFotosPendientes() {
   var progFill = document.getElementById('prog-fill');
   progDiv.classList.add('show');
 
-  var total = pendientes.length;
+  var total = codigosPend.length;
   var subidas = 0;
   var fallos = 0;
   var avisos = [];
 
-  for (var i = 0; i < pendientes.length; i++) {
-    var foto = pendientes[i];
+  for (var i = 0; i < codigosPend.length; i++) {
+    var foto = await obtenerDeDB('subidas_pendientes', codigosPend[i]).catch(function() { return null; });
+    if (!foto || !foto.data) { continue; } // ya subida/borrada por otra pasada
     progText.textContent = 'Subiendo ' + (i + 1) + '/' + total + ': ' + foto.codigo;
     progFill.style.width = ((i / total) * 100) + '%';
 
@@ -4962,19 +5005,21 @@ async function subirFotosPendientesAuto() {
   subiendoFotosAuto = true;
   var gen = ++_subirFotosGen;
   try {
-    var pendientes = await obtenerTodosDB('subidas_pendientes');
-    if (pendientes.length === 0) return;
+    // Solo las CLAVES (ver subirFotosPendientes): una foto en memoria cada vez
+    var codigosPend = await obtenerClavesDB('subidas_pendientes');
+    if (codigosPend.length === 0) return;
     // Safety timeout: si después de 2 min por foto sigue bloqueado, liberar el flag
     subiendoFotosAutoTimer = setTimeout(function() {
       console.warn('subirFotosPendientesAuto: timeout de seguridad alcanzado, liberando flag');
       subiendoFotosAuto = false;
       subiendoFotosAutoTimer = null;
-    }, Math.max(120000, pendientes.length * 30000)); // mín 2min, o 30s por foto
+    }, Math.max(120000, codigosPend.length * 30000)); // mín 2min, o 30s por foto
     var yaReautenticadoAuto = false;
-    for (var i = 0; i < pendientes.length; i++) {
+    for (var i = 0; i < codigosPend.length; i++) {
       // Otra pasada tomó el relevo tras el safety-timeout: abortar esta
       if (gen !== _subirFotosGen) break;
-      var foto = pendientes[i];
+      var foto = await obtenerDeDB('subidas_pendientes', codigosPend[i]).catch(function() { return null; });
+      if (!foto || !foto.data) continue;
       try {
         var resp = await fetchConTimeout(API_BASE + 'upload.php', {
           method: 'POST',
@@ -7629,23 +7674,24 @@ async function descargarFotosZIP(id) {
 
 async function descargarTodasFotosZIP() {
   var zip = new JSZip();
-  // Fusionar fuentes prefiriendo la resolución completa: fotos_locales y
-  // subidas_pendientes pisan al thumbnail del store 'fotos'
-  var porCodigo = {};
-  (await obtenerTodosDB('fotos')).forEach(function(f) {
-    if (f && f.data && typeof f.data === 'string') porCodigo[f.codigo] = f.data;
-  });
-  (await obtenerTodosDB('subidas_pendientes').catch(function() { return []; })).forEach(function(f) {
-    if (f && f.data && typeof f.data === 'string') porCodigo[f.codigo] = f.data;
-  });
-  (await obtenerTodosDB('fotos_locales').catch(function() { return []; })).forEach(function(f) {
-    if (f && f.data && typeof f.data === 'string') porCodigo[f.codigo] = f.data;
-  });
-  Object.keys(porCodigo).forEach(function(codigo) {
-    var data = porCodigo[codigo];
-    if (data.indexOf('data:') !== 0) return;
-    zip.file(codigo + '.jpg', data.split(',')[1], {base64: true});
-  });
+  // Por CLAVES y de una en una: fusionar los stores con getAll cargaba todas
+  // las fotos full-res a la vez (cientos de MB) y Android mataba la app.
+  // Prioridad de fuente: fotos_locales y subidas_pendientes (full-res) sobre
+  // el thumbnail del store 'fotos'.
+  var fuentePorCodigo = {};
+  (await obtenerClavesDB('fotos').catch(function() { return []; })).forEach(function(c) { fuentePorCodigo[c] = 'fotos'; });
+  (await obtenerClavesDB('subidas_pendientes').catch(function() { return []; })).forEach(function(c) { fuentePorCodigo[c] = 'subidas_pendientes'; });
+  (await obtenerClavesDB('fotos_locales').catch(function() { return []; })).forEach(function(c) { fuentePorCodigo[c] = 'fotos_locales'; });
+  var codigosZip = Object.keys(fuentePorCodigo);
+  for (var iz = 0; iz < codigosZip.length; iz++) {
+    var codigoZ = codigosZip[iz];
+    try {
+      var fz = await obtenerDeDB(fuentePorCodigo[codigoZ], codigoZ);
+      if (fz && fz.data && typeof fz.data === 'string' && fz.data.indexOf('data:') === 0) {
+        zip.file(codigoZ + '.jpg', fz.data.split(',')[1], {base64: true});
+      }
+    } catch(e) {}
+  }
   zip.generateAsync({type: 'blob'}).then(function(blob) {
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -9817,7 +9863,8 @@ function precargaListarFotos(zona) {
 
     // Marcar las que ya están precargadas
     if (db) {
-      obtenerTodosDB('fotos_precargadas').then(function(existentes) {
+      obtenerClavesDB('fotos_precargadas').then(function(clavesExist) {
+        var existentes = clavesExist.map(function(c) { return {codigo: c}; });
         var existentesMap = {};
         existentes.forEach(function(e) { existentesMap[e.codigo] = true; });
         var nuevas = fotosEncontradas.filter(function(f) { return !existentesMap[f.codigo]; });
@@ -9850,7 +9897,8 @@ async function precargaDescargar(listaFotos) {
   if (!db) { showToast('Base de datos no disponible', 'error'); return; }
 
   // Filtrar las que ya tenemos
-  var existentes = await obtenerTodosDB('fotos_precargadas');
+  var clavesExistentes = await obtenerClavesDB('fotos_precargadas');
+  var existentes = clavesExistentes.map(function(c) { return {codigo: c}; });
   var existentesMap = {};
   existentes.forEach(function(e) { existentesMap[e.codigo] = true; });
   var nuevas = listaFotos.filter(function(f) { return !existentesMap[f.codigo]; });

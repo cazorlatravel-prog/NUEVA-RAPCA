@@ -1442,52 +1442,61 @@ function cargarGhostFoto(tipo, subtipo) {
     };
   }
 
-  // Buscar en IndexedDB el thumbnail más reciente que coincida
+  // Buscar por CLAVES (el código es la clave de estos stores): cargar todos
+  // los registros con getAll metía en memoria las fotos full-res pendientes
+  // (cientos de MB con 50+ fotos) y Android mataba la app al abrir la cámara
   if (!db) return;
-  obtenerTodosDB('fotos').then(function(fotos) {
-    var matches = fotos.filter(function(f) {
-      return coincideGhost(f.codigo);
-    }).sort(function(a, b) { return (b.fecha || 0) - (a.fecha || 0); });
 
-    if (matches.length > 0 && matches[0].data) {
-      activarGhost(matches[0].data);
-    } else {
-      // Buscar en subidas_pendientes
-      obtenerTodosDB('subidas_pendientes').then(function(pendientes) {
-        var matchesPend = pendientes.filter(function(f) {
-          return coincideGhost(f.codigo);
-        }).sort(function(a, b) { return (b.fecha || 0) - (a.fecha || 0); });
-
-        if (matchesPend.length > 0 && matchesPend[0].data) {
-          activarGhost(matchesPend[0].data);
-        } else {
-          // Buscar en fotos precargadas offline y, como último recurso,
-          // en los registros sincronizados (descarga de Cloudinary si hay red)
-          buscarGhostEnPrecargadas(unidad, subtipo, activarGhost, function() {
-            buscarGhostEnRegistros(unidad, subtipo, activarGhost);
-          });
-        }
+  // De una lista de claves, coger las que coinciden y leer solo esas fichas
+  // (pocas), quedándose con la más reciente por fecha
+  function buscarEnStorePorClaves(store, onHit, onMiss) {
+    obtenerClavesDB(store).then(function(claves) {
+      var candidatas = (claves || []).filter(coincideGhost);
+      if (candidatas.length === 0) { onMiss(); return; }
+      Promise.all(candidatas.map(function(c) {
+        return obtenerDeDB(store, c).catch(function() { return null; });
+      })).then(function(regs) {
+        var matches = regs.filter(function(f) { return f && f.data; })
+          .sort(function(a, b) { return (b.fecha || 0) - (a.fecha || 0); });
+        if (matches.length > 0) onHit(matches[0].data);
+        else onMiss();
       });
-    }
-  }).catch(function() {});
+    }).catch(function() { onMiss(); });
+  }
+
+  buscarEnStorePorClaves('fotos', activarGhost, function() {
+    buscarEnStorePorClaves('subidas_pendientes', activarGhost, function() {
+      buscarEnStorePorClaves('fotos_locales', activarGhost, function() {
+        // Fotos precargadas offline y, como último recurso, los registros
+        // sincronizados (descarga de Cloudinary si hay red)
+        buscarGhostEnPrecargadas(unidad, subtipo, activarGhost, function() {
+          buscarGhostEnRegistros(unidad, subtipo, activarGhost);
+        });
+      });
+    });
+  });
 }
 
 function buscarGhostEnPrecargadas(unidad, subtipo, callback, onMiss) {
-  if (!db) return;
-  // El store 'fotos_precargadas' no tiene índice 'unidad', así que filtramos en memoria
-  obtenerTodosDB('fotos_precargadas').then(function(fotos) {
-    var matches = (fotos || []).filter(function(f) {
-      return f.unidad === unidad && f.waypoint === subtipo;
-    }).sort(function(a, b) {
-      // Más reciente primero
-      return (b.fecha || '').localeCompare(a.fecha || '');
+  if (!db) { if (onMiss) onMiss(); return; }
+  // Por claves (código = clave): getAll cargaba todas las precargadas en memoria
+  obtenerClavesDB('fotos_precargadas').then(function(claves) {
+    var candidatas = (claves || []).filter(function(c) {
+      return c.indexOf(unidad + '_VP_' + subtipo + '_') === 0 ||
+             c.indexOf(unidad + '_EV_' + subtipo + '_') === 0;
     });
-
-    if (matches.length > 0 && matches[0].data) {
-      callback(matches[0].data);
-    } else if (onMiss) {
-      onMiss();
-    }
+    if (candidatas.length === 0) { if (onMiss) onMiss(); return; }
+    Promise.all(candidatas.map(function(c) {
+      return obtenerDeDB('fotos_precargadas', c).catch(function() { return null; });
+    })).then(function(regs) {
+      var matches = (regs || []).filter(function(f) { return f && f.data; })
+        .sort(function(a, b) {
+          // Más reciente primero
+          return String(b.fecha || '').localeCompare(String(a.fecha || ''));
+        });
+      if (matches.length > 0) callback(matches[0].data);
+      else if (onMiss) onMiss();
+    });
   }).catch(function(e) {
     console.warn('Error buscando ghost en precargadas:', e);
     if (onMiss) onMiss();

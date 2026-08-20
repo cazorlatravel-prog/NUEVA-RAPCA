@@ -131,7 +131,8 @@ function actualizarIndicadorSync() {
 // --- Cola de subida visible ---
 function actualizarColaSubida() {
   if (!db) return;
-  obtenerTodosDB('subidas_pendientes').then(function(items) {
+  contarDB('subidas_pendientes').then(function(nPend) {
+    var items = {length: nPend};
     var el = document.getElementById('upload-queue-status');
     if (!el) return;
     if (items.length === 0) {
@@ -295,8 +296,11 @@ async function sincronizar() {
 // --- Subida de fotos pendientes ---
 async function subirFotosPendientes() {
   if (!db) { showToast('Base de datos no lista', 'error'); return; }
-  var pendientes = await obtenerTodosDB('subidas_pendientes');
-  if (pendientes.length === 0) { showToast('No hay fotos pendientes', 'info'); return; }
+  // Solo las CLAVES: cargar las 50+ fotos full-res de golpe (getAll) metía
+  // cientos de MB en memoria y Android mataba la app al pulsar "Subir ahora".
+  // Cada foto se lee de la base justo antes de subirla y se libera después.
+  var codigosPend = await obtenerClavesDB('subidas_pendientes');
+  if (codigosPend.length === 0) { showToast('No hay fotos pendientes', 'info'); return; }
 
   // Si el token es local o no existe, intentar re-autenticar antes de subir
   if (!sesion || !sesion.token || sesion.token.startsWith('local_')) {
@@ -312,13 +316,14 @@ async function subirFotosPendientes() {
   var progFill = document.getElementById('prog-fill');
   progDiv.classList.add('show');
 
-  var total = pendientes.length;
+  var total = codigosPend.length;
   var subidas = 0;
   var fallos = 0;
   var avisos = [];
 
-  for (var i = 0; i < pendientes.length; i++) {
-    var foto = pendientes[i];
+  for (var i = 0; i < codigosPend.length; i++) {
+    var foto = await obtenerDeDB('subidas_pendientes', codigosPend[i]).catch(function() { return null; });
+    if (!foto || !foto.data) { continue; } // ya subida/borrada por otra pasada
     progText.textContent = 'Subiendo ' + (i + 1) + '/' + total + ': ' + foto.codigo;
     progFill.style.width = ((i / total) * 100) + '%';
 
@@ -588,19 +593,21 @@ async function subirFotosPendientesAuto() {
   subiendoFotosAuto = true;
   var gen = ++_subirFotosGen;
   try {
-    var pendientes = await obtenerTodosDB('subidas_pendientes');
-    if (pendientes.length === 0) return;
+    // Solo las CLAVES (ver subirFotosPendientes): una foto en memoria cada vez
+    var codigosPend = await obtenerClavesDB('subidas_pendientes');
+    if (codigosPend.length === 0) return;
     // Safety timeout: si después de 2 min por foto sigue bloqueado, liberar el flag
     subiendoFotosAutoTimer = setTimeout(function() {
       console.warn('subirFotosPendientesAuto: timeout de seguridad alcanzado, liberando flag');
       subiendoFotosAuto = false;
       subiendoFotosAutoTimer = null;
-    }, Math.max(120000, pendientes.length * 30000)); // mín 2min, o 30s por foto
+    }, Math.max(120000, codigosPend.length * 30000)); // mín 2min, o 30s por foto
     var yaReautenticadoAuto = false;
-    for (var i = 0; i < pendientes.length; i++) {
+    for (var i = 0; i < codigosPend.length; i++) {
       // Otra pasada tomó el relevo tras el safety-timeout: abortar esta
       if (gen !== _subirFotosGen) break;
-      var foto = pendientes[i];
+      var foto = await obtenerDeDB('subidas_pendientes', codigosPend[i]).catch(function() { return null; });
+      if (!foto || !foto.data) continue;
       try {
         var resp = await fetchConTimeout(API_BASE + 'upload.php', {
           method: 'POST',
