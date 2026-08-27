@@ -127,7 +127,10 @@ function abrirCamara(tipo, subtipo) {
   document.getElementById('cam-code').textContent = fotoCodigo;
 
   // Abrir cámara
-  var constraints = {video: {facingMode: camaraFacing, width: {ideal: 1920}, height: {ideal: 1080}}, audio: false};
+  // 4:3 como el sensor y la foto final: con el visor 16:9 recortado a
+  // pantalla (cover), lo encuadrado NO era lo que salía en la foto y las
+  // parejas de comparativas con ghost quedaban con encuadres distintos
+  var constraints = {video: {facingMode: camaraFacing, width: {ideal: 1920}, height: {ideal: 1440}, aspectRatio: {ideal: 4 / 3}}, audio: false};
   navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
     camaraStream = stream;
     var video = document.getElementById('camera-video');
@@ -195,7 +198,10 @@ function switchCamara() {
   if (camaraStream) {
     camaraStream.getTracks().forEach(function(t) { t.stop(); });
   }
-  var constraints = {video: {facingMode: camaraFacing, width: {ideal: 1920}, height: {ideal: 1080}}, audio: false};
+  // 4:3 como el sensor y la foto final: con el visor 16:9 recortado a
+  // pantalla (cover), lo encuadrado NO era lo que salía en la foto y las
+  // parejas de comparativas con ghost quedaban con encuadres distintos
+  var constraints = {video: {facingMode: camaraFacing, width: {ideal: 1920}, height: {ideal: 1440}, aspectRatio: {ideal: 4 / 3}}, audio: false};
   navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
     camaraStream = stream;
     document.getElementById('camera-video').srcObject = stream;
@@ -206,7 +212,7 @@ function switchCamara() {
   }).catch(function(err) {
     // Restaurar la cámara anterior si el cambio falla (p.ej. solo hay una cámara)
     camaraFacing = anterior;
-    var fallback = {video: {facingMode: camaraFacing, width: {ideal: 1920}, height: {ideal: 1080}}, audio: false};
+    var fallback = {video: {facingMode: camaraFacing, width: {ideal: 1920}, height: {ideal: 1440}, aspectRatio: {ideal: 4 / 3}}, audio: false};
     navigator.mediaDevices.getUserMedia(fallback).then(function(stream) {
       camaraStream = stream;
       document.getElementById('camera-video').srcObject = stream;

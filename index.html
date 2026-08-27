@@ -300,8 +300,11 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 /* === CÁMARA === */
 .camera-modal{position:fixed;inset:0;background:#000;z-index:8000;display:none;flex-direction:column}
 .camera-modal.open{display:flex}
-.camera-video-wrap{flex:1;position:relative;overflow:hidden}
-.camera-video-wrap video{width:100%;height:100%;object-fit:cover}
+.camera-video-wrap{flex:1;position:relative;overflow:hidden;background:#000}
+/* contain (no cover): el visor muestra EXACTAMENTE el encuadre de la foto
+   final (WYSIWYG). El ghost, también contain y con el mismo aspecto 3:4,
+   encaja píxel a píxel sobre el visor: alinear el fantasma = alinear la foto */
+.camera-video-wrap video{width:100%;height:100%;object-fit:contain}
 .camera-overlay{position:absolute;top:10px;left:10px;color:#fff;font-size:12px;text-shadow:0 1px 3px rgba(0,0,0,.7);z-index:1}
 .camera-overlay .cam-compass{font-size:14px;margin-bottom:4px}
 .camera-overlay .cam-coords{font-size:11px;opacity:.9}

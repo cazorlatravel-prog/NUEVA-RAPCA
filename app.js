@@ -7,7 +7,7 @@
 // --- Constantes globales ---
 // Versión de la app (acompaña al CACHE_NAME de sw.js en cada actualización):
 // visible en la barra inferior para confirmar que la actualización llegó
-var APP_VERSION = 'v38';
+var APP_VERSION = 'v39';
 var API_BASE = 'https://rapca.app/';
 var GOOGLE_FORM_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSe8kPl5QErboQmrAJ6hSnbkiAJb3h9Mi6_Fntgws_Z1NWj1TQ/formResponse';
 var CLOUDINARY_UPLOAD_URL = 'https://rapca.app/upload.php';
